@@ -227,13 +227,16 @@ for i in range(args.n_runs):
     }, open(results_path, "wb"))
 
     logger.info(f'Epoch {epoch}: train loss: {loss / num_batch}, val auc: {val_auc}, time: {time.time() - start_epoch}')
-  
-  if args.use_validation:
-    if early_stopper.early_stop_check(val_auc):
-      logger.info('No improvement over {} epochs, stop training'.format(early_stopper.max_round))
-      break
-    else:
-      torch.save(decoder.state_dict(), get_checkpoint_path(epoch))
+
+    # (fix) early-stop + save checkpoint PHẢI nằm trong vòng lặp epoch;
+    # bản gốc repo bị dedent ra ngoài -> best_epoch=0 nhưng checkpoint không
+    # bao giờ được save -> crash khi load best model.
+    if args.use_validation:
+      if early_stopper.early_stop_check(val_auc):
+        logger.info('No improvement over {} epochs, stop training'.format(early_stopper.max_round))
+        break
+      else:
+        torch.save(decoder.state_dict(), get_checkpoint_path(epoch))
 
   if args.use_validation:
     logger.info(f'Loading the best model at epoch {early_stopper.best_epoch}')

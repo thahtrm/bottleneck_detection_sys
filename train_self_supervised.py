@@ -220,7 +220,8 @@ for i in range(args.n_runs):
         pos_prob, neg_prob = tgn.compute_edge_probabilities(sources_batch, destinations_batch, negatives_batch,
                                                             timestamps_batch, edge_idxs_batch, NUM_NEIGHBORS)
 
-        loss += criterion(pos_prob.squeeze(), pos_label) + criterion(neg_prob.squeeze(), neg_label)
+        # reshape(-1) thay vì squeeze(): squeeze() co scalar khi batch=1 -> lỗi shape với label
+        loss += criterion(pos_prob.reshape(-1), pos_label) + criterion(neg_prob.reshape(-1), neg_label)
 
       loss /= args.backprop_every
 
