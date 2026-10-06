@@ -35,7 +35,7 @@ from pathlib import Path
 import numpy as np
 
 from .events import Event
-from .normalize import ISSUE_THEMES, normalize_issue_theme, normalize_priority
+from .normalize import ISSUE_THEMES, normalize_issue_theme, normalize_link_type, normalize_priority
 
 KINDS = ("status", "assignee", "priority", "link", "comment")
 LINK_TYPES_ONEHOT = ("Block", "Depend", "Epic", "Parent-Child", "Subtask",
@@ -89,12 +89,19 @@ def write_instance(name: str,
                    events_per_issue: dict[str, list[Event]],
                    label_rows: dict[str, dict],   # (issue_key, ts) -> row có 'label'
                    out_dir: str = "data",
-                   node_out_dim: int | None = 64) -> dict:
+                   node_out_dim: int | None = 64,
+                   leak_safe: bool = False) -> dict:
     """Viết 3 file `ml_{name}.*`. Trả về stats.
 
     node_out_dim: chiều node feature cuối cùng. Adapter sinh 8 chiều ngữ nghĩa
     (NODE_DIM); repo TGN yêu cầu memory_dim == node feature dim nên padding
     zero lên node_out_dim (mặc định 64). Đặt None để giữ đúng 8 chiều.
+
+    leak_safe: bỏ mọi feature suy ra từ loại link — edge cột 5–14 (one-hot
+    loại link + direction) và node [6] has_block_link, [7] n_links (đếm từ
+    trạng thái cuối document). Nhãn v3 là hàm trực tiếp của các feature này
+    (P0: AUC 0,835 -> 0,620 trên JFrog khi bỏ). Bắt buộc khi train với nhãn
+    v3; nên bật với mọi nhãn có dùng tín hiệu link.
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -117,9 +124,10 @@ def write_instance(name: str,
         d = doc_by_key.get(key, {})
         f_ = d.get("fields") or {}
         n_links = sum(1 for _ in (d.get("issueLinks") or []))
+        # Block hoặc Depend sau chuẩn hóa (trước đây so tên thô với tập Block-only
+        # -> luôn 0 trên JFrog/Spring, vốn chỉ có Dependency/Gantt)
         has_block = any(
-            ((lk.get("type") or {}).get("name") or "").strip().lower()
-            in {"block", "blocked", "blocks", "blocker"}
+            normalize_link_type((lk.get("type") or {}).get("name")) in {"Block", "Depend"}
             for lk in (d.get("issueLinks") or [])
         )
         meta[key] = {
@@ -144,6 +152,8 @@ def write_instance(name: str,
             n_labeled += 1 if lab_row else 0
             v_key = e.v if e.v in node_id else key  # assignee/comment -> self-loop v1
             feat = edge_feature(e, m["priority"], m["theme"], prev_ts)
+            if leak_safe:
+                feat[5:15] = [0.0] * 10
             rows.append((node_id[key], node_id[v_key], e.ts, label, *feat))
 
     rows.sort(key=lambda r: (r[2], r[0]))
@@ -167,6 +177,8 @@ def write_instance(name: str,
     for key, idx0 in node_id.items():
         m = meta[key]
         row = node_features(m["priority"], m["theme"], m["has_block"], m["n_links"], max_links)
+        if leak_safe:
+            row[6] = row[7] = 0.0
         node_feats[idx0 + 1, :NODE_DIM] = row  # padding zero các chiều còn lại
     np.save(out / f"ml_{name}_node.npy", node_feats)
 

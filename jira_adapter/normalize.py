@@ -7,6 +7,8 @@ adapter chạy độc lập.
 """
 from __future__ import annotations
 
+import re
+
 # --- Link types -----------------------------------------------------------
 # Ánh xạ ~75 tên link tùy biến -> 20+ hạng mục (rút từ jira_issue_linktype_mapping.json).
 # Chỉ giữ các hạng mục liên quan trực tiếp đến bottleneck + nhóm phổ biến còn lại.
@@ -148,7 +150,9 @@ def normalize_priority(raw: "str | dict | None") -> float:
         raw = raw.get("name")
     if not raw:
         return 0.4  # default "normal"
-    return PRIORITY_NORM.get(str(raw).strip().lower(), 0.4)
+    # JFrog đánh số tiền tố: "1 - Blocker", "4 - Normal"
+    name = re.sub(r"^\s*\d+\s*-\s*", "", str(raw)).strip().lower()
+    return PRIORITY_NORM.get(name, 0.4)
 
 
 # --- Issue type themes (tổng hợp từ jira_issuetype_thematic_analysis.json) ---

@@ -76,7 +76,8 @@ def build_instance_mongo(name: str, host: str, out_dir: str = "data",
                          eda_out: str | None = None,
                          mode: str = "dependency",
                          use_dwell: bool = False,
-                         as_name: str | None = None) -> dict:
+                         as_name: str | None = None,
+                         leak_safe: bool = False) -> dict:
     docs = fetch_instance(host, name, db=db, limit=limit)
     if not docs:
         raise SystemExit(f"[build_mongo] instance {name}: 0 issue — kiểm tra host/db/collection")
@@ -101,7 +102,9 @@ def build_instance_mongo(name: str, host: str, out_dir: str = "data",
     label_map = {(r["key"], round(r["ts"], 3)): r for r in rows}
     result["label_stats"] = lab_stats
     out_name = as_name or name
-    result["out"] = write_instance(out_name, docs, eps, label_map, out_dir=out_dir)
+    result["out"] = write_instance(out_name, docs, eps, label_map, out_dir=out_dir,
+                                   leak_safe=leak_safe)
+    result["leak_safe"] = leak_safe
     return result
 
 
@@ -122,6 +125,8 @@ def main() -> None:
                     help="chỉ cho composite: thêm tín hiệu dwell (v1 — leakage temporal)")
     ap.add_argument("--as-name", default=None,
                     help="tên output (ml_{as_name}.*) khác tên instance, vd JFrog_comp")
+    ap.add_argument("--leak-safe", action="store_true",
+                    help="bỏ feature suy ra từ loại link (edge 5–14, node [6],[7]) — xem to_tgn.write_instance")
     args = ap.parse_args()
 
     if args.list:
@@ -148,7 +153,8 @@ def main() -> None:
                                                 db=args.db, limit=args.limit,
                                                 eda_out=args.eda_out,
                                                 mode=args.label_mode, use_dwell=args.use_dwell,
-                                                as_name=args.as_name))
+                                                as_name=args.as_name,
+                                                leak_safe=args.leak_safe))
         except Exception as ex:  # noqa: BLE001
             results.append({"instance": name, "error": f"{type(ex).__name__}: {ex}"})
 

@@ -16,6 +16,9 @@ kèm gắn nhãn bottleneck theo §6.1 của báo cáo
 | `eda.py` | EDA per-instance → markdown (số liệu quyết định P1) |
 | `build_mongo.py` | **Driver chính**: đọc instance từ MongoDB (đã restore dump) → EDA + events + labels + files |
 | `build.py` | Driver dùng file JSON (nếu xuất issue ra file) |
+| `download_dataset.sh` | Tải dataset từ Zenodo + công cụ MongoDB (không cần root) → restore vào mongod local |
+| `dossier.py` | Hồ sơ issue hồi cứu (dòng thời gian trạng thái + percentile dwell, link, comment, tín hiệu F/I) cho gắn nhãn bằng LLM |
+| `sampling.py` | Chọn mẫu pilot 3 tầng (v3 / ứng viên heuristic / ngẫu nhiên) → hồ sơ + bảng chấm gold — xem `docs/phuong-an-gan-nhan-bottleneck-bang-llm.md` |
 
 ## Loại sự kiện (kind)
 
@@ -43,11 +46,45 @@ kèm gắn nhãn bottleneck theo §6.1 của báo cáo
 - Changelog KHÔNG truncate (`total == len(histories)` — đã verify 5 instance lớn).
 - JFrog có changelog `field: "Link"` (sự kiện link CÓ timestamp) — chưa dùng ở v1.
 
+## Tải dataset gốc & restore vào MongoDB (một lần)
+
+Nguồn: Zenodo record **15719919**, file `2025-06-23 ThePublicJiraDataset.zip`
+(5.81GB, md5 `02f85309d966092ea130ca0797aea795`). Bên trong có
+`3. DataDump/mongodump-JiraReposAnon.archive` (mongodump `--gzip`, ~60GB khi restore,
+2,686,282 docs / 16 instance). Cần ~75GB đĩa trống, `curl`, `unzip`; **không cần root**.
+
+```bash
+# Tất cả trong một lệnh: tải zip (resume được) + kiểm md5 + giải nén -> data/raw/,
+# tải mongod + mongodb-database-tools (tarball) -> .tools/, khởi động mongod
+# @127.0.0.1:27017 (dbpath .tools/mongo-data), mongorestore vào db JiraReposAnon
+bash jira_adapter/download_dataset.sh
+
+# Hoặc từng bước
+bash jira_adapter/download_dataset.sh download   # chỉ tải + giải nén dataset
+bash jira_adapter/download_dataset.sh tools      # tải mongod / mongorestore
+bash jira_adapter/download_dataset.sh start      # khởi động mongod (cần sau mỗi lần reboot)
+bash jira_adapter/download_dataset.sh restore    # mongorestore (~15-30 phút)
+bash jira_adapter/download_dataset.sh stop       # tắt mongod
+```
+
+Tùy chỉnh bằng biến môi trường: `RAW_DIR` (mặc định `data/raw`), `TOOLS_DIR` (`.tools`),
+`MONGO_PORT` (27017), `MONGO_VER` (9.0.2), `TOOLS_VER` (100.19.1), `MONGO_OS`
+(`ubuntu2404`; distro khác: `ubuntu2204`, `rhel93`, ... — xem mongodb.com/try/download).
+Nếu đổi port, truyền `--host 127.0.0.1:<port>` cho `build_mongo` / `sampling`.
+
+Tải thủ công (nếu không dùng script):
+
+```bash
+curl -fL -C - -o data/raw/ThePublicJiraDataset.zip \
+  "https://zenodo.org/api/records/15719919/files/2025-06-23%20ThePublicJiraDataset.zip/content"
+mongorestore --gzip --archive="data/raw/ThePublicJiraDataset/3. DataDump/mongodump-JiraReposAnon.archive" \
+  --nsFrom "JiraReposAnon.*" --nsTo "JiraReposAnon.*"
+```
+
 ## Chạy (dataset đã restore vào MongoDB local)
 
 ```bash
-# 0) (một lần) restore dump -> mongod local @127.0.0.1:27017, db JiraReposAnon
-#    (xem docs/bao-cao... Phụ lục D; công cụ ở .tools/)
+# 0) (một lần) tải + restore dump -> xem mục "Tải dataset gốc" ở trên
 
 # 1) Liệt kê instance + số issue
 PYTHONPATH=.pylibs python -m jira_adapter.build_mongo --list
@@ -55,6 +92,12 @@ PYTHONPATH=.pylibs python -m jira_adapter.build_mongo --list
 # 2) EDA + build 1 instance -> data/ml_{instance}.* + docs/eda/eda_{instance}.md
 PYTHONPATH=.pylibs python -m jira_adapter.build_mongo --instance JFrog --out data --eda-out docs/eda
 PYTHONPATH=.pylibs python -m jira_adapter.build_mongo --instance Mojang --out data --limit 50000
+
+# 2b) Build không rò rỉ nhãn (bỏ feature suy ra từ loại link) — bắt buộc khi dùng nhãn v3
+PYTHONPATH=.pylibs python -m jira_adapter.build_mongo --instance JFrog --out data --leak-safe --as-name JFrog_ls
+
+# 2c) Mẫu pilot gắn nhãn bằng LLM: hồ sơ issue + bảng chấm gold -> data/llm_pilot/JFrog/
+PYTHONPATH=.pylibs python -m jira_adapter.sampling --instance JFrog --out data/llm_pilot
 
 # 3) Huấn luyện (GPU: chạy với sandbox mở rộng vì /dev/nvidia* bị ẩn ở chế độ mặc định)
 python train_self_supervised.py -d JFrog --bs 128 --n_degree 10 --n_head 4 --n_epoch 20 \

@@ -5,6 +5,13 @@
 **Trạng thái:** Bản đề xuất (v1.0) — kèm kế hoạch thực hiện
 **Ngày:** 2026-02 (phiên làm việc hiện tại)
 
+> **⚠️ Đính chính 2026-10-04 (P0 đo rò rỉ nhãn, chi tiết: `docs/phuong-an-gan-nhan-bottleneck-bang-llm.md` §1).** Kết quả T1 của nhãn v3 trong báo cáo này (Tóm tắt, §6.1, Phụ lục D) **không còn hiệu lực**:
+> - Nhãn v3 ("có ≥1 link Block/Depend") rò rỉ qua **edge feature one-hot loại link**: 432/432 issue dương JFrog (2.711/2.714 Spring) có sự kiện link Block/Depend, luôn đến trước sự kiện có nhãn. Node `[7] log1p(n_links)` rò rỉ một phần.
+> - Bỏ các feature này, JFrog T1 test AUC (3 lần chạy) giảm từ **0,835 → 0,620**; bỏ thêm sự kiện link → **0,484** (ngẫu nhiên). Nghĩa là TGN **không học được** tín hiệu bottleneck từ diễn biến quy trình với nhãn v3.
+> - Node `[6] has_block_link` luôn bằng 0 do bug (chỉ so tên link kiểu Block) — đã sửa trong `to_tgn.py`; build mới có cờ `--leak-safe`.
+> - "Priority 100% normal trên JFrog" là **bug chuẩn hóa** (tên dạng `"4 - Normal"` không khớp bảng) — thực tế: Normal 72%, High 16%, Critical 7%, Blocker 3%. Đã sửa `normalize_priority`; dữ liệu `ml_*` hiện có vẫn mang giá trị cũ cho đến khi build lại.
+> - Hướng thay thế: nhãn theo episode do LLM trích tín hiệu + rule, kiểm định bằng gold set — xem tài liệu nói trên.
+
 ---
 
 ## Mục lục
@@ -40,8 +47,8 @@
 
 **Kết quả P0 đã đo (2026-10-01 — pipeline chạy end-to-end trên dữ liệu thật):**
 - **T2 self-supervised (link prediction):** JFrog test AUC **0.9986** (old) / **0.9823** (new nodes) · Spring test AUC **0.9997** / **0.9988** (6,769 inductive nodes) — embedding temporal của TGN học rất tốt cấu trúc sự kiện Jira.
-- **T1 phát hiện bottleneck (label v3 = issue có quan hệ Block/Depend):** JFrog **test AUC 0.839** · Spring **test AUC 0.768** — **cả 2 vượt mục tiêu ≥0,75**.
-- **Ablation nhãn:** composite (top-5% dự án) cùng model chỉ đạt **AUC 0.578** (JFrog) → thiết kế nhãn quyết định tính học được; composite+dwell thậm chí AUC < 0.5 (leakage temporal).
+- **T1 phát hiện bottleneck (label v3 = issue có quan hệ Block/Depend):** JFrog **test AUC 0.839** · Spring **test AUC 0.768** — **cả 2 vượt mục tiêu ≥0,75**. **⚠️ Đính chính 2026-10-04: rò rỉ nhãn — bỏ feature loại link còn 0,620, bỏ thêm sự kiện link còn 0,484.**
+- **Ablation nhãn:** composite (top-5% dự án) cùng model chỉ đạt **AUC 0.578** (JFrog) → ~~thiết kế nhãn quyết định tính học được~~ (đính chính: chênh lệch v3/composite chủ yếu do v3 rò rỉ qua feature loại link); composite+dwell thậm chí AUC < 0.5 (leakage temporal).
 - **Baseline DyRep** (JFrog, link-pred): AUC 0.990 / 0.889 vs TGN 0.999 / 0.982 — TGN vượt trội ở new nodes (+9.3 AUC).
 - 3 bug repo TGN + 1 lỗi dữ liệu (timestamp âm) đã được xác định & sửa trong P0 — xem Phụ lục D.
 
@@ -290,7 +297,7 @@ LABEL(i; t→t+Δt) = 1  nếu B1_score trong (t, t+Δt] thuộc top-q% của d�
 - Với B2 (assignee-level): cùng công thức trên nút developer, dùng số issue mở ưu tiên cao + thời gian phản hồi trung bình.
 - **Kiểm định nhãn:** đối chiếu thủ công 200–500 issue top-score với người có kinh nghiệm SPM (nếu có) để ước lượng precision của chính nhãn — bước "label audit".
 
-> **⚠️ Cập nhật từ P0 (đã đo, xem Phụ lục D §6):** công thức composite trên (phiên bản v1/v2) **không hoạt động** trên dữ liệu thật: (a) thành phần dwell tương quan với t → leakage qua split thời gian (AUC < 0.5); (b) 96–97% issue không có link + priority gần như hằng số (JFrog 100% "normal") → top-5% pha loãng issue không-tín-hiệu (AUC ~0.58). Nhãn **v3 (mặc định)** đã áp dụng: `LABEL(i,t)=1` iff issue có ≥1 link Block/Depend — T1 JFrog **AUC 0.839**. Composite giữ làm ablation.
+> **⚠️ Cập nhật từ P0 (đã đo, xem Phụ lục D §6):** công thức composite trên (phiên bản v1/v2) **không hoạt động** trên dữ liệu thật: (a) thành phần dwell tương quan với t → leakage qua split thời gian (AUC < 0.5); (b) 96–97% issue không có link + priority gần như hằng số (JFrog 100% "normal" — **sai, bug chuẩn hóa, đã sửa 2026-10-04**) → top-5% pha loãng issue không-tín-hiệu (AUC ~0.58). Nhãn **v3 (mặc định)** đã áp dụng: `LABEL(i,t)=1` iff issue có ≥1 link Block/Depend — T1 JFrog **AUC 0.839**. Composite giữ làm ablation. **⚠️ 2026-10-04: AUC này do rò rỉ nhãn (0,620 / 0,484 khi bỏ feature/sự kiện link) — nhãn v3 cần thay, xem `docs/phuong-an-gan-nhan-bottleneck-bang-llm.md`.**
 
 ### 6.2. Chiến lược dữ liệu & subset
 
@@ -455,12 +462,12 @@ data/ml_{instance}.csv/.npy + data/ml_{instance}_node.npy
 | Smoke-test training loop (torch 2.x + Py 3.13) | ✅ `train_self_supervised.py -d synth` chạy hết 3 epoch, save model (sửa 3 bug Py-3.13/torch-2.x) | `saved_models/synth_smoke-synth.pth` |
 | T2 self-supervised JFrog (GPU) | ✅ **20 epoch × ~17.5s** — test **AUC 0.9986 / AP 0.9977** (old nodes), **AUC 0.9823 / AP 0.9709** (new/inductive, 1,216 nodes chưa xuất hiện trong train) | `saved_models/tgn_jira-JFrog.pth`, `results/tgn_jira.pkl` |
 | EDA + build Mojang (scale, pilot 50k) | ✅ 3 dự án (MCPE 37.4k, REALMS 9.1k, WEB 3.5k), 210,411 events, 50.5% issue có link (38.7k "Duplicate"), 20 assignee (1.4% assigned) | `data/ml_Mojang.*` |
-| T1 fine-tune node-classification (JFrog, label v3) | ✅ **test AUC 0.839** (best epoch 15/30, val AUC 0.814, early-stop đúng) — tín hiệu bottleneck **học được** | `results/tgn_jira.pkl`, decoder checkpoint `saved_checkpoints/` |
+| T1 fine-tune node-classification (JFrog, label v3) | ✅ **test AUC 0.839** (best epoch 15/30, val AUC 0.814, early-stop đúng) — ~~tín hiệu bottleneck **học được**~~ **⚠️ rò rỉ nhãn: 0,620 khi bỏ feature loại link, 0,484 khi bỏ thêm sự kiện link (2026-10-04)** | `results/tgn_jira.pkl`, decoder checkpoint `saved_checkpoints/` |
 | T2 Spring (main instance) | ✅ **early-stop epoch 15 (best 10)**, 16 epoch × ~360s — test **AUC 0.9997 / AP 0.9996** (old nodes), **AUC 0.9988 / AP 0.9984** (new/inductive, 6,769 nodes) — chạy được sau fix timestamp âm | `saved_models/tgn_jira-Spring.pth`, `results/tgn_jira.pkl` |
-| T1 Spring (label v3) | ✅ **test AUC 0.768** (best epoch 17/30, val 0.8185, early-stop epoch 22) — cả 2 instance đều **vượt mục tiêu ≥0.75** | `saved_checkpoints/tgn_jira-Spring-17  node-classification.pth` |
+| T1 Spring (label v3) | ✅ **test AUC 0.768** (best epoch 17/30, val 0.8185, early-stop epoch 22) — cả 2 instance đều **vượt mục tiêu ≥0.75** (⚠️ cùng cơ chế rò rỉ: 2.711/2.714 issue dương Spring có sự kiện link Block/Depend) | `saved_checkpoints/tgn_jira-Spring-17  node-classification.pth` |
 | T2 Mojang (scale pilot 50k) | ✅ 20 epoch × ~167s — test **AUC 0.9989 / AP 0.9985** (old), **AUC 0.9937 / AP 0.9915** (new, 4,951 inductive nodes) — pipeline chạy ổn định ở quy mô lớn nhất đã test | `saved_models/tgn_jira-Mojang.pth` |
 | Baseline DyRep JFrog (T2, link-pred) | ✅ test AUC **0.9901** (old) / **0.8893** (new) vs TGN **0.9986 / 0.9823** — TGN thắng cả 2, chênh **+9.3 AUC** trên new nodes (memory giúp inductive) | `saved_models/tgn_dyrep-JFrog.pth` |
-| Ablation label composite (v1/v2) trên JFrog | ✅ v1 (composite+dwell): val AUC **0.19–0.44** (<chance — leakage temporal) · v2 (composite static, ranking): **test AUC 0.578** vs v3 **0.839** — chứng minh **thiết kế nhãn quyết định tính học được** (cùng model, cùng data) | `data/ml_JFrog_comp.*`, `--label-mode composite` |
+| Ablation label composite (v1/v2) trên JFrog | ✅ v1 (composite+dwell): val AUC **0.19–0.44** (<chance — leakage temporal) · v2 (composite static, ranking): **test AUC 0.578** vs v3 **0.839** — ~~chứng minh **thiết kế nhãn quyết định tính học được**~~ (đính chính 2026-10-04: lợi thế của v3 đến từ rò rỉ nhãn) | `data/ml_JFrog_comp.*`, `--label-mode composite` |
 
 **Sự thật dữ liệu mới (xác minh trực tiếp trên dump, quan trọng cho §6/§8):**
 1. **Shape document khác Jira API v2 "gốc"**: `changelog` là dict `{startAt, maxResults, total, histories:[{id, author, created, items}]}`; **links nằm trong `fields.issuelinks` (lowercase)**, comments trong `fields.comments` — không có top-level `issueLinks`/`comments`. → adapter thêm `normalize_doc()` (idempotent) xử lý cả 2 shape.
@@ -476,8 +483,8 @@ data/ml_{instance}.csv/.npy + data/ml_{instance}_node.npy
 | Phiên bản | Định nghĩa | Kết quả đo (JFrog / Spring) | Kết luận |
 |---|---|---|---|
 | v1 (composite + dwell) | top-5%/dự án theo `B1_score(t)` có dwell(t)=t−created | JFrog: T1 **AUC 0.19–0.44** (<chance!); split: train 1.1% / val 36% / test **55%** positive | **BỎ** — dwell làm LABEL tương quan với thời điểm → leakage qua split thời gian; prior shift cực đoan |
-| v2 (composite static) | top-5%/dự án theo score không-dwell | quantile naive: positive rate **62–88%** (sai hướng ngược) → sửa bằng **ranking + tie-break**: split cân bằng 5.5/4.7/4.2% → **T1 test AUC 0.578** (val 0.51–0.67, nhiễu quanh chance) | **BỎ làm nhãn chính** — 96–97% issue không có link + priority hằng số (JFrog 100% = "normal") → top-5% pha loãng ~70% issue không-tín-hiệu → gần như random. **Giữ làm ablation** (data `ml_JFrog_comp.*`) |
-| **v3 (dependency — CHỌN)** | `LABEL(i,t)=1` iff issue có ≥1 link **Block/Depend** (quan hệ chặn/chờ) | JFrog: 450 issue (2.9%), split 3.7/3.1/1.2% ✓ · Spring: 2,794 issue (4.0%), split 2.8/3.0/1.1% ✓ · Mojang: ~10 issue (0.02% — quá.sparse) → **T1 JFrog: test AUC 0.839** (tín hiệu học được!) | **Mặc định** — tín hiệu mạnh nhất, face-valid ("điểm nghẽn = issue bị chặn/chặn người"), sạch cho evaluation temporal; composite giữ làm ablation (flag `--mode composite`) |
+| v2 (composite static) | top-5%/dự án theo score không-dwell | quantile naive: positive rate **62–88%** (sai hướng ngược) → sửa bằng **ranking + tie-break**: split cân bằng 5.5/4.7/4.2% → **T1 test AUC 0.578** (val 0.51–0.67, nhiễu quanh chance) | **BỎ làm nhãn chính** — 96–97% issue không có link + priority hằng số (JFrog 100% = "normal" — sai, bug chuẩn hóa, đã sửa 2026-10-04) → top-5% pha loãng ~70% issue không-tín-hiệu → gần như random. **Giữ làm ablation** (data `ml_JFrog_comp.*`) |
+| **v3 (dependency — CHỌN)** | `LABEL(i,t)=1` iff issue có ≥1 link **Block/Depend** (quan hệ chặn/chờ) | JFrog: 450 issue (2.9%), split 3.7/3.1/1.2% ✓ · Spring: 2,794 issue (4.0%), split 2.8/3.0/1.1% ✓ · Mojang: ~10 issue (0.02% — quá.sparse) → **T1 JFrog: test AUC 0.839** (~~tín hiệu học được!~~ ⚠️ rò rỉ nhãn — 0,620 / 0,484 sau khi bỏ feature/sự kiện link) | **Mặc định** — tín hiệu mạnh nhất, face-valid ("điểm nghẽn = issue bị chặn/chặn người"), sạch cho evaluation temporal; composite giữ làm ablation (flag `--mode composite`) |
 
 **Bài học** (ghi cho §6.1 + §8): (a) nhãn point-in-time KHÔNG được chứa hàm của t nếu evaluate bằng split thời gian; (b) quantile trên score ít biến thiên (links sparse, priority hằng) tạo tied mass → phải rank + tie-break hoặc chọn ngưỡng tín hiệu; (c) **Mojang gần như không có link Block/Depend** (0.03% issue, 14 links) → vai trò "scale/EDA" chứ không phải instance huấn luyện chính — cập nhật quyết định Q2 ở Phụ lục B khi có T2/T1 số liệu.
 
