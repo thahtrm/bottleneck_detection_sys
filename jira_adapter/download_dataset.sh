@@ -20,10 +20,10 @@ ZENODO_MD5="02f85309d966092ea130ca0797aea795"
 ZIP="$RAW_DIR/ThePublicJiraDataset.zip"
 ARCHIVE="$RAW_DIR/ThePublicJiraDataset/3. DataDump/mongodump-JiraReposAnon.archive"
 
-SERVER_NAME="mongodb-linux-x86_64-$MONGO_OS-$MONGO_VER"
+SERVER_NAME="mongodb-linux-x86_64-enterprise-$MONGO_OS-$MONGO_VER"
 TOOLS_NAME="mongodb-database-tools-$MONGO_OS-x86_64-$TOOLS_VER"
-MONGOD="$TOOLS_DIR/$SERVER_NAME/bin/mongod"
-MONGORESTORE="$TOOLS_DIR/$TOOLS_NAME/bin/mongorestore"
+MONGOD="$(find "$TOOLS_DIR" -name mongod -type f 2>/dev/null | head -1 || echo "$TOOLS_DIR/$SERVER_NAME/bin/mongod")"
+MONGORESTORE="$(find "$TOOLS_DIR" -name mongorestore -type f 2>/dev/null | head -1 || echo "$TOOLS_DIR/$TOOLS_NAME/bin/mongorestore")"
 DB_PATH="$TOOLS_DIR/mongo-data"
 LOG="$TOOLS_DIR/mongod.log"
 

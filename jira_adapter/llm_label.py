@@ -286,8 +286,10 @@ def label_issue(client: Client, key: str, pilot: Path, n_samples: int) -> dict:
     samples = []
     if raw_path.exists():
         samples = [json.loads(l) for l in raw_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+        # mẫu cũ không ghi reasoning_effort đều chạy với "low"
         samples = [s for s in samples if s.get("prompt_version") == PROMPT_VERSION
-                   and s.get("model") == client.model]
+                   and s.get("model") == client.model
+                   and s.get("reasoning_effort", "low") == client.reasoning_effort]
     user = f"DOSSIER\n\n{text}\n\nReturn the JSON object now."
     # mẫu bị cắt (hết max_tokens khi reasoning) / JSON hỏng không tính; tối đa 2N lần gọi mới
     n_calls = 0
@@ -295,11 +297,15 @@ def label_issue(client: Client, key: str, pilot: Path, n_samples: int) -> dict:
         n_calls += 1
         r = client.chat(CODEBOOK, user)
         ans = parse_answer(r["content"])
-        s = {"prompt_version": PROMPT_VERSION, "model": client.model, **r, "answer": ans,
+        s = {"prompt_version": PROMPT_VERSION, "model": client.model,
+             "reasoning_effort": client.reasoning_effort, **r, "answer": ans,
              "check": verify(ans, text) if ans else None}
         with raw_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(s, ensure_ascii=False) + "\n")
         samples.append(s)
+    # chỉ gộp N mẫu hợp lệ đầu (llm_raw có thể còn mẫu từ lần chạy N lớn hơn); mẫu hỏng vẫn tính giờ/token
+    valid = [s for s in samples if s.get("answer")]
+    samples = [s for s in samples if not s.get("answer")] + valid[:n_samples]
     agg = aggregate(samples, dossier)
     agg.update({"key": key, "model": client.model, "prompt_version": PROMPT_VERSION,
                 "seconds": round(sum(s["seconds"] for s in samples), 1),
@@ -338,6 +344,7 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None, help="chỉ chạy N issue đầu (xen kẽ các tầng)")
     ap.add_argument("--keys", nargs="*", default=None)
     ap.add_argument("--n-samples", type=int, default=None)
+    ap.add_argument("--workers", type=int, default=1, help="số issue gọi song song (≤ PARALLEL của server)")
     args = ap.parse_args()
 
     env = load_env(args.env)
@@ -363,12 +370,15 @@ def main() -> None:
         keys = keys[: args.limit]
 
     t0 = time.time()
-    for i, k in enumerate(keys, 1):
-        a = label_issue(client, k, pilot, n_samples)
-        print(f"[{i}/{len(keys)}] {k:<16} tier={manifest[k]['tier']:<9} final={a['final']!s:<6} "
-              f"vote={a.get('vote')} role={a.get('role')} type={a.get('type')} excl={a.get('exclusion')} "
-              f"fab={a.get('fabricated_evidence')} trunc={a.get('truncated')} {a.get('seconds')}s "
-              f"| elapsed {time.time() - t0:.0f}s", flush=True)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as ex:
+        futs = {ex.submit(label_issue, client, k, pilot, n_samples): k for k in keys}
+        for i, fut in enumerate(as_completed(futs), 1):
+            k, a = futs[fut], fut.result()
+            print(f"[{i}/{len(keys)}] {k:<16} tier={manifest[k]['tier']:<9} final={a['final']!s:<6} "
+                  f"vote={a.get('vote')} role={a.get('role')} type={a.get('type')} excl={a.get('exclusion')} "
+                  f"fab={a.get('fabricated_evidence')} trunc={a.get('truncated')} {a.get('seconds')}s "
+                  f"| elapsed {time.time() - t0:.0f}s", flush=True)
     print(write_csv(pilot, manifest))
 
 
