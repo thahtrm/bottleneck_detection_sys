@@ -105,65 +105,32 @@ def prepare_datasets(duckdb_path: str = "data/jira.duckdb", instance: str = "JFr
     assignee_dur_sum = defaultdict(float)
     assignee_dur_cnt = defaultdict(int)
     assignee_del_cnt = defaultdict(int)
-    assignee_resolved_history = defaultdict(list)
     reporter_del_cnt = defaultdict(int)
     reporter_cnt = defaultdict(int)
-    reporter_resolved_history = defaultdict(list)
     project_active = defaultdict(int)
-    project_resolved_history = defaultdict(list)
-    unassigned_active = set()
-    unassigned_resolved_history = list()
 
     assignee_active_count = np.zeros(len(df), dtype=int)
     assignee_hist_completed = np.zeros(len(df), dtype=int)
     assignee_hist_cycle_time = np.zeros(len(df), dtype=float)
     assignee_hist_delay_rate = np.zeros(len(df), dtype=float)
     assignee_wci = np.zeros(len(df), dtype=float)
-
-    assignee_90d_completed = np.zeros(len(df), dtype=int)
-    assignee_90d_delay_rate = np.zeros(len(df), dtype=float)
-    assignee_90d_cycle_time = np.zeros(len(df), dtype=float)
-
     reporter_hist_delay_rate = np.zeros(len(df), dtype=float)
     reporter_hist_completed = np.zeros(len(df), dtype=int)
-    reporter_90d_completed = np.zeros(len(df), dtype=int)
-    reporter_90d_delay_rate = np.zeros(len(df), dtype=float)
-
     project_active_count = np.zeros(len(df), dtype=int)
-    project_90d_completed = np.zeros(len(df), dtype=int)
-    project_90d_delay_rate = np.zeros(len(df), dtype=float)
-    project_90d_cycle_time = np.zeros(len(df), dtype=float)
-
-    unassigned_active_count = np.zeros(len(df), dtype=int)
-    unassigned_90d_delay_rate = np.zeros(len(df), dtype=float)
-
-    W90 = 90.0 * 86400.0
 
     for ts, ev_type, i in events:
         ass = assignee_arr[i]
         rep = reporter_arr[i]
         prj = proj_arr[i]
-        is_unass = (ass == "(unassigned)")
 
         if ev_type == 0:  # RESOLUTION
             assignee_active[ass].pop(i, None)
-            d_val = dur_arr[i]
-            dl_val = is_delayed_arr[i]
-            assignee_dur_sum[ass] += d_val
+            assignee_dur_sum[ass] += dur_arr[i]
             assignee_dur_cnt[ass] += 1
-            assignee_del_cnt[ass] += dl_val
-            assignee_resolved_history[ass].append((ts, d_val, dl_val))
-
-            reporter_del_cnt[rep] += dl_val
+            assignee_del_cnt[ass] += is_delayed_arr[i]
+            reporter_del_cnt[rep] += is_delayed_arr[i]
             reporter_cnt[rep] += 1
-            reporter_resolved_history[rep].append((ts, dl_val))
-
             project_active[prj] = max(0, project_active[prj] - 1)
-            project_resolved_history[prj].append((ts, d_val, dl_val))
-
-            if is_unass:
-                unassigned_active.discard(i)
-                unassigned_resolved_history.append((ts, dl_val))
         else:  # CREATION
             act_dict = assignee_active[ass]
             assignee_active_count[i] = len(act_dict)
@@ -178,53 +145,21 @@ def prepare_datasets(duckdb_path: str = "data/jira.duckdb", instance: str = "JFr
                 wci += sp / days_left
             assignee_wci[i] = round(wci, 4)
 
-            # Historical stats prior to ts (all-time)
+            # Historical stats prior to ts
             cnt = assignee_dur_cnt[ass]
             assignee_hist_completed[i] = cnt
             assignee_hist_cycle_time[i] = round((assignee_dur_sum[ass] / cnt) if cnt > 0 else planned_arr[i], 2)
             assignee_hist_delay_rate[i] = round((assignee_del_cnt[ass] / cnt) if cnt > 0 else 0.5, 4)
 
-            # Rolling 90-day stats prior to ts
-            recent_ass = [x for x in assignee_resolved_history[ass] if ts - x[0] <= W90]
-            assignee_90d_completed[i] = len(recent_ass)
-            if len(recent_ass) > 0:
-                assignee_90d_delay_rate[i] = round(float(np.mean([x[2] for x in recent_ass])), 4)
-                assignee_90d_cycle_time[i] = round(float(np.mean([x[1] for x in recent_ass])), 2)
-            else:
-                assignee_90d_delay_rate[i] = assignee_hist_delay_rate[i]
-                assignee_90d_cycle_time[i] = assignee_hist_cycle_time[i]
-
-            # Reporter stats
             r_cnt = reporter_cnt[rep]
             reporter_hist_completed[i] = r_cnt
             reporter_hist_delay_rate[i] = round((reporter_del_cnt[rep] / r_cnt) if r_cnt > 0 else 0.5, 4)
 
-            recent_rep = [x for x in reporter_resolved_history[rep] if ts - x[0] <= W90]
-            reporter_90d_completed[i] = len(recent_rep)
-            reporter_90d_delay_rate[i] = round(float(np.mean([x[1] for x in recent_rep])), 4) if len(recent_rep) > 0 else reporter_hist_delay_rate[i]
-
-            # Project stats
             project_active_count[i] = project_active[prj]
-            recent_prj = [x for x in project_resolved_history[prj] if ts - x[0] <= W90]
-            project_90d_completed[i] = len(recent_prj)
-            if len(recent_prj) > 0:
-                project_90d_delay_rate[i] = round(float(np.mean([x[2] for x in recent_prj])), 4)
-                project_90d_cycle_time[i] = round(float(np.mean([x[1] for x in recent_prj])), 2)
-            else:
-                project_90d_delay_rate[i] = 0.5
-                project_90d_cycle_time[i] = planned_arr[i]
 
-            # Unassigned stats
-            unassigned_active_count[i] = len(unassigned_active)
-            recent_unass = [x for x in unassigned_resolved_history if ts - x[0] <= W90]
-            unassigned_90d_delay_rate[i] = round(float(np.mean([x[1] for x in recent_unass])), 4) if len(recent_unass) > 0 else 0.5
-
-            # Register active task
             due = ts + planned_arr[i] * 86400.0
             act_dict[i] = (due, sp_arr[i])
             project_active[prj] += 1
-            if is_unass:
-                unassigned_active.add(i)
 
     # Schedule Compression Factor
     scf = np.round(planned_arr / np.maximum(1.0, assignee_hist_cycle_time), 4)
@@ -240,7 +175,6 @@ def prepare_datasets(duckdb_path: str = "data/jira.duckdb", instance: str = "JFr
     feat_df = pd.DataFrame({
         "issue_key": df["issue_key"].values,
         "project": df["project"].values,
-        "summary": summaries,
         "issuetype": df["issuetype"].values,
         "issuetype_theme": df["issuetype_theme"].values,
         "priority_raw": df["priority_raw"].values,
@@ -265,22 +199,12 @@ def prepare_datasets(duckdb_path: str = "data/jira.duckdb", instance: str = "JFr
         "assignee_hist_completed": assignee_hist_completed,
         "assignee_hist_cycle_time": assignee_hist_cycle_time,
         "assignee_hist_delay_rate": assignee_hist_delay_rate,
-        "assignee_90d_completed": assignee_90d_completed,
-        "assignee_90d_delay_rate": assignee_90d_delay_rate,
-        "assignee_90d_cycle_time": assignee_90d_cycle_time,
         "assignee_wci": assignee_wci,
         "scf": scf,
         "reporter": reporter_arr,
         "reporter_hist_completed": reporter_hist_completed,
         "reporter_hist_delay_rate": reporter_hist_delay_rate,
-        "reporter_90d_completed": reporter_90d_completed,
-        "reporter_90d_delay_rate": reporter_90d_delay_rate,
         "project_active_count": project_active_count,
-        "project_90d_completed": project_90d_completed,
-        "project_90d_delay_rate": project_90d_delay_rate,
-        "project_90d_cycle_time": project_90d_cycle_time,
-        "unassigned_active_count": unassigned_active_count,
-        "unassigned_90d_delay_rate": unassigned_90d_delay_rate,
         "is_delayed": is_delayed_arr,
     })
 

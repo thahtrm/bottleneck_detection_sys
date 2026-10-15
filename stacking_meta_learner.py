@@ -39,23 +39,29 @@ def build_meta_features(
     p_lr: np.ndarray,
 ) -> tuple[np.ndarray, list[str]]:
     """Xây dựng không gian đặc trưng Meta-Learning."""
-    # 1. Thống kê tổng hợp xác suất
+    # 1. Logit transform (log-odds)
+    eps = 1e-4
+    l_xgb = np.log(np.clip(p_xgb, eps, 1 - eps) / (1.0 - np.clip(p_xgb, eps, 1 - eps)))
+    l_rf = np.log(np.clip(p_rf, eps, 1 - eps) / (1.0 - np.clip(p_rf, eps, 1 - eps)))
+    l_lr = np.log(np.clip(p_lr, eps, 1 - eps) / (1.0 - np.clip(p_lr, eps, 1 - eps)))
+
+    # 2. Thống kê tổng hợp xác suất
     mean_prob = (p_xgb + p_rf + p_lr) / 3.0
     weighted_blend = 0.45 * p_xgb + 0.40 * p_rf + 0.15 * p_lr
     min_prob = np.minimum.reduce([p_xgb, p_rf, p_lr])
     max_prob = np.maximum.reduce([p_xgb, p_rf, p_lr])
     prob_spread = max_prob - min_prob
 
-    # 2. Độ bất đồng thuận (Model Disagreement)
+    # 3. Độ bất đồng thuận (Model Disagreement)
     diff_xgb_rf = np.abs(p_xgb - p_rf)
     diff_xgb_lr = np.abs(p_xgb - p_lr)
     diff_rf_lr = np.abs(p_rf - p_lr)
 
-    # 3. Tương tác phi tuyến xác suất
+    # 4. Tương tác phi tuyến xác suất
     prod_xgb_rf = p_xgb * p_rf
     prod_xgb_lr = p_xgb * p_lr
 
-    # 4. Đặc trưng nghiệp vụ phần mềm ổn định theo thời gian
+    # 5. Đặc trưng nghiệp vụ phần mềm ổn định theo thời gian
     is_unassigned = (raw_df["assignee"] == "(unassigned)").astype(float).values
     p_norm = raw_df["priority_norm"].fillna(0.4).values
     sp = raw_df["story_points"].fillna(5.0).values
@@ -70,10 +76,24 @@ def build_meta_features(
     ambiguity = raw_df["ambiguity_score"].fillna(0.0).values
     word_cnt = np.log1p(raw_df["word_count"].fillna(10).values)
 
+    # 6. Rolling 90-day velocity indicators
+    a_90d_del = raw_df["assignee_90d_delay_rate"].fillna(0.5).values
+    a_90d_cyc = np.log1p(raw_df["assignee_90d_cycle_time"].fillna(30.0).values)
+    p_90d_del = raw_df["project_90d_delay_rate"].fillna(0.5).values
+    p_90d_cyc = np.log1p(raw_df["project_90d_cycle_time"].fillna(30.0).values)
+    u_90d_del = raw_df["unassigned_90d_delay_rate"].fillna(0.5).values
+
+    # 7. Issue Graph & Dependencies
+    num_links = raw_df["num_links"].fillna(0).values
+    has_dep = raw_df["has_block_or_depend"].fillna(0).values
+
     feature_matrix = np.column_stack([
         p_xgb,
         p_rf,
         p_lr,
+        l_xgb,
+        l_rf,
+        l_lr,
         mean_prob,
         weighted_blend,
         min_prob,
@@ -96,12 +116,22 @@ def build_meta_features(
         ambiguity,
         word_cnt,
         is_unassigned,
+        a_90d_del,
+        a_90d_cyc,
+        p_90d_del,
+        p_90d_cyc,
+        u_90d_del,
+        num_links,
+        has_dep,
     ])
 
     feature_names = [
         "p_xgb",
         "p_rf",
         "p_lr",
+        "l_xgb",
+        "l_rf",
+        "l_lr",
         "mean_prob",
         "weighted_blend",
         "min_prob",
@@ -124,6 +154,13 @@ def build_meta_features(
         "ambiguity_score",
         "log_word_count",
         "is_unassigned",
+        "assignee_90d_delay_rate",
+        "assignee_90d_cycle_time",
+        "project_90d_delay_rate",
+        "project_90d_cycle_time",
+        "unassigned_90d_delay_rate",
+        "num_links",
+        "has_block_or_depend",
     ]
 
     return feature_matrix, feature_names
@@ -170,18 +207,44 @@ def run_stacking_meta_learner(
     # 4. Huấn luyện đa mô hình Meta-Learner & Chọn mô hình tối ưu trên Val
     candidates = {}
 
-    # Candidate A: Regularized Logistic Regression Meta-Learner
-    lr_meta = LogisticRegression(C=0.2, penalty="l2", random_state=42, max_iter=500)
-    lr_meta.fit(X_val_scaled, y_val)
-    candidates["Meta-LogReg"] = (
-        lr_meta.predict_proba(X_val_scaled)[:, 1],
-        lr_meta.predict_proba(X_test_scaled)[:, 1],
-        lr_meta,
-    )
+    from sklearn.model_selection import StratifiedKFold
 
-    # Candidate B: Conservative LightGBM Meta-Learner
-    lgbm_meta = LGBMClassifier(
-        n_estimators=35,
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+    # Candidate A: Regularized Logistic Regression Meta-Learner (K-Fold Ensemble)
+    oof_lr = np.zeros(len(y_val))
+    test_p_lr = np.zeros(len(y_test))
+    for train_idx, fold_idx in skf.split(X_val_scaled, y_val):
+        m_lr = LogisticRegression(C=0.1, max_iter=1000, random_state=42)
+        m_lr.fit(X_val_scaled[train_idx], y_val[train_idx])
+        oof_lr[fold_idx] = m_lr.predict_proba(X_val_scaled[fold_idx])[:, 1]
+        test_p_lr += m_lr.predict_proba(X_test_scaled)[:, 1] / 5.0
+    candidates["Meta-LogReg-Ensemble"] = (oof_lr, test_p_lr, None)
+
+    # Candidate B: Conservative LightGBM Meta-Learner (K-Fold Ensemble)
+    oof_lgb = np.zeros(len(y_val))
+    test_p_lgb = np.zeros(len(y_test))
+    for train_idx, fold_idx in skf.split(X_val_meta, y_val):
+        m_lgb = LGBMClassifier(
+            n_estimators=45,
+            max_depth=3,
+            num_leaves=7,
+            learning_rate=0.03,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_alpha=1.0,
+            reg_lambda=2.0,
+            random_state=42,
+            verbose=-1,
+        )
+        m_lgb.fit(X_val_meta[train_idx], y_val[train_idx])
+        oof_lgb[fold_idx] = m_lgb.predict_proba(X_val_meta[fold_idx])[:, 1]
+        test_p_lgb += m_lgb.predict_proba(X_test_meta)[:, 1] / 5.0
+    candidates["Meta-LightGBM-Ensemble"] = (oof_lgb, test_p_lgb, None)
+
+    # Candidate C: Full-fit LightGBM Meta-Learner
+    lgbm_full = LGBMClassifier(
+        n_estimators=40,
         max_depth=3,
         num_leaves=7,
         learning_rate=0.03,
@@ -192,24 +255,19 @@ def run_stacking_meta_learner(
         random_state=42,
         verbose=-1,
     )
-    lgbm_meta.fit(X_val_meta, y_val)
-    candidates["Meta-LightGBM"] = (
-        lgbm_meta.predict_proba(X_val_meta)[:, 1],
-        lgbm_meta.predict_proba(X_test_meta)[:, 1],
-        lgbm_meta,
+    lgbm_full.fit(X_val_meta, y_val)
+    candidates["Meta-LightGBM-Full"] = (
+        lgbm_full.predict_proba(X_val_meta)[:, 1],
+        lgbm_full.predict_proba(X_test_meta)[:, 1],
+        lgbm_full,
     )
 
-    # Candidate C: Super Ensemble Blend (Meta-LGBM + Meta-LogReg + Base Blend)
-    p_val_blend = (
-        0.40 * candidates["Meta-LightGBM"][0]
-        + 0.35 * candidates["Meta-LogReg"][0]
-        + 0.25 * (0.45 * p_val_xgb + 0.40 * p_val_rf + 0.15 * p_val_lr)
-    )
-    p_test_blend = (
-        0.40 * candidates["Meta-LightGBM"][1]
-        + 0.35 * candidates["Meta-LogReg"][1]
-        + 0.25 * (0.45 * p_test_xgb + 0.40 * p_test_rf + 0.15 * p_test_lr)
-    )
+    # Candidate D: Super Ensemble Blend
+    base_val = 0.45 * p_val_xgb + 0.40 * p_val_rf + 0.15 * p_val_lr
+    base_test = 0.45 * p_test_xgb + 0.40 * p_test_rf + 0.15 * p_test_lr
+
+    p_val_blend = 0.45 * oof_lgb + 0.35 * oof_lr + 0.20 * base_val
+    p_test_blend = 0.45 * test_p_lgb + 0.35 * test_p_lr + 0.20 * base_test
     candidates["Super-Stacking-Blend"] = (p_val_blend, p_test_blend, None)
 
     # 5. Đánh giá và quét ngưỡng tối ưu trên tập Validation

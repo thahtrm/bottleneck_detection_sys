@@ -1,25 +1,28 @@
 {
-  "winning_architecture": "Meta-LightGBM",
-  "optimal_threshold": 0.5000000000000003,
-  "val_f1": 0.7917077986179665,
+  "winning_architecture": "Meta-LightGBM-Full",
+  "optimal_threshold": 0.49500000000000033,
+  "val_f1": 0.7921882824236355,
   "test_metrics": {
-    "f1_score": 0.6519,
-    "precision": 0.5369,
-    "recall": 0.8296,
-    "pr_auc": 0.6119,
-    "roc_auc": 0.679,
-    "brier_score": 0.2342,
+    "f1_score": 0.65,
+    "precision": 0.5439,
+    "recall": 0.8074,
+    "pr_auc": 0.5594,
+    "roc_auc": 0.6628,
+    "brier_score": 0.2388,
     "confusion_matrix": {
-      "tp": 560,
-      "fp": 483,
-      "tn": 377,
-      "fn": 115
+      "tp": 545,
+      "fp": 457,
+      "tn": 403,
+      "fn": 130
     }
   },
   "feature_names": [
     "p_xgb",
     "p_rf",
     "p_lr",
+    "l_xgb",
+    "l_rf",
+    "l_lr",
     "mean_prob",
     "weighted_blend",
     "min_prob",
@@ -41,6 +44,13 @@
     "project_active_norm",
     "ambiguity_score",
     "log_word_count",
-    "is_unassigned"
+    "is_unassigned",
+    "assignee_90d_delay_rate",
+    "assignee_90d_cycle_time",
+    "project_90d_delay_rate",
+    "project_90d_cycle_time",
+    "unassigned_90d_delay_rate",
+    "num_links",
+    "has_block_or_depend"
   ]
 }

@@ -1,21 +1,21 @@
 {
   "randomforest": {
     "track": "randomforest",
-    "timestamp": "2026-10-15T13:46:44.989651+00:00",
-    "optimal_threshold": 0.46,
-    "val_f1_at_optimal_threshold": 0.7528,
+    "timestamp": "2026-10-15T15:06:56.391718+00:00",
+    "optimal_threshold": 0.49,
+    "val_f1_at_optimal_threshold": 0.7637,
     "test_metrics": {
-      "f1_score": 0.6417,
-      "precision": 0.5305,
-      "recall": 0.8119,
-      "pr_auc": 0.5871,
-      "roc_auc": 0.6523,
-      "brier_score": 0.2595,
+      "f1_score": 0.6535,
+      "precision": 0.5024,
+      "recall": 0.9348,
+      "pr_auc": 0.5027,
+      "roc_auc": 0.6153,
+      "brier_score": 0.2478,
       "confusion_matrix": {
-        "tp": 548,
-        "fp": 485,
-        "tn": 375,
-        "fn": 127
+        "tp": 631,
+        "fp": 625,
+        "tn": 235,
+        "fn": 44
       }
     },
     "target_status": {
@@ -27,7 +27,7 @@
   },
   "logreg": {
     "track": "logreg",
-    "timestamp": "2026-10-15T13:57:00.778810+00:00",
+    "timestamp": "2026-10-15T15:06:58.954427+00:00",
     "optimal_threshold": 0.7,
     "val_f1_at_optimal_threshold": 0.7391,
     "test_metrics": {
@@ -35,7 +35,7 @@
       "precision": 0.5196,
       "recall": 0.7467,
       "pr_auc": 0.4869,
-      "roc_auc": 0.5966,
+      "roc_auc": 0.5965,
       "brier_score": 0.3261,
       "confusion_matrix": {
         "tp": 504,
@@ -53,7 +53,7 @@
   },
   "xgboost": {
     "track": "xgboost",
-    "timestamp": "2026-10-15T13:55:53.558584+00:00",
+    "timestamp": "2026-10-15T15:06:52.757813+00:00",
     "optimal_threshold": 0.46,
     "val_f1_at_optimal_threshold": 0.741,
     "test_metrics": {
@@ -79,21 +79,21 @@
   },
   "stacking": {
     "track": "stacking",
-    "timestamp": "2026-10-15T13:58:25.542323+00:00",
+    "timestamp": "2026-10-15T15:12:04.959675+00:00",
     "optimal_threshold": 0.5,
     "val_f1_at_optimal_threshold": 0.7917,
     "test_metrics": {
-      "f1_score": 0.6519,
-      "precision": 0.5369,
-      "recall": 0.8296,
-      "pr_auc": 0.6119,
-      "roc_auc": 0.679,
-      "brier_score": 0.2342,
+      "f1_score": 0.65,
+      "precision": 0.5439,
+      "recall": 0.8074,
+      "pr_auc": 0.5594,
+      "roc_auc": 0.6628,
+      "brier_score": 0.2388,
       "confusion_matrix": {
-        "tp": 560,
-        "fp": 483,
-        "tn": 377,
-        "fn": 115
+        "tp": 545,
+        "fp": 457,
+        "tn": 403,
+        "fn": 130
       }
     },
     "target_status": {
