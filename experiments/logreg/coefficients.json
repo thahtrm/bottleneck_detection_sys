@@ -1,0 +1,133 @@
+{
+  "model_type": "LogisticRegression(ElasticNet, solver=saga)",
+  "hyperparameters": {
+    "C": 0.01,
+    "l1_ratio": 0.0
+  },
+  "intercept": 0.00395,
+  "total_features": 83,
+  "top_positive_risk_factors": [
+    {
+      "feature": "te_assignee",
+      "coefficient": 0.636491
+    },
+    {
+      "feature": "pt_log_project_active",
+      "coefficient": 0.467945
+    },
+    {
+      "feature": "pt_log_assignee_active",
+      "coefficient": 0.293654
+    },
+    {
+      "feature": "pt_assignee_load_ratio",
+      "coefficient": 0.281107
+    },
+    {
+      "feature": "issuetype_theme_Requirements",
+      "coefficient": 0.205388
+    },
+    {
+      "feature": "pt_assignee_hist_delay_rate",
+      "coefficient": 0.199071
+    },
+    {
+      "feature": "pt_delay_risk_score",
+      "coefficient": 0.136765
+    },
+    {
+      "feature": "priority_raw_2 - Critical",
+      "coefficient": 0.118949
+    },
+    {
+      "feature": "pt_sp_per_planned_day",
+      "coefficient": 0.076081
+    },
+    {
+      "feature": "pt_high_risk_planned",
+      "coefficient": 0.072472
+    },
+    {
+      "feature": "story_points",
+      "coefficient": 0.065789
+    },
+    {
+      "feature": "scf story_points",
+      "coefficient": 0.059281
+    },
+    {
+      "feature": "pt_reporter_hist_delay_rate",
+      "coefficient": 0.054891
+    },
+    {
+      "feature": "te_issuetype",
+      "coefficient": 0.052544
+    },
+    {
+      "feature": "reporter_hist_delay_rate_sp_3",
+      "coefficient": 0.04529
+    }
+  ],
+  "top_negative_protective_factors": [
+    {
+      "feature": "pt_log_reporter_completed",
+      "coefficient": -0.26947
+    },
+    {
+      "feature": "assignee_wci",
+      "coefficient": -0.195819
+    },
+    {
+      "feature": "issuetype_theme_Maintenance",
+      "coefficient": -0.192051
+    },
+    {
+      "feature": "assignee_wci story_points",
+      "coefficient": -0.179708
+    },
+    {
+      "feature": "reporter_hist_delay_rate_sp_2",
+      "coefficient": -0.159967
+    },
+    {
+      "feature": "pt_tight_deadline",
+      "coefficient": -0.145097
+    },
+    {
+      "feature": "priority_raw_1 - Blocker",
+      "coefficient": -0.126199
+    },
+    {
+      "feature": "scf planned_duration_days",
+      "coefficient": -0.094229
+    },
+    {
+      "feature": "pt_high_priority",
+      "coefficient": -0.069192
+    },
+    {
+      "feature": "story_points_sp_2",
+      "coefficient": -0.061601
+    },
+    {
+      "feature": "project_HAP",
+      "coefficient": -0.049436
+    },
+    {
+      "feature": "pt_priority_norm",
+      "coefficient": -0.04454
+    },
+    {
+      "feature": "planned_duration_days",
+      "coefficient": -0.038753
+    },
+    {
+      "feature": "assignee_hist_cycle_time_sp_2",
+      "coefficient": -0.031983
+    },
+    {
+      "feature": "planned_duration_days_sp_3",
+      "coefficient": -0.028426
+    }
+  ]
+}
