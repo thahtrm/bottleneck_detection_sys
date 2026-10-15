@@ -1,0 +1,46 @@
+{
+  "winning_architecture": "Meta-LightGBM",
+  "optimal_threshold": 0.5000000000000003,
+  "val_f1": 0.7917077986179665,
+  "test_metrics": {
+    "f1_score": 0.6519,
+    "precision": 0.5369,
+    "recall": 0.8296,
+    "pr_auc": 0.6119,
+    "roc_auc": 0.679,
+    "brier_score": 0.2342,
+    "confusion_matrix": {
+      "tp": 560,
+      "fp": 483,
+      "tn": 377,
+      "fn": 115
+    }
+  },
+  "feature_names": [
+    "p_xgb",
+    "p_rf",
+    "p_lr",
+    "mean_prob",
+    "weighted_blend",
+    "min_prob",
+    "max_prob",
+    "prob_spread",
+    "diff_xgb_rf",
+    "diff_xgb_lr",
+    "diff_rf_lr",
+    "prod_xgb_rf",
+    "prod_xgb_lr",
+    "priority_norm",
+    "story_points",
+    "planned_duration_days",
+    "sp_planned_ratio",
+    "assignee_wci",
+    "scf",
+    "reporter_hist_delay_rate",
+    "assignee_hist_delay_rate",
+    "project_active_norm",
+    "ambiguity_score",
+    "log_word_count",
+    "is_unassigned"
+  ]
+}

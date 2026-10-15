@@ -1,0 +1,106 @@
+{
+  "randomforest": {
+    "track": "randomforest",
+    "timestamp": "2026-10-15T13:46:44.989651+00:00",
+    "optimal_threshold": 0.46,
+    "val_f1_at_optimal_threshold": 0.7528,
+    "test_metrics": {
+      "f1_score": 0.6417,
+      "precision": 0.5305,
+      "recall": 0.8119,
+      "pr_auc": 0.5871,
+      "roc_auc": 0.6523,
+      "brier_score": 0.2595,
+      "confusion_matrix": {
+        "tp": 548,
+        "fp": 485,
+        "tn": 375,
+        "fn": 127
+      }
+    },
+    "target_status": {
+      "f1_target_passed (>= 0.80)": false,
+      "precision_constraint_passed (>= 0.75)": false,
+      "recall_constraint_passed (>= 0.80)": true,
+      "all_constraints_met": false
+    }
+  },
+  "logreg": {
+    "track": "logreg",
+    "timestamp": "2026-10-15T13:57:00.778810+00:00",
+    "optimal_threshold": 0.7,
+    "val_f1_at_optimal_threshold": 0.7391,
+    "test_metrics": {
+      "f1_score": 0.6128,
+      "precision": 0.5196,
+      "recall": 0.7467,
+      "pr_auc": 0.4869,
+      "roc_auc": 0.5966,
+      "brier_score": 0.3261,
+      "confusion_matrix": {
+        "tp": 504,
+        "fp": 466,
+        "tn": 394,
+        "fn": 171
+      }
+    },
+    "target_status": {
+      "f1_target_passed (>= 0.80)": false,
+      "precision_constraint_passed (>= 0.75)": false,
+      "recall_constraint_passed (>= 0.80)": false,
+      "all_constraints_met": false
+    }
+  },
+  "xgboost": {
+    "track": "xgboost",
+    "timestamp": "2026-10-15T13:55:53.558584+00:00",
+    "optimal_threshold": 0.46,
+    "val_f1_at_optimal_threshold": 0.741,
+    "test_metrics": {
+      "f1_score": 0.6443,
+      "precision": 0.5279,
+      "recall": 0.8267,
+      "pr_auc": 0.5157,
+      "roc_auc": 0.6309,
+      "brier_score": 0.2779,
+      "confusion_matrix": {
+        "tp": 558,
+        "fp": 499,
+        "tn": 361,
+        "fn": 117
+      }
+    },
+    "target_status": {
+      "f1_target_passed (>= 0.80)": false,
+      "precision_constraint_passed (>= 0.75)": false,
+      "recall_constraint_passed (>= 0.80)": true,
+      "all_constraints_met": false
+    }
+  },
+  "stacking": {
+    "track": "stacking",
+    "timestamp": "2026-10-15T13:58:25.542323+00:00",
+    "optimal_threshold": 0.5,
+    "val_f1_at_optimal_threshold": 0.7917,
+    "test_metrics": {
+      "f1_score": 0.6519,
+      "precision": 0.5369,
+      "recall": 0.8296,
+      "pr_auc": 0.6119,
+      "roc_auc": 0.679,
+      "brier_score": 0.2342,
+      "confusion_matrix": {
+        "tp": 560,
+        "fp": 483,
+        "tn": 377,
+        "fn": 115
+      }
+    },
+    "target_status": {
+      "f1_target_passed (>= 0.80)": false,
+      "precision_constraint_passed (>= 0.75)": false,
+      "recall_constraint_passed (>= 0.80)": true,
+      "all_constraints_met": false
+    }
+  }
+}
