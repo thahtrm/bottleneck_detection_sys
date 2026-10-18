@@ -1,0 +1,17 @@
+{
+  "model": "Hybrid Stacking Meta-Ranker (Track 5)",
+  "objective": "Task Criticality & Schedule Impact Multi-View Fusion",
+  "ensemble_weights": {
+    "Track1_GraphCPM": 0.173,
+    "Track2_CascadeSim": 0.1082,
+    "Track3_TGN": 0.6913,
+    "Track4_LGBMRanker": 0.0274
+  },
+  "components": {
+    "track1": "Topological DAG & Critical Path Slack Time (CPM)",
+    "track2": "Monte Carlo Cascading Schedule Slippage & Survival AFT",
+    "track3": "Continuous-Time Temporal Graph Network (TGN) Memory (128d)",
+    "track4": "Learning-to-Rank LambdaRank GBDT Multi-Task"
+  },
+  "evaluation_timestamp": "2026-10-18T12:47:58.839574+00:00"
+}

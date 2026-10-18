@@ -1,0 +1,52 @@
+[
+  {
+    "rank": 1,
+    "feature": "priority_norm",
+    "mean_abs_shap": 0.1089
+  },
+  {
+    "rank": 2,
+    "feature": "story_points",
+    "mean_abs_shap": 0.0626
+  },
+  {
+    "rank": 3,
+    "feature": "active_per_completed",
+    "mean_abs_shap": 0.0282
+  },
+  {
+    "rank": 4,
+    "feature": "proj_enc",
+    "mean_abs_shap": 0.0238
+  },
+  {
+    "rank": 5,
+    "feature": "assignee_active_count",
+    "mean_abs_shap": 0.0233
+  },
+  {
+    "rank": 6,
+    "feature": "project_90d_completed",
+    "mean_abs_shap": 0.0228
+  },
+  {
+    "rank": 7,
+    "feature": "assignee_hist_completed",
+    "mean_abs_shap": 0.013
+  },
+  {
+    "rank": 8,
+    "feature": "blocks_count",
+    "mean_abs_shap": 0.0121
+  },
+  {
+    "rank": 9,
+    "feature": "type_enc",
+    "mean_abs_shap": 0.0112
+  },
+  {
+    "rank": 10,
+    "feature": "assignee_90d_completed",
+    "mean_abs_shap": 0.011
+  }
+]

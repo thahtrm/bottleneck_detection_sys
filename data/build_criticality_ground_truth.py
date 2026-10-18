@@ -25,6 +25,14 @@ import pandas as pd
 import networkx as nx
 
 
+def min_max_norm(arr: np.ndarray) -> np.ndarray:
+    p99 = np.percentile(arr, 99) if len(arr) > 0 else 1.0
+    p1 = np.percentile(arr, 1) if len(arr) > 0 else 0.0
+    if p99 > p1:
+        return np.clip((arr - p1) / (p99 - p1), 0.0, 1.0).astype(np.float32)
+    return np.zeros_like(arr, dtype=np.float32)
+
+
 def compute_graph_cpm_metrics(
     issues_df: pd.DataFrame,
     links_df: pd.DataFrame,
@@ -219,6 +227,13 @@ def build_criticality_dataset(
     planned_dur[p_norm >= 0.6] = 30.0
     planned_dur[p_norm >= 0.8] = 14.0
 
+    s_ser = issues_df["summary"].fillna("")
+    word_counts = np.maximum(1, s_ser.str.split().str.len().fillna(1).values.astype(np.int32))
+    theme_w = np.ones(n_total, dtype=np.float32)
+    theme_w[t_ser.values == "maintenance"] = 2.0
+    theme_w[t_ser.values == "requirements"] = 4.0
+    sp_arr = np.round(1.0 + 3.0 * p_norm + theme_w + np.minimum(word_counts / 15.0, 2.0)).astype(np.float32)
+
     issues_df["planned_duration_days"] = planned_dur
 
     max_dataset_ts = float(np.nanmax(issues_df["created_ts"].values)) + 86400.0
@@ -241,6 +256,11 @@ def build_criticality_dataset(
     marginal_delay = np.array([graph_metrics["marginal_delay"].get(k, 0.0) for k in issues_df["issue_key"]], dtype=np.float32)
     inverted_pr = np.array([graph_metrics["inverted_pagerank"].get(k, 0.0) for k in issues_df["issue_key"]], dtype=np.float32)
 
+    blocks_cnt_map = links_df.groupby("target_key").size().to_dict()
+    depends_cnt_map = links_df.groupby("source_key").size().to_dict()
+    issues_df["blocks_count"] = np.array([blocks_cnt_map.get(k, 0) for k in issues_df["issue_key"]], dtype=np.int32)
+    issues_df["depends_count"] = np.array([depends_cnt_map.get(k, 0) for k in issues_df["issue_key"]], dtype=np.int32)
+
     issues_df["blast_radius"] = blast_radius
     issues_df["downstream_delay"] = downstream_delay
     issues_df["slack_time"] = slack_time
@@ -249,33 +269,32 @@ def build_criticality_dataset(
 
     # 4. Formulate Unified Ground Truth Criticality Score
     print("[4/5] Formulating Ground Truth Criticality Score and P0 alerts...", flush=True)
-    # Graph slack score: 1 if slack is 0 (on critical path), decays with larger slack
-    slack_score = np.exp(-slack_time / 14.0).astype(np.float32)
-    
-    # Normalizations
-    def min_max_norm(arr: np.ndarray) -> np.ndarray:
-        p99 = np.percentile(arr, 99)
-        p1 = np.percentile(arr, 1)
-        if p99 > p1:
-            return np.clip((arr - p1) / (p99 - p1), 0.0, 1.0).astype(np.float32)
-        return np.zeros_like(arr, dtype=np.float32)
+    # Structural DAG Criticality
+    norm_marginal = issues_df["marginal_delay"].values / (issues_df["marginal_delay"].max() + 1e-4)
+    norm_casc = issues_df["downstream_delay"].values / (issues_df["downstream_delay"].max() + 1e-4)
+    slack_score = np.exp(-issues_df["slack_time"].values / 14.0).astype(np.float32)
+    norm_blast = np.clip(issues_df["blast_radius"].values / 5.0, 0.0, 1.0).astype(np.float32)
+    norm_pr = issues_df["inverted_pagerank"].values / (issues_df["inverted_pagerank"].max() + 1e-4)
 
-    norm_marginal = min_max_norm(marginal_delay)
-    norm_cascading = min_max_norm(downstream_delay)
-    norm_blast = min_max_norm(blast_radius)
-    norm_slip = min_max_norm(slippage_arr * (1.0 + 2.0 * p_norm))
-    norm_pr = min_max_norm(inverted_pr)
+    graph_crit = (
+        0.35 * norm_marginal
+        + 0.30 * norm_casc
+        + 0.15 * slack_score
+        + 0.10 * norm_blast
+        + 0.10 * norm_pr
+    ).astype(np.float32)
 
-    is_graph_node = (blast_radius > 0) | (slack_time < 999.0) | (marginal_delay > 0)
+    prio_weight = p_norm
+    slip_ratio = np.clip(slippage_arr / (planned_dur + 1e-4), 0.0, 3.0) / 3.0
 
-    # Raw criticality composite
+    is_blocker = (issues_df["blast_radius"].values > 0) | (issues_df["blocks_count"].values > 0)
+
+    # Raw criticality composite reflecting schedule impact & cascading risk
     raw_criticality = np.where(
-        is_graph_node,
-        0.35 * norm_marginal + 0.25 * norm_cascading + 0.15 * slack_score + 0.15 * norm_blast + 0.10 * norm_slip,
-        0.60 * norm_slip + 0.40 * min_max_norm(slippage_arr / (planned_dur + 1e-4)),
-    )
-    # Boost graph nodes with verified downstream cascading impact
-    raw_criticality = np.where(is_graph_node, raw_criticality * 1.25, raw_criticality).astype(np.float32)
+        is_blocker,
+        0.70 + 0.30 * graph_crit + 0.20 * prio_weight + 0.10 * slip_ratio,
+        0.50 * prio_weight + 0.35 * slip_ratio + 0.15 * np.clip(sp_arr / 15.0, 0.0, 1.0),
+    ).astype(np.float32)
     issues_df["raw_criticality"] = raw_criticality
 
     # 5. Extract Zero-Leakage T0 Features (WCI, SCF, Historical Dynamics, NLP Lexicons)
