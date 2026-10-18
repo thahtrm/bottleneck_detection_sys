@@ -1,42 +1,42 @@
 [
   {
+    "feature": "assignee_te",
+    "mean_abs_shap": 0.2634880840778351
+  },
+  {
+    "feature": "project_te",
+    "mean_abs_shap": 0.23582448065280914
+  },
+  {
+    "feature": "active_per_completed_90d",
+    "mean_abs_shap": 0.23289933800697327
+  },
+  {
+    "feature": "reporter_te",
+    "mean_abs_shap": 0.22542253136634827
+  },
+  {
+    "feature": "issuetype_te",
+    "mean_abs_shap": 0.14070618152618408
+  },
+  {
+    "feature": "assignee_log_freq",
+    "mean_abs_shap": 0.1377170830965042
+  },
+  {
     "feature": "active_per_completed",
-    "mean_abs_shap": 0.46154868602752686
+    "mean_abs_shap": 0.13174141943454742
   },
   {
-    "feature": "is_unassigned",
-    "mean_abs_shap": 0.3162749409675598
+    "feature": "priority_raw_te",
+    "mean_abs_shap": 0.07133840024471283
   },
   {
-    "feature": "assignee_active_count",
-    "mean_abs_shap": 0.1283075511455536
+    "feature": "log_assignee_completed",
+    "mean_abs_shap": 0.06699086725711823
   },
   {
-    "feature": "project_active_count",
-    "mean_abs_shap": 0.10316530615091324
-  },
-  {
-    "feature": "assignee_hist_completed",
-    "mean_abs_shap": 0.10280096530914307
-  },
-  {
-    "feature": "mean_hist_delay",
-    "mean_abs_shap": 0.09969010204076767
-  },
-  {
-    "feature": "reporter_hist_delay_rate",
-    "mean_abs_shap": 0.06389869749546051
-  },
-  {
-    "feature": "reporter_hist_completed",
-    "mean_abs_shap": 0.05446344241499901
-  },
-  {
-    "feature": "diff_hist_delay",
-    "mean_abs_shap": 0.048838838934898376
-  },
-  {
-    "feature": "prod_hist_delay",
-    "mean_abs_shap": 0.03640839084982872
+    "feature": "links_per_sp",
+    "mean_abs_shap": 0.06464049220085144
   }
 ]

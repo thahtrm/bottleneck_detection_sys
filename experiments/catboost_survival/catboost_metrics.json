@@ -1,0 +1,26 @@
+{
+  "model": "catboost_survival_aft",
+  "distribution": "Normal",
+  "scale": 2.6,
+  "competing_risks": "none",
+  "optimal_threshold": 0.21000000000000002,
+  "val_f1": 0.6006666646772167,
+  "test_f1": 0.48925081433224754,
+  "test_precision": 0.3450418421484439,
+  "test_recall": 0.8405596269153898,
+  "test_pr_auc": 0.4107231789952438,
+  "test_roc_auc": 0.7444662746584576,
+  "test_brier": 0.15212070181304282,
+  "best_hyperparameters": {
+    "distribution": "Normal",
+    "scale": 2.6,
+    "depth": 8,
+    "learning_rate": 0.04021359337708006,
+    "l2_leaf_reg": 9.297519155931083,
+    "random_strength": 0.2859913390614711,
+    "half_life_days": 3180.104224878513,
+    "censored_weight_boost": 1.0939848188713912
+  },
+  "train_samples": 1810894,
+  "censored_samples": 195422
+}

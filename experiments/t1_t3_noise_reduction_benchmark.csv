@@ -1,0 +1,13 @@
+name,description,precision,recall,f1_score,pr_auc,roc_auc,brier_score,alert_rate,fdr (false_alarm_rate),tp,fp,tn,fn,evaluated_samples
+T1 - Giải pháp 1: Lọc Sinh Tồn Tự Nhiên (T > 1d),"Loại bỏ tự nhiên các task đóng sớm <= 1 ngày, giữ nguyên xác suất tĩnh T0",0.5151,0.818,0.6321,0.5883,0.8789,0.1181,0.3443,0.4849,61388,57793,213331,13662,346174
+T1 - Giải pháp 2: Tái Hiệu Chuẩn Đặc Trưng Tĩnh T0,Hiệu chuẩn xác suất sinh tồn có điều kiện tại Ngày 1 chỉ dùng đặc trưng T0,0.5729,0.7104,0.6343,0.667,0.8939,0.1096,0.2689,0.4271,53317,39756,231368,21733,346174
+T1 - Giải pháp 3: Kiến Trúc 4 Trụ Cột Động (Recall >= 80%),Kết hợp Changelogs/Comments + Bayes Có Điều Kiện + Residual Margin tại Ngày 1 (T*=0.42),0.574,0.8008,0.6687,0.7126,0.9121,0.1018,0.3025,0.426,60101,44604,226520,14949,346174
+T1 - Giải pháp 4: Cổng Khử Nhiễu Nghiêm Ngặt (High-Precision Gate),Ngưỡng khắt khe ưu tiên độ chính xác cao tại Ngày 1 (T*=0.46),0.6004,0.758,0.67,0.7126,0.9121,0.1018,0.2737,0.3996,56888,37869,233255,18162,346174
+T2 - Giải pháp 1: Lọc Sinh Tồn Tự Nhiên (T > 2d),"Loại bỏ tự nhiên các task đóng sớm <= 2 ngày, giữ nguyên xác suất tĩnh T0",0.5445,0.818,0.6538,0.6125,0.8923,0.1109,0.3257,0.4555,61388,51355,219769,13662,346174
+T2 - Giải pháp 2: Tái Hiệu Chuẩn Đặc Trưng Tĩnh T0,Hiệu chuẩn xác suất sinh tồn có điều kiện tại Ngày 2 chỉ dùng đặc trưng T0,0.5799,0.7698,0.6615,0.6996,0.9084,0.1029,0.2878,0.4201,57771,41846,229278,17279,346174
+T2 - Giải pháp 3: Kiến Trúc 4 Trụ Cột Động (Recall >= 80%),Kết hợp Changelogs/Comments + Bayes Có Điều Kiện + Residual Margin tại Ngày 2 (T*=0.46),0.6025,0.8055,0.6894,0.7402,0.9227,0.0969,0.2898,0.3975,60454,39879,231245,14596,346174
+T2 - Giải pháp 4: Cổng Khử Nhiễu Nghiêm Ngặt (High-Precision Gate),Ngưỡng khắt khe ưu tiên độ chính xác cao tại Ngày 2 (T*=0.5),0.6294,0.7618,0.6893,0.7402,0.9227,0.0969,0.2624,0.3706,57174,33658,237466,17876,346174
+T3 - Giải pháp 1: Lọc Sinh Tồn Tự Nhiên (T > 3d),"Loại bỏ tự nhiên các task đóng sớm <= 3 ngày, giữ nguyên xác suất tĩnh T0",0.5669,0.818,0.6697,0.6318,0.9016,0.1061,0.3128,0.4331,61388,46897,224227,13662,346174
+T3 - Giải pháp 2: Tái Hiệu Chuẩn Đặc Trưng Tĩnh T0,Hiệu chuẩn xác suất sinh tồn có điều kiện tại Ngày 3 chỉ dùng đặc trưng T0,0.581,0.8116,0.6772,0.7188,0.9174,0.0983,0.3029,0.419,60913,43929,227195,14137,346174
+T3 - Giải pháp 3: Kiến Trúc 4 Trụ Cột Động (Recall >= 80%),Kết hợp Changelogs/Comments + Bayes Có Điều Kiện + Residual Margin tại Ngày 3 (T*=0.48),0.6185,0.8133,0.7026,0.7567,0.9296,0.0932,0.2851,0.3815,61036,37651,233473,14014,346174
+T3 - Giải pháp 4: Cổng Khử Nhiễu Nghiêm Ngặt (High-Precision Gate),Ngưỡng khắt khe ưu tiên độ chính xác cao tại Ngày 3 (T*=0.52),0.6436,0.7709,0.7015,0.7567,0.9296,0.0932,0.2597,0.3564,57853,32036,239088,17197,346174

@@ -1,0 +1,135 @@
+{
+  "model_type": "LogisticRegression(ElasticNet + Splines + PowerTransformer + TFIDF + CalibratedClassifierCV)",
+  "hyperparameters": {
+    "C": 0.003,
+    "l1_ratio": 0.2,
+    "solver": "saga",
+    "calibration": "sigmoid (Platt scaling)"
+  },
+  "intercept": 0.196224,
+  "total_features": 150,
+  "top_positive_risk_factors": [
+    {
+      "feature": "is_unassigned",
+      "coefficient": 0.285714
+    },
+    {
+      "feature": "pt_active_per_completed",
+      "coefficient": 0.180653
+    },
+    {
+      "feature": "log_assignee_active",
+      "coefficient": 0.159953
+    },
+    {
+      "feature": "unassigned_risk_90d",
+      "coefficient": 0.114541
+    },
+    {
+      "feature": "reporter_hist_delay_rate",
+      "coefficient": 0.08576
+    },
+    {
+      "feature": "scf_sp_0",
+      "coefficient": 0.083594
+    },
+    {
+      "feature": "issuetype_New Feature",
+      "coefficient": 0.07459
+    },
+    {
+      "feature": "pt_assignee_active_count",
+      "coefficient": 0.059755
+    },
+    {
+      "feature": "active_per_completed",
+      "coefficient": 0.055501
+    },
+    {
+      "feature": "delay_risk_score",
+      "coefficient": 0.054437
+    },
+    {
+      "feature": "pt_project_active_count",
+      "coefficient": 0.041575
+    },
+    {
+      "feature": "issuetype_Task",
+      "coefficient": 0.038335
+    },
+    {
+      "feature": "num_links",
+      "coefficient": 0.037875
+    },
+    {
+      "feature": "total_deps",
+      "coefficient": 0.037875
+    },
+    {
+      "feature": "tfidf_plugin",
+      "coefficient": 0.029693
+    }
+  ],
+  "top_negative_protective_factors": [
+    {
+      "feature": "pt_assignee_90d_completed",
+      "coefficient": -0.223542
+    },
+    {
+      "feature": "log_reporter_completed",
+      "coefficient": -0.094521
+    },
+    {
+      "feature": "pt_reporter_hist_completed",
+      "coefficient": -0.089963
+    },
+    {
+      "feature": "log_assignee_wci",
+      "coefficient": -0.071875
+    },
+    {
+      "feature": "project_active_count_sp_0",
+      "coefficient": -0.070357
+    },
+    {
+      "feature": "issuetype_theme_Maintenance",
+      "coefficient": -0.050443
+    },
+    {
+      "feature": "pt_reporter_90d_completed",
+      "coefficient": -0.046236
+    },
+    {
+      "feature": "project_90d_delay_rate",
+      "coefficient": -0.022645
+    },
+    {
+      "feature": "log_scf",
+      "coefficient": -0.017925
+    },
+    {
+      "feature": "tfidf_ui",
+      "coefficient": -0.012805
+    },
+    {
+      "feature": "tfidf_does",
+      "coefficient": -0.011378
+    },
+    {
+      "feature": "tfidf_version",
+      "coefficient": -0.010925
+    },
+    {
+      "feature": "issuetype_Sub-task",
+      "coefficient": -0.004692
+    },
+    {
+      "feature": "issuetype_Support Ticket",
+      "coefficient": -0.003889
+    },
+    {
+      "feature": "sp_planned_ratio_sp_1",
+      "coefficient": -0.001516
+    }
+  ]
+}

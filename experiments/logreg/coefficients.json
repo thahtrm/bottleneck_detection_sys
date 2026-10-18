@@ -1,133 +1,135 @@
 {
-  "model_type": "LogisticRegression(ElasticNet, solver=saga)",
+  "model_type": "LogisticRegression(ElasticNet + Splines + PowerTransformer + TFIDF + CalibratedClassifierCV)",
   "hyperparameters": {
-    "C": 0.01,
-    "l1_ratio": 0.0
+    "C": 0.003,
+    "l1_ratio": 0.2,
+    "solver": "saga",
+    "calibration": "sigmoid (Platt scaling)"
   },
-  "intercept": 0.004916,
-  "total_features": 83,
+  "intercept": 0.196224,
+  "total_features": 150,
   "top_positive_risk_factors": [
     {
-      "feature": "te_assignee",
-      "coefficient": 0.638581
+      "feature": "is_unassigned",
+      "coefficient": 0.285714
     },
     {
-      "feature": "pt_log_project_active",
-      "coefficient": 0.468023
+      "feature": "pt_active_per_completed",
+      "coefficient": 0.180653
     },
     {
-      "feature": "pt_log_assignee_active",
-      "coefficient": 0.293363
+      "feature": "log_assignee_active",
+      "coefficient": 0.159953
     },
     {
-      "feature": "pt_assignee_load_ratio",
-      "coefficient": 0.28088
+      "feature": "unassigned_risk_90d",
+      "coefficient": 0.114541
     },
     {
-      "feature": "issuetype_theme_Requirements",
-      "coefficient": 0.205267
+      "feature": "reporter_hist_delay_rate",
+      "coefficient": 0.08576
     },
     {
-      "feature": "pt_assignee_hist_delay_rate",
-      "coefficient": 0.198113
+      "feature": "scf_sp_0",
+      "coefficient": 0.083594
     },
     {
-      "feature": "pt_delay_risk_score",
-      "coefficient": 0.136859
+      "feature": "issuetype_New Feature",
+      "coefficient": 0.07459
     },
     {
-      "feature": "priority_raw_2 - Critical",
-      "coefficient": 0.119034
+      "feature": "pt_assignee_active_count",
+      "coefficient": 0.059755
     },
     {
-      "feature": "pt_sp_per_planned_day",
-      "coefficient": 0.075853
+      "feature": "active_per_completed",
+      "coefficient": 0.055501
     },
     {
-      "feature": "pt_high_risk_planned",
-      "coefficient": 0.072641
+      "feature": "delay_risk_score",
+      "coefficient": 0.054437
     },
     {
-      "feature": "story_points",
-      "coefficient": 0.065834
+      "feature": "pt_project_active_count",
+      "coefficient": 0.041575
     },
     {
-      "feature": "scf story_points",
-      "coefficient": 0.058665
+      "feature": "issuetype_Task",
+      "coefficient": 0.038335
     },
     {
-      "feature": "pt_reporter_hist_delay_rate",
-      "coefficient": 0.055002
+      "feature": "num_links",
+      "coefficient": 0.037875
     },
     {
-      "feature": "te_issuetype",
-      "coefficient": 0.048801
+      "feature": "total_deps",
+      "coefficient": 0.037875
     },
     {
-      "feature": "reporter_hist_delay_rate_sp_3",
-      "coefficient": 0.045341
+      "feature": "tfidf_plugin",
+      "coefficient": 0.029693
     }
   ],
   "top_negative_protective_factors": [
     {
-      "feature": "pt_log_reporter_completed",
-      "coefficient": -0.269864
+      "feature": "pt_assignee_90d_completed",
+      "coefficient": -0.223542
     },
     {
-      "feature": "assignee_wci",
-      "coefficient": -0.195701
+      "feature": "log_reporter_completed",
+      "coefficient": -0.094521
+    },
+    {
+      "feature": "pt_reporter_hist_completed",
+      "coefficient": -0.089963
+    },
+    {
+      "feature": "log_assignee_wci",
+      "coefficient": -0.071875
+    },
+    {
+      "feature": "project_active_count_sp_0",
+      "coefficient": -0.070357
     },
     {
       "feature": "issuetype_theme_Maintenance",
-      "coefficient": -0.191749
+      "coefficient": -0.050443
     },
     {
-      "feature": "assignee_wci story_points",
-      "coefficient": -0.179493
+      "feature": "pt_reporter_90d_completed",
+      "coefficient": -0.046236
     },
     {
-      "feature": "reporter_hist_delay_rate_sp_2",
-      "coefficient": -0.159578
+      "feature": "project_90d_delay_rate",
+      "coefficient": -0.022645
     },
     {
-      "feature": "pt_tight_deadline",
-      "coefficient": -0.145317
+      "feature": "log_scf",
+      "coefficient": -0.017925
     },
     {
-      "feature": "priority_raw_1 - Blocker",
-      "coefficient": -0.125979
+      "feature": "tfidf_ui",
+      "coefficient": -0.012805
     },
     {
-      "feature": "scf planned_duration_days",
-      "coefficient": -0.093359
+      "feature": "tfidf_does",
+      "coefficient": -0.011378
     },
     {
-      "feature": "pt_high_priority",
-      "coefficient": -0.06924
+      "feature": "tfidf_version",
+      "coefficient": -0.010925
     },
     {
-      "feature": "story_points_sp_2",
-      "coefficient": -0.061663
+      "feature": "issuetype_Sub-task",
+      "coefficient": -0.004692
     },
     {
-      "feature": "project_HAP",
-      "coefficient": -0.049156
+      "feature": "issuetype_Support Ticket",
+      "coefficient": -0.003889
     },
     {
-      "feature": "pt_priority_norm",
-      "coefficient": -0.044423
-    },
-    {
-      "feature": "planned_duration_days",
-      "coefficient": -0.038554
-    },
-    {
-      "feature": "assignee_hist_cycle_time_sp_2",
-      "coefficient": -0.031803
-    },
-    {
-      "feature": "planned_duration_days_sp_3",
-      "coefficient": -0.028477
+      "feature": "sp_planned_ratio_sp_1",
+      "coefficient": -0.001516
     }
   ]
 }

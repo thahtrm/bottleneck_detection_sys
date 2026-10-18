@@ -1,0 +1,196 @@
+{
+  "core_threshold": 0.46,
+  "pre_prediction_gate": {
+    "t0_gate_roc_auc": 0.9686,
+    "t0_gate_pr_auc": 0.9761,
+    "t24_gate_roc_auc": 0.9747,
+    "t24_gate_pr_auc": 0.9809,
+    "recommended_t0_gate": {
+      "gate": "T0+ Pre-Triage Gate",
+      "threshold": 0.8,
+      "flagged_issues": 152461,
+      "precision_non_work": 0.9797,
+      "recall_non_work": 0.8379,
+      "recall_duplicates": 0.8783,
+      "lost_real_delayed_issues": 1110,
+      "preserved_real_delayed_rate": 0.975
+    },
+    "purification_sweep": [
+      {
+        "gate": "T0+ Pre-Triage Gate",
+        "threshold": 0.9,
+        "flagged_issues": 147191,
+        "precision_non_work": 0.9834,
+        "recall_non_work": 0.812,
+        "recall_duplicates": 0.8647,
+        "lost_real_delayed_issues": 847,
+        "preserved_real_delayed_rate": 0.9809
+      },
+      {
+        "gate": "T0+ Pre-Triage Gate",
+        "threshold": 0.85,
+        "flagged_issues": 150213,
+        "precision_non_work": 0.9817,
+        "recall_non_work": 0.8273,
+        "recall_duplicates": 0.8721,
+        "lost_real_delayed_issues": 985,
+        "preserved_real_delayed_rate": 0.9778
+      },
+      {
+        "gate": "T0+ Pre-Triage Gate",
+        "threshold": 0.8,
+        "flagged_issues": 152461,
+        "precision_non_work": 0.9797,
+        "recall_non_work": 0.8379,
+        "recall_duplicates": 0.8783,
+        "lost_real_delayed_issues": 1110,
+        "preserved_real_delayed_rate": 0.975
+      },
+      {
+        "gate": "T0+ Pre-Triage Gate",
+        "threshold": 0.75,
+        "flagged_issues": 154367,
+        "precision_non_work": 0.9774,
+        "recall_non_work": 0.8464,
+        "recall_duplicates": 0.8844,
+        "lost_real_delayed_issues": 1271,
+        "preserved_real_delayed_rate": 0.9714
+      },
+      {
+        "gate": "T0+ Pre-Triage Gate",
+        "threshold": 0.7,
+        "flagged_issues": 156182,
+        "precision_non_work": 0.9748,
+        "recall_non_work": 0.8541,
+        "recall_duplicates": 0.8911,
+        "lost_real_delayed_issues": 1412,
+        "preserved_real_delayed_rate": 0.9682
+      },
+      {
+        "gate": "T0+ Pre-Triage Gate",
+        "threshold": 0.6,
+        "flagged_issues": 160516,
+        "precision_non_work": 0.9664,
+        "recall_non_work": 0.8703,
+        "recall_duplicates": 0.9052,
+        "lost_real_delayed_issues": 1870,
+        "preserved_real_delayed_rate": 0.9579
+      },
+      {
+        "gate": "T0+ Pre-Triage Gate",
+        "threshold": 0.5,
+        "flagged_issues": 165574,
+        "precision_non_work": 0.953,
+        "recall_non_work": 0.8852,
+        "recall_duplicates": 0.9162,
+        "lost_real_delayed_issues": 2574,
+        "preserved_real_delayed_rate": 0.9421
+      },
+      {
+        "gate": "T24h Post-Triage Gate",
+        "threshold": 0.9,
+        "flagged_issues": 146323,
+        "precision_non_work": 0.9847,
+        "recall_non_work": 0.8083,
+        "recall_duplicates": 0.8876,
+        "lost_real_delayed_issues": 607,
+        "preserved_real_delayed_rate": 0.9863
+      },
+      {
+        "gate": "T24h Post-Triage Gate",
+        "threshold": 0.85,
+        "flagged_issues": 150298,
+        "precision_non_work": 0.9826,
+        "recall_non_work": 0.8285,
+        "recall_duplicates": 0.8976,
+        "lost_real_delayed_issues": 737,
+        "preserved_real_delayed_rate": 0.9834
+      },
+      {
+        "gate": "T24h Post-Triage Gate",
+        "threshold": 0.8,
+        "flagged_issues": 153192,
+        "precision_non_work": 0.98,
+        "recall_non_work": 0.8422,
+        "recall_duplicates": 0.9045,
+        "lost_real_delayed_issues": 878,
+        "preserved_real_delayed_rate": 0.9802
+      },
+      {
+        "gate": "T24h Post-Triage Gate",
+        "threshold": 0.75,
+        "flagged_issues": 155610,
+        "precision_non_work": 0.9769,
+        "recall_non_work": 0.8528,
+        "recall_duplicates": 0.9099,
+        "lost_real_delayed_issues": 1013,
+        "preserved_real_delayed_rate": 0.9772
+      },
+      {
+        "gate": "T24h Post-Triage Gate",
+        "threshold": 0.7,
+        "flagged_issues": 157840,
+        "precision_non_work": 0.9735,
+        "recall_non_work": 0.862,
+        "recall_duplicates": 0.9156,
+        "lost_real_delayed_issues": 1191,
+        "preserved_real_delayed_rate": 0.9732
+      },
+      {
+        "gate": "T24h Post-Triage Gate",
+        "threshold": 0.6,
+        "flagged_issues": 162877,
+        "precision_non_work": 0.9638,
+        "recall_non_work": 0.8807,
+        "recall_duplicates": 0.9267,
+        "lost_real_delayed_issues": 1707,
+        "preserved_real_delayed_rate": 0.9616
+      },
+      {
+        "gate": "T24h Post-Triage Gate",
+        "threshold": 0.5,
+        "flagged_issues": 168584,
+        "precision_non_work": 0.9493,
+        "recall_non_work": 0.8978,
+        "recall_duplicates": 0.9373,
+        "lost_real_delayed_issues": 2377,
+        "preserved_real_delayed_rate": 0.9465
+      }
+    ]
+  },
+  "purified_real_work_delay_prediction": {
+    "raw_catboost": {
+      "precision": 0.2283,
+      "recall": 0.8204,
+      "f1": 0.3572,
+      "fp": 123220
+    },
+    "after_t0_pre_triage": {
+      "precision": 0.3099,
+      "recall": 0.854,
+      "f1": 0.4548,
+      "fp": 84486
+    },
+    "after_t24_post_triage": {
+      "precision": 0.3165,
+      "recall": 0.8411,
+      "f1": 0.4599,
+      "fp": 80714
+    }
+  },
+  "all_issue_benchmark": {
+    "baseline": {
+      "precision": 0.3845,
+      "recall": 0.818,
+      "f1": 0.5231,
+      "fp": 98282
+    },
+    "pre_triage_track5": {
+      "precision": 0.3955,
+      "recall": 0.8033,
+      "f1": 0.5301,
+      "fp": 92138,
+      "fp_suppressed": 6144
+    }
+  }
+}

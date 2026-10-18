@@ -47,11 +47,18 @@ def find_optimal_threshold(
     candidate_best_p = 0.0
     candidate_best_r = 0.0
 
+    y_true_b = (y_true == 1)
+    tot_pos = int(np.sum(y_true_b))
     for thr in np.arange(0.05, 0.95, 0.01):
-        preds = (y_prob >= thr).astype(int)
-        p = precision_score(y_true, preds, zero_division=0)
-        r = recall_score(y_true, preds, zero_division=0)
-        f1 = f1_score(y_true, preds, zero_division=0)
+        mask = (y_prob >= thr)
+        pred_pos = int(np.sum(mask))
+        if pred_pos == 0 or tot_pos == 0:
+            p, r, f1 = 0.0, 0.0, 0.0
+        else:
+            tp = int(np.sum(y_true_b & mask))
+            p = tp / pred_pos
+            r = tp / tot_pos
+            f1 = (2.0 * p * r / (p + r)) if (p + r) > 0 else 0.0
 
         if f1 > candidate_best_f1:
             candidate_best_f1 = f1
