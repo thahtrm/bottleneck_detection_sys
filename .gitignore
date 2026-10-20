@@ -248,5 +248,4 @@ dmypy.json
 # pytype static type analyzer
 .pytype/
 
-# CatBoost training telemetry
-catboost_info/
+# End of https://www.toptal.com/developers/gitignore/api/pycharm,python
