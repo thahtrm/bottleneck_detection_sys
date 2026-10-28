@@ -3,11 +3,11 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=pycharm,python
 
 # Custom
-log/
-results/
-saved_checkpoints/
-saved_models/
-data/
+/log/
+/results/
+/saved_checkpoints/
+/saved_models/
+/data/
 .DS_Store
 
 # Local tooling, vendored libs, and dumps

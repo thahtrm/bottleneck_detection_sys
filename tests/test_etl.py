@@ -8,9 +8,9 @@ from pathlib import Path
 import duckdb
 import numpy as np
 
-from jira_adapter.build_duckdb import build_instance_duckdb, fetch_instance_from_duckdb
-from jira_adapter.etl.loader import DuckDBLoader
-from jira_adapter.etl.transformer import JiraTransformer
+from early_risk_detection.data.build_duckdb import build_instance_duckdb
+from early_risk_detection.data.etl.loader import DuckDBLoader
+from early_risk_detection.data.etl.transformer import JiraTransformer
 
 
 class TestETL(unittest.TestCase):

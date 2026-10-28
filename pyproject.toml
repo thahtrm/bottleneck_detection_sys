@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "early-risk-detection"
+version = "0.1.0"
+description = "Early detection of delay-risk and critical tasks in Jira issue trackers (TGN memory + survival GBDT)."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.10"
+authors = [{ name = "jiooum", email = "binhds@iotlink.com.vn" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Bug Tracking",
+]
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "pyarrow>=14",
+    "duckdb>=1.1",
+    "scikit-learn>=1.4",
+    "scipy>=1.11",
+    "torch>=2.2",
+    "networkx>=3.2",
+    "xgboost>=2.0",
+    "catboost>=1.2",
+    "joblib>=1.3",
+]
+
+[project.optional-dependencies]
+train = ["optuna>=3.5", "lightgbm>=4.0", "shap>=0.44", "imbalanced-learn>=0.12", "matplotlib>=3.8", "seaborn>=0.13"]
+viz = ["matplotlib>=3.8", "seaborn>=0.13"]
+mongo = ["pymongo>=4.6"]
+dev = ["pytest>=8", "ruff>=0.5", "build>=1.2"]
+
+[project.scripts]
+erd = "early_risk_detection.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/early_risk_detection"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/early_risk_detection", "tests", "README.md", "LICENSE", "NOTICE", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:cacheprovider"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["experiments/archive", "training/criticality/baselines/tgn_upstream"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501", "E702", "E741", "B905"]
