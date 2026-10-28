@@ -249,3 +249,10 @@ dmypy.json
 .pytype/
 
 # End of https://www.toptal.com/developers/gitignore/api/pycharm,python
+
+# Generated artifacts (refactor/packaging)
+outputs/
+bundles/
+catboost_info/
+/*.npy
+/*.csv

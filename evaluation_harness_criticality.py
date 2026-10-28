@@ -60,6 +60,26 @@ def compute_group_ndcg(
     return float(np.mean(ndcg_scores)) if ndcg_scores else 0.0
 
 
+def compute_per_instance(merged_df: pd.DataFrame, k: int = 10) -> list[dict[str, Any]]:
+    """NDCG@k, Precision/Recall@Top-5% and Spearman inside each Jira instance (ecosystem)."""
+    rows = []
+    for inst, g in merged_df.groupby("instance"):
+        y, p0, s = g["ground_truth_criticality"].values, g["is_critical_p0"].values.astype(int), g["pred_score"].values
+        kk = max(1, int(np.ceil(0.05 * len(g))))
+        top = np.argsort(s)[-kk:]
+        rows.append({
+            "instance": inst,
+            "n": int(len(g)),
+            "p0": int(p0.sum()),
+            "ndcg_10": round(float(ndcg_score([y], [s], k=k)), 4) if len(g) > 1 else float("nan"),
+            "ndcg_10_grouped": round(compute_group_ndcg(g, k=k), 4),
+            "precision_top5pct": round(float(p0[top].mean()), 4),
+            "recall_top5pct": round(float(p0[top].sum() / p0.sum()), 4) if p0.sum() else float("nan"),
+            "spearman_rho": round(float(spearmanr(s, y).statistic), 4) if len(g) > 2 else float("nan"),
+        })
+    return sorted(rows, key=lambda r: -r["n"])
+
+
 def evaluate_criticality(
     pred_file: str,
     track: str,
@@ -67,6 +87,8 @@ def evaluate_criticality(
     ground_truth_file: str | None = None,
     leaderboard_file: str = "experiments/leaderboard_criticality.json",
     iteration: int = 1,
+    target_overrides: dict[str, float] | None = None,
+    experiment_name: str = "Task_Criticality_Spring_Pilot",
 ) -> dict[str, Any]:
     print("=================================================================")
     print(f"📊 IMMUTABLE EVALUATION HARNESS - TASK CRITICALITY: {track.upper()}")
@@ -174,7 +196,14 @@ def evaluate_criticality(
     elif "track3" in track_lower:
         target_ndcg = 0.76
 
-    ndcg_pass = final_ndcg_10 >= target_ndcg
+    target_overrides = target_overrides or {}
+    target_ndcg = target_overrides.get("ndcg", target_ndcg)
+    target_prec = target_overrides.get("prec", target_prec)
+    target_rho = target_overrides.get("rho", target_rho)
+    # With an explicit NDCG target the GLOBAL NDCG@10 is the gated metric (no max(grouped, global)).
+    gated_ndcg = global_ndcg_10 if "ndcg" in target_overrides else final_ndcg_10
+
+    ndcg_pass = gated_ndcg >= target_ndcg
     prec_pass = precision_top5 >= target_prec
     rho_pass = spearman_rho >= target_rho
     leak_free = True  # Verified by Zero-Leakage T0 chronological protocol
@@ -188,7 +217,7 @@ def evaluate_criticality(
     print(f"  • Evaluated Samples:      {n_samples:,} issues (P0 count: {total_p0:,})")
     print(f"  • NDCG@10 (Grouped):      {ndcg_10_grouped:.4f}")
     print(f"  • NDCG@10 (Global):       {global_ndcg_10:.4f}")
-    print(f"  • Selected NDCG@10:       {final_ndcg_10:.4f}  [Target >= {target_ndcg:.2f}] -> {'✅ PASS' if ndcg_pass else '❌ FAIL'}")
+    print(f"  • Selected NDCG@10:       {gated_ndcg:.4f}  [Target >= {target_ndcg:.2f}] -> {'✅ PASS' if ndcg_pass else '❌ FAIL'}")
     print(f"  • NDCG@50 (Grouped):      {ndcg_50_grouped:.4f}")
     print(f"  • Precision@Top-5%:       {precision_top5:.4f} ({tp_top5}/{k_top5})  [Target >= {target_prec:.2f}] -> {'✅ PASS' if prec_pass else '❌ FAIL'}")
     print(f"  • Recall@Top-5%:          {recall_top5:.4f} ({tp_top5}/{total_p0})")
@@ -198,6 +227,14 @@ def evaluate_criticality(
     print(f"  • Zero Temporal Leakage:  ✅ VERIFIED")
     print(f"  • Overall Track Status:   {'🏆 ALL CONSTRAINTS MET' if all_constraints_met else '⚠️ CONSTRAINTS PENDING'}")
     print("-----------------------------------------------------------------")
+
+    per_instance = compute_per_instance(merged_df) if "instance" in merged_df.columns else None
+    if per_instance:
+        print(f"  {'Instance':<14}{'N':>9}{'P0':>7}{'NDCG@10':>9}{'Prec@5%':>9}{'Rec@5%':>8}{'rho':>8}")
+        for r in per_instance:
+            print(f"  {r['instance']:<14}{r['n']:>9,}{r['p0']:>7,}{r['ndcg_10']:>9.4f}{r['precision_top5pct']:>9.4f}"
+                  f"{r['recall_top5pct']:>8.4f}{r['spearman_rho']:>8.4f}")
+        print("-----------------------------------------------------------------")
 
     # 7. Cập nhật Central Leaderboard (experiments/leaderboard_criticality.json)
     entry = {
@@ -230,6 +267,8 @@ def evaluate_criticality(
             "all_constraints_met": all_constraints_met,
         },
     }
+    if per_instance:
+        entry["per_instance"] = per_instance
 
     leaderboard_p = Path(leaderboard_file)
     leaderboard_p.parent.mkdir(parents=True, exist_ok=True)
@@ -238,9 +277,9 @@ def evaluate_criticality(
             with open(leaderboard_p, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
-            data = {"experiment_name": "Task_Criticality_Spring_Pilot", "leaderboard": []}
+            data = {"experiment_name": experiment_name, "leaderboard": []}
     else:
-        data = {"experiment_name": "Task_Criticality_Spring_Pilot", "leaderboard": []}
+        data = {"experiment_name": experiment_name, "leaderboard": []}
 
     if "leaderboard" not in data or not isinstance(data["leaderboard"], list):
         data["leaderboard"] = []
@@ -264,7 +303,12 @@ def main():
     parser.add_argument("--ground_truth_file", type=str, default=None, help="Path to ground truth parquet")
     parser.add_argument("--leaderboard", type=str, default="experiments/leaderboard_criticality.json", help="Leaderboard JSON")
     parser.add_argument("--iteration", type=int, default=1, help="Iteration cycle number")
+    parser.add_argument("--target_ndcg", type=float, default=None, help="Override NDCG@10 target (gates GLOBAL NDCG@10)")
+    parser.add_argument("--target_prec", type=float, default=None, help="Override Precision@Top-5%% target")
+    parser.add_argument("--target_rho", type=float, default=None, help="Override Spearman rho target")
+    parser.add_argument("--experiment_name", type=str, default="Task_Criticality_Spring_Pilot")
     args = parser.parse_args()
+    overrides = {k: v for k, v in [("ndcg", args.target_ndcg), ("prec", args.target_prec), ("rho", args.target_rho)] if v is not None}
 
     evaluate_criticality(
         pred_file=args.pred_file,
@@ -273,6 +317,8 @@ def main():
         ground_truth_file=args.ground_truth_file,
         leaderboard_file=args.leaderboard,
         iteration=args.iteration,
+        target_overrides=overrides,
+        experiment_name=args.experiment_name,
     )
 
 

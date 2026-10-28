@@ -122,7 +122,7 @@ def compute_graph_cpm_metrics(
             if not preds:
                 es[u] = 0.0
             else:
-                es[u] = max(ef[p] for p in preds)
+                es[u] = max((ef.get(p, 0.0) for p in preds), default=0.0)
             ef[u] = es[u] + u_dur
 
         project_finish = max(ef.values()) if ef else 0.0
@@ -136,7 +136,7 @@ def compute_graph_cpm_metrics(
             if not succs:
                 lf[u] = project_finish
             else:
-                lf[u] = min(ls[s] for s in succs)
+                lf[u] = min((ls.get(s, project_finish) for s in succs), default=project_finish)
             ls[u] = lf[u] - u_dur
             slack_time[u] = max(0.0, ls[u] - es[u])
 
