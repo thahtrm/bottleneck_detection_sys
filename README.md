@@ -113,7 +113,15 @@ Mã của nghiên cứu gốc (trước khi tái cấu trúc) nằm ở commit `
 * **Delay**: đặc trưng priority / issuetype / assignee / số link lấy **tại T0** (bản gốc dùng giá
   trị cuối cùng, tức rò rỉ tương lai); nhãn giữ nguyên định nghĩa. Cổng pre-triage được viết lại
   (`delay/gate.py`, `training/delay/train_non_work.py`) vì mã sinh đặc trưng gốc không còn.
-  Metric vì vậy khác báo cáo cũ — xem `experiments/leaderboard_delay_t0.json`.
+  Metric vì vậy khác báo cáo cũ — xem `experiments/leaderboard_delay_t0.json`:
+
+  | Test (346.174 issue) | ROC-AUC | PR-AUC | F1 | Recall |
+  |---|---|---|---|---|
+  | Gốc (thuộc tính cuối cùng, rò rỉ) — pre_triage | 0,7952 | 0,4860 | 0,5301 | 0,8033 |
+  | Mới (T0) — `delay_official_t0` (bundle) | 0,7268 | 0,4139 | 0,4448 | 0,8244 |
+  | Mới (T0) — riêng XGBoost | 0,7368 | 0,4177 | 0,4627 | 0,7456 |
+
+  Phần chênh lệch ≈0,07 ROC-AUC là lượng "điểm" mà bản gốc có được nhờ biết giá trị tương lai.
 * **Criticality**: sửa lỗi DuckDB `arg_max` khi hoà (thuộc tính T0 không tất định) và trung bình
   back-off chỉ fit trên train. Metric test: NDCG@10 grouped 0,8547 / Precision@Top-5% 0,2386
   (gốc 0,8545 / 0,2390).
