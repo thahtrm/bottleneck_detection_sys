@@ -23,7 +23,6 @@ import numpy as np
 import optuna
 import pandas as pd
 from catboost import CatBoostRegressor, Pool
-from evaluation_harness import evaluate_predictions, find_optimal_threshold
 from sklearn.metrics import (
     average_precision_score,
     brier_score_loss,
@@ -32,7 +31,9 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
-from train_xgboost import extract_all_features
+
+from early_risk_detection.delay.features import extract_all_features
+from early_risk_detection.evaluation import evaluate_predictions, find_optimal_threshold
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 

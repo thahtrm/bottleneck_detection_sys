@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
@@ -43,7 +43,7 @@ erd = "early_risk_detection.cli:main"
 packages = ["src/early_risk_detection"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/early_risk_detection", "tests", "README.md", "LICENSE", "NOTICE", "pyproject.toml"]
+include = ["/src/early_risk_detection", "/tests", "/README.md", "/LICENSE", "/NOTICE", "/pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -57,3 +57,13 @@ extend-exclude = ["experiments/archive", "training/criticality/baselines/tgn_ups
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 ignore = ["E501", "E702", "E741", "B905"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["early_risk_detection"]
+
+[tool.ruff.lint.per-file-ignores]
+# Code carried over from the research repo (ETL, harness, baselines): closures called inside
+# their own loop iteration, diagnostic variables kept for parity with the published runs.
+"src/early_risk_detection/data/**" = ["B007", "B023", "B904", "E731", "F841"]
+"src/early_risk_detection/evaluation/**" = ["F841"]
+"training/**" = ["B007", "B023", "B904", "E731", "F821", "F841"]

@@ -36,7 +36,7 @@ def make_jira_db(path, n_issues: int = 400, seed: int = 0) -> str:
             instance=inst[i], issue_key=key, project=proj[i],
             summary=" ".join(rng.choice(words, rng.integers(3, 9))), issuetype=it, issuetype_theme=themes[it],
             priority_raw=pr, priority_norm=prio_norm[pr], status="Closed" if not np.isnan(resolved[i]) else "Open",
-            resolution=None, created_ts=created[i], updated_ts=(resolved[i] if not np.isnan(resolved[i]) else created[i] + DAY),
+            resolution=None if np.isnan(resolved[i]) else ["Fixed", "Fixed", "Done", "Duplicate", "Won't Fix"][i % 5], created_ts=created[i], updated_ts=(resolved[i] if not np.isnan(resolved[i]) else created[i] + DAY),
             resolved_ts=resolved[i], assignee=users[rng.integers(0, 12)] if rng.random() < 0.8 else None,
             reporter=users[rng.integers(0, 12)], num_changelogs=0, num_links=0, num_comments=0,
             has_block_or_depend=False))

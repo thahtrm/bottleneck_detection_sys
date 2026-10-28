@@ -277,7 +277,6 @@ def propensity_features(df: pd.DataFrame, links: pd.DataFrame, planned_t0: np.nd
     is computed on ``fit_mask`` rows (training) or taken from ``backoff`` (serving); returns
     ``(features, backoff)``.
     """
-    n = len(df)
     created = df["created_ts"].values.astype(np.float64)
     key_to_row = pd.Series(df["row_id"].values, index=df["instance"] + "|" + df["issue_key"])
     dep = links[links["link_type_std"].isin(["Block", "Depend"])]
@@ -410,3 +409,23 @@ def add_t0_features(df: pd.DataFrame, links: pd.DataFrame, dur: np.ndarray,
     for c in prop.columns:
         df[c] = prop[c].values
     return backoff
+
+
+def select_issues(df: pd.DataFrame, issue_keys=None, as_of=None, open_only: bool = True) -> np.ndarray:
+    """Row positions to score: explicit ``instance|issue_key`` uids, or every issue created before
+    ``as_of`` (epoch seconds or ``pd.Timestamp``; default now) and, if ``open_only``, not resolved by then."""
+    if issue_keys is not None:
+        uid = pd.Index(df["instance"] + "|" + df["issue_key"])
+        keys = list(issue_keys)
+        pos = uid.get_indexer(keys)
+        missing = [k for k, p in zip(keys, pos) if p < 0]
+        if missing:
+            raise KeyError(f"{len(missing)} issue keys not found, e.g. {missing[:3]}")
+        return np.sort(pos)
+    t = pd.Timestamp.now(tz="UTC").timestamp() if as_of is None else \
+        (as_of.timestamp() if isinstance(as_of, pd.Timestamp) else float(as_of))
+    mask = df["created_ts"].values <= t
+    if open_only:
+        res = df["resolved_ts"].values
+        mask &= np.isnan(res) | (res > t)
+    return np.flatnonzero(mask)

@@ -1,187 +1,132 @@
-# TGN: Temporal Graph Networks [[arXiv](https://arxiv.org/abs/2006.10637), [YouTube](https://www.youtube.com/watch?v=W1GvX2ZcUmY), [Blog Post](https://towardsdatascience.com/temporal-graph-networks-ab8f327f2efe)] 
+# early-risk-detection
 
-Dynamic Graph             |  TGN	
-:-------------------------:|:-------------------------:	
-![](figures/dynamic_graph.png)  |  ![](figures/tgn.png)	
+Thư viện phát hiện sớm rủi ro trong Jira, chấm điểm **ngay tại thời điểm tạo issue (T0)**:
 
+| Mô hình | Câu hỏi | Kiến trúc | Đầu ra chính |
+|---|---|---|---|
+| **Delay risk** (`DelayRiskScorer`) | Task này có trễ hạn so với SLA không? | XGBoost 5-fold + XGBoost AFT + CatBoost AFT + P(non-work), cổng pre-triage (non-work / trùng lặp ngữ nghĩa) | `p_delay`, `is_at_risk`, `predicted_duration_days` |
+| **Criticality** (`CriticalityScorer`) | Task nào quan trọng nhất (ảnh hưởng lịch dự án)? | TGN memory trên 19,6 triệu sự kiện Jira + readout ranking-aware (3 seed) | `score`, `rank_in_instance`, `is_critical` (top 5%/instance) |
 
+Cả hai được huấn luyện trên The Public Jira Dataset (16 instance, 2.685.911 issue), chia
+train/val/test theo thời gian (70/15/15). Số liệu kiểm tra out-of-time nằm trong `manifest.json`
+của mỗi bundle (`erd bundle info <bundle>`) và trong `experiments/leaderboard_*.json`.
 
+## Cài đặt
 
-## Introduction
-
-Despite the plethora of different models for deep learning on graphs, few approaches have been proposed thus far for dealing with graphs that present some sort of dynamic nature (e.g. evolving features or connectivity over time).
- 
-In this paper, we present Temporal Graph Networks (TGNs), a generic, efficient framework for deep learning on dynamic graphs represented as sequences of timed events. Thanks to a novel combination of memory modules and graph-based operators, TGNs are able to significantly outperform previous approaches being at the same time more computationally efficient. 
-
-We furthermore show that several previous models for learning on dynamic graphs can be cast as specific instances of our framework. We perform a detailed ablation study of different components of our framework and devise the best configuration that achieves state-of-the-art performance on several transductive and inductive prediction tasks for dynamic graphs.
-
-
-#### Paper link: [Temporal Graph Networks for Deep Learning on Dynamic Graphs](https://arxiv.org/abs/2006.10637)
-
-
-## Running the experiments
-
-### Requirements
-
-Dependencies (with python >= 3.7):
-
-```{bash}
-pandas==1.1.0
-torch==1.6.0
-scikit_learn==0.23.1
+```bash
+pip install early-risk-detection            # thư viện suy luận
+pip install "early-risk-detection[mongo]"   # + ETL từ MongoDB
+pip install -e ".[train,dev]"               # phát triển / huấn luyện lại (từ repo)
 ```
 
-### Dataset and Preprocessing
+Yêu cầu Python ≥ 3.10. GPU (CUDA) được dùng nếu có: chấm criticality phải replay toàn bộ dòng
+sự kiện (≈1,5 phút trên RTX 4060 Ti cho 2,68 triệu issue), trên CPU chậm hơn nhiều.
 
-#### Download the public data
-Download the sample datasets (eg. wikipedia and reddit) from
-[here](http://snap.stanford.edu/jodie/) and store their csv files in a folder named
-```data/```.
+## Dùng nhanh
 
-#### Preprocess the data
-We use the dense `npy` format to save the features in binary format. If edge features or nodes 
-features are absent, they will be replaced by a vector of zeros. 
-```{bash}
-python utils/preprocess_data.py --data wikipedia --bipartite
-python utils/preprocess_data.py --data reddit --bipartite
+Đầu vào là một DuckDB theo schema của `early_risk_detection.data.etl` (bảng `issues`,
+`issue_changelogs`, `issue_links`, `issue_comments`) và embedding văn bản của issue
+(`nomic-embed-text` qua Ollama).
+
+```python
+from early_risk_detection import CriticalityScorer, DelayRiskScorer
+from early_risk_detection.embeddings import EmbeddingIndex, OllamaEmbedder
+
+emb = EmbeddingIndex("data", fallback=OllamaEmbedder())   # embedding có sẵn + Ollama cho issue mới
+
+risk = DelayRiskScorer.load("bundles/delay").score("data/jira.duckdb", embeddings=emb)
+crit = CriticalityScorer.load("bundles/criticality").score("data/jira.duckdb", embeddings=emb)
+
+risk[risk.is_at_risk].head()          # issue đang mở có nguy cơ trễ, xếp theo p_delay
+crit[crit.is_critical].head()         # top 5% issue quan trọng của mỗi instance
 ```
 
+Mặc định chấm mọi issue **đang mở tại thời điểm hiện tại**; dùng `as_of=pd.Timestamp(...)` để
+chấm tại một mốc khác hoặc `issue_keys=["Apache|SPARK-123", ...]` cho danh sách cụ thể.
 
+CLI tương đương:
 
-### Model Training
-
-Self-supervised learning using the link prediction task:
-```{bash}
-# TGN-attn: Supervised learning on the wikipedia dataset
-python train_self_supervised.py --use_memory --prefix tgn-attn --n_runs 10
-
-# TGN-attn-reddit: Supervised learning on the reddit dataset
-python train_self_supervised.py -d reddit --use_memory --prefix tgn-attn-reddit --n_runs 10
+```bash
+erd etl --instance JFrog --duckdb data/jira.duckdb --overwrite     # MongoDB -> DuckDB
+erd embed --duckdb-path data/jira.duckdb --out-dir data             # embedding Ollama cho mọi issue
+erd score delay       --bundle bundles/delay       --db data/jira.duckdb --emb-dir data --out risk.csv
+erd score criticality --bundle bundles/criticality --db data/jira.duckdb --emb-dir data --out top.csv
+erd bundle info bundles/delay
+erd eval criticality --track X --pred_file p.csv --ground_truth_file gt.parquet   # harness đánh giá
 ```
 
-Supervised learning on dynamic node classification (this requires a trained model from 
-the self-supervised task, by eg. running the commands above):
-```{bash}
-# TGN-attn: self-supervised learning on the wikipedia dataset
-python train_supervised.py --use_memory --prefix tgn-attn --n_runs 10
+## Cấu trúc repo
 
-# TGN-attn-reddit: self-supervised learning on the reddit dataset
-python train_supervised.py -d reddit --use_memory --prefix tgn-attn-reddit --n_runs 10
+```
+src/early_risk_detection/     THƯ VIỆN (được đóng gói) — chỉ code cần cho suy luận + đánh giá
+  features/t0.py              đặc trưng T0 dùng chung: tái dựng priority/type/assignee lúc tạo,
+                              link đã biết tại T0, lịch sử chỉ gồm sự kiện trước T0
+  delay/                      features (mô phỏng tải O(N) + featurizer), gate, survival, scorer
+  criticality/                stream (dòng sự kiện), memory (TGN), readout, scorer
+  data/                       ETL Mongo/JSON -> DuckDB, chuẩn hoá Jira (ex `jira_adapter`)
+  embeddings.py               trích xuất Ollama + EmbeddingIndex
+  evaluation/                 harness đánh giá delay / criticality
+  bundle.py, cli.py
+training/                     KHÔNG đóng gói — huấn luyện, import thư viện
+  delay/                      build_dataset -> train_xgboost -> train_aft -> train_catboost_survival
+                              (none + cause_specific) -> train_non_work -> fit_blend_gate -> export_bundle
+  criticality/                build_dataset -> build_events -> train_tgn (+probe_memory) -> train_readout
+                              -> evaluate_all -> export_bundle
+  */baselines/                mô hình đối chứng của khoá luận (RF, LogReg, Cox, stacking, track 1-5, TGN gốc)
+tests/                        pytest (DuckDB tổng hợp, không cần dữ liệu thật)
+experiments/                  leaderboard, kết quả; experiments/archive = thí nghiệm cũ (không bảo trì)
+docs/                         báo cáo khoá luận, EDA, hình
 ```
 
-### Baselines
+## Huấn luyện lại
 
-```{bash}
-### Wikipedia Self-supervised
-
-# Jodie
-python train_self_supervised.py --use_memory --memory_updater rnn --embedding_module time --prefix jodie_rnn --n_runs 10
-
-# DyRep
-python train_self_supervised.py --use_memory --memory_updater rnn --dyrep --use_destination_embedding_in_message --prefix dyrep_rnn --n_runs 10
-
-
-### Reddit Self-supervised
-
-# Jodie
-python train_self_supervised.py -d reddit --use_memory --memory_updater rnn --embedding_module time --prefix jodie_rnn_reddit --n_runs 10
-
-# DyRep
-python train_self_supervised.py -d reddit --use_memory --memory_updater rnn --dyrep --use_destination_embedding_in_message --prefix dyrep_rnn_reddit --n_runs 10
-
-
-### Wikipedia Supervised
-
-# Jodie
-python train_supervised.py --use_memory --memory_updater rnn --embedding_module time --prefix jodie_rnn --n_runs 10
-
-# DyRep
-python train_supervised.py --use_memory --memory_updater rnn --dyrep --use_destination_embedding_in_message --prefix dyrep_rnn --n_runs 10
-
-
-### Reddit Supervised
-
-# Jodie
-python train_supervised.py -d reddit --use_memory --memory_updater rnn --embedding_module time --prefix jodie_rnn_reddit --n_runs 10
-
-# DyRep
-python train_supervised.py -d reddit --use_memory --memory_updater rnn  --dyrep --use_destination_embedding_in_message --prefix dyrep_rnn_reddit --n_runs 10
+```bash
+pip install -r requirements-lock.txt && pip install -e . --no-deps
+bash training/criticality/run_pipeline.sh       # -> bundles/criticality
+PARAMS=1 bash training/delay/run_pipeline.sh    # -> bundles/delay (PARAMS=1: dùng siêu tham số đã tìm)
 ```
 
+Mỗi bước ghi trạng thái đã fit vào một *staging bundle*; `export_bundle.py` khoá lại thành
+bundle có `manifest.json` (phiên bản thư viện, cấu hình, metric test, SHA-256 từng file).
+`ModelBundle.load` từ chối bundle bị sửa đổi hoặc khác `kind`.
 
-### Ablation Study
-Commands to replicate all results in the ablation study over different modules:
-```{bash}
-# TGN-2l
-python train_self_supervised.py --use_memory --n_layer 2 --prefix tgn-2l --n_runs 10 
+### Ánh xạ lệnh cũ -> mới
 
-# TGN-no-mem
-python train_self_supervised.py --prefix tgn-no-mem --n_runs 10 
+| Trước | Sau |
+|---|---|
+| `python extract_ollama_embeddings.py` | `erd embed` |
+| `python -m jira_adapter.etl ...` | `erd etl ...` (`early_risk_detection.data.etl`) |
+| `python evaluation_harness*.py ...` | `erd eval delay|criticality ...` |
+| `python prepare_censored_dataset.py`, `tier1_feature_engineering.py` | `training/delay/build_dataset.py` |
+| `train_xgboost.py`, `train_survival_aft.py`, `train_catboost_survival.py` | `training/delay/train_{xgboost,aft,catboost_survival}.py` |
+| `pre_triage_filter.py` + blend trong `train_catboost_survival.py` | `training/delay/{train_non_work,fit_blend_gate}.py` |
+| `tgn_full/*.py` | `training/criticality/*.py` |
+| `track1..5_*.py`, `data/build_criticality_ground_truth.py` | `training/criticality/baselines/` |
+| `train_rf.py`, `train_logreg.py`, `train_catboost_cox.py`, `stacking_meta_learner.py` | `training/delay/baselines/` |
+| `train_self_supervised.py`, `model/`, `modules/`, `utils/` (TGN gốc) | `training/criticality/baselines/tgn_upstream/` |
+| `scratch/`, `debug_spring_order.py`, `tgn_full/leakage_demo.py` | `experiments/archive/` |
 
-# TGN-time
-python train_self_supervised.py --use_memory --embedding_module time --prefix tgn-time --n_runs 10 
+Mã của nghiên cứu gốc (trước khi tái cấu trúc) nằm ở commit `bff3476`.
 
-# TGN-id
-python train_self_supervised.py --use_memory --embedding_module identity --prefix tgn-id --n_runs 10
+## Khác biệt so với kết quả gốc của nghiên cứu
 
-# TGN-sum
-python train_self_supervised.py --use_memory --embedding_module graph_sum --prefix tgn-sum --n_runs 10
+* **Delay**: đặc trưng priority / issuetype / assignee / số link lấy **tại T0** (bản gốc dùng giá
+  trị cuối cùng, tức rò rỉ tương lai); nhãn giữ nguyên định nghĩa. Cổng pre-triage được viết lại
+  (`delay/gate.py`, `training/delay/train_non_work.py`) vì mã sinh đặc trưng gốc không còn.
+  Metric vì vậy khác báo cáo cũ — xem `experiments/leaderboard_delay_t0.json`.
+* **Criticality**: sửa lỗi DuckDB `arg_max` khi hoà (thuộc tính T0 không tất định) và trung bình
+  back-off chỉ fit trên train. Metric test: NDCG@10 grouped 0,8547 / Precision@Top-5% 0,2386
+  (gốc 0,8545 / 0,2390).
 
-# TGN-mean
-python train_self_supervised.py --use_memory --aggregator mean --prefix tgn-mean --n_runs 10
+## Phát triển
+
+```bash
+pytest                    # 17+ test, ~5 giây, không cần GPU / dữ liệu thật
+ruff check src tests training
+uv build                  # wheel + sdist trong dist/
 ```
 
+## Giấy phép
 
-#### General flags
-
-```{txt}
-optional arguments:
-  -d DATA, --data DATA         Data sources to use (wikipedia or reddit)
-  --bs BS                      Batch size
-  --prefix PREFIX              Prefix to name checkpoints and results
-  --n_degree N_DEGREE          Number of neighbors to sample at each layer
-  --n_head N_HEAD              Number of heads used in the attention layer
-  --n_epoch N_EPOCH            Number of epochs
-  --n_layer N_LAYER            Number of graph attention layers
-  --lr LR                      Learning rate
-  --patience                   Patience of the early stopping strategy
-  --n_runs                     Number of runs (compute mean and std of results)
-  --drop_out DROP_OUT          Dropout probability
-  --gpu GPU                    Idx for the gpu to use
-  --node_dim NODE_DIM          Dimensions of the node embedding
-  --time_dim TIME_DIM          Dimensions of the time embedding
-  --use_memory                 Whether to use a memory for the nodes
-  --embedding_module           Type of the embedding module
-  --message_function           Type of the message function
-  --memory_updater             Type of the memory updater
-  --aggregator                 Type of the message aggregator
-  --memory_update_at_the_end   Whether to update the memory at the end or at the start of the batch
-  --message_dim                Dimension of the messages
-  --memory_dim                 Dimension of the memory
-  --backprop_every             Number of batches to process before performing backpropagation
-  --different_new_nodes        Whether to use different unseen nodes for validation and testing
-  --uniform                    Whether to sample the temporal neighbors uniformly (or instead take the most recent ones)
-  --randomize_features         Whether to randomize node features
-  --dyrep                      Whether to run the model as DyRep
-```
-
-## TODOs 
-* Make code memory efficient: for the sake of simplicity, the memory module of the TGN model is 
-implemented as a parameter (so that it is stored and loaded together of the model). However, this 
-does not need to be the case, and 
-more efficient implementations which treat the models as just tensors (in the same way as the 
-input features) would be more amenable to large graphs.
-
-## Cite us
-
-```bibtex
-@inproceedings{tgn_icml_grl2020,
-    title={Temporal Graph Networks for Deep Learning on Dynamic Graphs},
-    author={Emanuele Rossi and Ben Chamberlain and Fabrizio Frasca and Davide Eynard and Federico 
-    Monti and Michael Bronstein},
-    booktitle={ICML 2020 Workshop on Graph Representation Learning},
-    year={2020}
-}
-```
-
-
+Apache-2.0. Phần mô hình TGN dựa trên [twitter-research/tgn](https://github.com/twitter-research/tgn)
+(Rossi et al., 2020) — xem `NOTICE`.

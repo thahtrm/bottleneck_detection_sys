@@ -98,3 +98,17 @@ def test_semantic_knn_subset_equals_full_and_brute_force(issues):
         done = done[np.argsort(resolved[done], kind="stable")][-16:]
         want2 = max(0.0, (e[done] @ e[i]).max()) if len(done) else 0.0
         assert full[i, 2] == pytest.approx(want2, abs=1e-5)
+
+
+def test_issue_resolved_at_creation_instant(tmp_path):
+    from conftest import make_jira_db
+
+    db = make_jira_db(tmp_path / "j.duckdb", n_issues=60, seed=3)
+    con = duckdb.connect(db)
+    k = con.execute("SELECT instance, issue_key, created_ts FROM issues ORDER BY created_ts LIMIT 1 OFFSET 10").fetchone()
+    con.execute("UPDATE issues SET resolved_ts = created_ts WHERE instance = ? AND issue_key = ?", [k[0], k[1]])
+    df, links = load_issues_t0(con), load_timed_links(con)
+    con.close()
+    base = chronological_features(df, links)
+    row = base[(base.instance == k[0]) & (base.issue_key == k[1])].iloc[0]
+    assert row.is_resolved == 1 and row.duration_days == 0

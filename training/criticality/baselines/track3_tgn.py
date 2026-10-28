@@ -8,10 +8,9 @@ Continuous-Time Dynamic Node Memory & Temporal Attention Engine:
 from __future__ import annotations
 
 import argparse
-
-import duckdb
 from pathlib import Path
 
+import duckdb
 import numpy as np
 import pandas as pd
 import torch

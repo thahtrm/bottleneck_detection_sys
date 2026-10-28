@@ -8,10 +8,9 @@ Auto-Iteration Engine for Monte Carlo Criticality & Marginal Schedule Slippage:
 from __future__ import annotations
 
 import argparse
-
-import networkx as nx
 from pathlib import Path
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 from scipy.stats import fisk

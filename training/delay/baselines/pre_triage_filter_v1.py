@@ -15,13 +15,13 @@ Kiến trúc Lọc Hai Giai Đoạn Đột Phá (Enhanced Two-Stage Pipeline):
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from evaluation_harness import evaluate_predictions
 from sklearn.metrics import (
     average_precision_score,
     confusion_matrix,
@@ -31,9 +31,11 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
+from early_risk_detection.evaluation import evaluate_predictions
+
 plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
 
-ARTIFACT_DIR = Path("/home/jiooum/.gemini/antigravity/brain/37355967-0fbb-4de6-9070-8598b73639b0")
+ARTIFACT_DIR = Path(os.environ.get("ERD_ARTIFACT_DIR", "outputs/delay_baselines"))  # extra copy of figures / caches
 SCRATCH_DIR = ARTIFACT_DIR / "scratch"
 
 

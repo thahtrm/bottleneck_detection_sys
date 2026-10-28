@@ -17,6 +17,7 @@ và các biểu đồ figures/solutions_comparison.png, figures/t1_t3_noise_redu
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -51,9 +52,9 @@ FIG_DIR = Path("figures")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 EXP_DIR = Path("experiments")
 EXP_DIR.mkdir(parents=True, exist_ok=True)
-ARTIFACT_DIR = Path("/home/jiooum/.gemini/antigravity/brain/37355967-0fbb-4de6-9070-8598b73639b0")
+ARTIFACT_DIR = Path(os.environ.get("ERD_ARTIFACT_DIR", "outputs/delay_baselines"))  # extra copy of figures / caches
 SCRATCH_DIR = ARTIFACT_DIR / "scratch"
-SCRATCH_DIR.mkdir(parents=True, exist_ok=True)
+SCRATCH_DIR.mkdir(parents=True, exist_ok=True)  # noqa: E402
 
 
 def load_or_extract_early_event_streams():

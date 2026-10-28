@@ -27,7 +27,7 @@ plt.rcParams.update({
 
 FIG_DIR = Path("figures")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
-ARTIFACT_DIR = Path("/home/jiooum/.gemini/antigravity/brain/37355967-0fbb-4de6-9070-8598b73639b0")
+ARTIFACT_DIR = Path(os.environ.get("ERD_ARTIFACT_DIR", "outputs/delay_baselines"))  # extra copy of figures / caches
 
 
 def main():

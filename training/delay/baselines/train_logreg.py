@@ -23,7 +23,6 @@ from typing import Any
 import numpy as np
 import optuna
 import pandas as pd
-from evaluation_harness import find_optimal_threshold
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.frozen import FrozenEstimator
@@ -39,6 +38,8 @@ from sklearn.preprocessing import (
     SplineTransformer,
     StandardScaler,
 )
+
+from early_risk_detection.evaluation import find_optimal_threshold
 
 warnings.filterwarnings("ignore")
 optuna.logging.set_verbosity(optuna.logging.WARNING)

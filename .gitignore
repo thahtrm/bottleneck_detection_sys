@@ -256,3 +256,6 @@ bundles/
 catboost_info/
 /*.npy
 /*.csv
+
+# Packaging
+dist/

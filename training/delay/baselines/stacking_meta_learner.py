@@ -335,7 +335,7 @@ def run_stacking_meta_learner(
     print(f"[Export] Saved {val_csv} and {test_csv}")
 
     # 7. Kích hoạt Evaluation Harness để cập nhật Leaderboard
-    from evaluation_harness import evaluate_predictions
+    from early_risk_detection.evaluation import evaluate_predictions
 
     eval_result = evaluate_predictions(
         test_pred_path=str(test_csv),

@@ -90,7 +90,7 @@ def extract_full_database_embeddings(
             available = [m["name"] for m in models_info.get("models", [])]
             print(f"[Ollama Check] Connected! Available models: {available}", flush=True)
     except Exception as e:
-        raise RuntimeError(f"[Ollama Check] ERROR connecting to Ollama Docker container: {e}")
+        raise RuntimeError(f"[Ollama Check] ERROR connecting to Ollama Docker container: {e}") from e
 
     # 1. Đọc danh sách issues theo đúng thứ tự thời gian chuẩn từ DuckDB và đóng kết nối ngay
     t0 = time.time()
@@ -298,6 +298,13 @@ class EmbeddingIndex:
                                "embedder is configured (e.g. EmbeddingIndex(..., fallback=OllamaEmbedder()))")
             out[~hit] = self.fallback(embedding_text(issues[~hit]).tolist())
         return out
+
+
+def embed_issues(source, issues: pd.DataFrame) -> np.ndarray:
+    """Embeddings for ``issues`` from an :class:`EmbeddingIndex` (``.get``) or an embedder (``__call__(texts)``)."""
+    if hasattr(source, "get"):
+        return source.get(issues)
+    return source(embedding_text(issues).tolist())
 
 
 def main(argv: list[str] | None = None) -> None:

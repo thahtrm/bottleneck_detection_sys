@@ -1,4 +1,8 @@
+# Exact environment used to train the published bundles (CPython 3.13, CUDA 13).
+# Library users: `pip install early-risk-detection` (ranges in pyproject.toml).
+# Reproduce training: `pip install -r requirements-lock.txt && pip install -e . --no-deps`.
 alembic==1.20.0
+catboost==1.2.10
 cloudpickle==3.1.2
 colorlog==6.12.0
 contourpy==1.4.0
@@ -16,6 +20,7 @@ mako==1.4.3
 markupsafe==3.0.4
 matplotlib==3.11.2
 narwhals==2.27.1
+networkx==3.7
 numpy==2.5.4
 nvidia-nccl-cu13==2.32.3
 optuna==5.0.0
@@ -23,6 +28,7 @@ packaging==26.3
 pandas==3.0.6
 pillow==12.3.0
 pyarrow==26.0.0
+pymongo==4.18.2
 pyparsing==3.3.3
 python-dateutil==2.9.0.post0
 pyyaml==6.0.3
@@ -35,6 +41,7 @@ sklearn-compat==0.1.6
 slicer==0.0.8
 sqlalchemy==2.1.4
 threadpoolctl==3.7.0
+torch==2.14.0
 tqdm==4.70.1
 typing-extensions==4.16.0
 xgboost==3.4.1

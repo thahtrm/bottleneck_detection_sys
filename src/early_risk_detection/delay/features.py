@@ -116,8 +116,10 @@ def chronological_features(df: pd.DataFrame, links: pd.DataFrame) -> pd.DataFram
 
     res_indices = np.flatnonzero(is_res_arr == 1)
     ev_ts = np.concatenate([created_arr, resolved_arr[res_indices]])
-    ev_type = np.concatenate([np.ones(n_total, np.int8), np.zeros(len(res_indices), np.int8)])
+    ev_type = np.concatenate([np.zeros(n_total, np.int8), np.ones(len(res_indices), np.int8)])
     ev_idx = np.concatenate([np.arange(n_total, dtype=np.int32), res_indices.astype(np.int32)])
+    # creations before resolutions at equal ts: an issue closed at its creation instant must not
+    # see its own outcome as history (the original study ordered the other way round)
     order = np.lexsort((ev_type, ev_ts))
     ev_ts, ev_type, ev_idx = ev_ts[order], ev_type[order], ev_idx[order]
 
@@ -138,7 +140,7 @@ def chronological_features(df: pd.DataFrame, links: pd.DataFrame) -> pd.DataFram
     for step in range(len(ev_ts)):
         ts, i = ev_ts[step], ev_idx[step]
         rep, prj, inst, is_un = rep_keys[i], prj_keys[i], inst_arr[i], is_unass_arr[i]
-        if ev_type[step] == 0:  # RESOLUTION: outcome credited to the final assignee, load released by the T0 owner
+        if ev_type[step] == 1:  # RESOLUTION: outcome credited to the final assignee, load released by the T0 owner
             ass_active[owner_t0.pop(i)].pop(i, None)
             ass = ass_fin_keys[i]
             d_val = float(dur_arr[i])
@@ -545,3 +547,10 @@ class DelayFeaturizer:
         f.tfidf.idf_ = np.asarray(tf["idf"], dtype=np.float32)
         f.tfidf_svd = bundle.load_arrays(f"{prefix}_tfidf_svd.npz")["components"]
         return f
+
+
+def extract_all_features(train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame,
+                         seed: int = 42) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Original study API (used by baselines): fit on train, transform val / test."""
+    f = DelayFeaturizer(seed=seed)
+    return f.fit_transform(train_df), f.transform(val_df), f.transform(test_df)

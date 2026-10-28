@@ -16,7 +16,8 @@ import pandas as pd
 import torch
 
 from ..bundle import ModelBundle
-from ..features.t0 import add_t0_features, issue_durations, load_issues_t0, load_timed_links
+from ..embeddings import embed_issues
+from ..features.t0 import add_t0_features, issue_durations, load_issues_t0, load_timed_links, select_issues
 from .memory import EventStream, load_memory, snapshot_memory
 from .readout import Readout, predict_scores, static_matrix
 from .stream import build_event_stream, load_neighbours
@@ -67,7 +68,7 @@ class CriticalityScorer:
             logger.info("Loading issues and T0 attributes...")
             df = load_issues_t0(con)
             links = load_timed_links(con)
-            sel = self._select(df, issue_keys, as_of, open_only)
+            sel = select_issues(df, issue_keys, as_of, open_only)
             logger.info(f"{len(df):,} issues in database, {len(sel):,} selected for scoring")
             if len(sel) == 0:
                 return _empty()
@@ -83,7 +84,7 @@ class CriticalityScorer:
             con.close()
 
         sub = df.iloc[sel].reset_index(drop=True)
-        text_emb = _embed(embeddings, sub).astype(np.float32)
+        text_emb = embed_issues(embeddings, sub).astype(np.float32)
         svd = text_emb @ self.svd_components.T
         for k in range(svd.shape[1]):
             sub[f"svd_{k}"] = svd[:, k]
@@ -100,23 +101,6 @@ class CriticalityScorer:
         return out.sort_values(["instance", "rank_in_instance"]).reset_index(drop=True)
 
     # ------------------------------------------------------------------------------------------
-    @staticmethod
-    def _select(df: pd.DataFrame, issue_keys, as_of, open_only: bool) -> np.ndarray:
-        if issue_keys is not None:
-            uid = pd.Index(df["instance"] + "|" + df["issue_key"])
-            pos = uid.get_indexer(list(issue_keys))
-            missing = [k for k, p in zip(issue_keys, pos) if p < 0]
-            if missing:
-                raise KeyError(f"{len(missing)} issue keys not found, e.g. {missing[:3]}")
-            return np.sort(pos)
-        t = pd.Timestamp.now(tz="UTC").timestamp() if as_of is None else \
-            (as_of.timestamp() if isinstance(as_of, pd.Timestamp) else float(as_of))
-        mask = df["created_ts"].values <= t
-        if open_only:
-            res = df["resolved_ts"].values
-            mask &= np.isnan(res) | (res > t)
-        return np.flatnonzero(mask)
-
     def _memory_snapshots(self, df: pd.DataFrame, sel: np.ndarray, sdir: Path) -> np.ndarray:
         import json
 
@@ -131,14 +115,6 @@ class CriticalityScorer:
         assert np.all(applied_max < created[sel]), "temporal leakage in memory snapshot"
         del model
         return np.concatenate([Z, ((aux - self.amu) / self.asd).astype(np.float16)], 1)
-
-
-def _embed(embeddings, issues: pd.DataFrame) -> np.ndarray:
-    if hasattr(embeddings, "get"):
-        return embeddings.get(issues)
-    from ..embeddings import embedding_text
-
-    return embeddings(embedding_text(issues).tolist())
 
 
 def _empty() -> pd.DataFrame:
