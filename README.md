@@ -122,6 +122,9 @@ Mã của nghiên cứu gốc (trước khi tái cấu trúc) nằm ở commit `
   | Mới (T0) — riêng XGBoost | 0,7368 | 0,4177 | 0,4627 | 0,7456 |
 
   Phần chênh lệch ≈0,07 ROC-AUC là lượng "điểm" mà bản gốc có được nhờ biết giá trị tương lai.
+  Bundle chính thức **cố ý giữ blend 4 mô hình + cổng** để tái lập trung thành kiến trúc của
+  nghiên cứu, dù trên T0 riêng XGBoost nhỉnh hơn một chút (ROC-AUC 0,7368 so với 0,7268) nhưng
+  recall thấp hơn (0,7456 so với 0,8244).
 * **Criticality**: sửa lỗi DuckDB `arg_max` khi hoà (thuộc tính T0 không tất định) và trung bình
   back-off chỉ fit trên train. Metric test: NDCG@10 grouped 0,8547 / Precision@Top-5% 0,2386
   (gốc 0,8545 / 0,2390).
@@ -129,7 +132,7 @@ Mã của nghiên cứu gốc (trước khi tái cấu trúc) nằm ở commit `
 ## Phát triển
 
 ```bash
-pytest                    # 17+ test, ~5 giây, không cần GPU / dữ liệu thật
+pytest                    # 20 test, ~5 giây, không cần GPU / dữ liệu thật
 ruff check src tests training
 uv build                  # wheel + sdist trong dist/
 ```
