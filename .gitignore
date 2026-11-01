@@ -262,3 +262,4 @@ dist/
 
 # Large per-issue prediction dumps of the T0 pipeline (reports / params stay tracked)
 experiments/delay_t0/**/*.csv
+.superpowers/
