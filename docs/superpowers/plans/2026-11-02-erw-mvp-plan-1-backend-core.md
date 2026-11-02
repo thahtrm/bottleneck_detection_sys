@@ -84,48 +84,13 @@ docs/superpowers/spikes/         # báo cáo spike
 
 ---
 
-## Phần A — Spike (làm trước; kết quả có thể làm đổi Task 11 và kế hoạch 2)
+## Phần A — Spike (S1, S2 do người dùng làm; S3 làm trước Task 5)
 
-### Task 1: Spike S1 — chi phí lô chấm điểm trên nền 2,68 triệu issue
+### Task 1–2: Spike S1 (chi phí lô chấm điểm) và S2 (LLM song ngữ, JSON): **người dùng tự thực hiện, ngoài phạm vi kế hoạch này**
 
-**Files:**
-- Create: `webapp/spikes/s1_batch_cost.py`
-- Create: `docs/superpowers/spikes/2026-11-02-s1-batch-cost.md`
-
-- [ ] **Step 1: Viết script** `s1_batch_cost.py --db data/jira.duckdb --emb-dir data --bundles bundles --n 10`.
-  - Chọn `n` issue đang mở có `created_ts` lớn nhất trong instance `MongoDB` (truy vấn DuckDB).
-  - Đo **riêng từng bước**:
-    - (a) `DelayRiskScorer.load("bundles/delay").score(db, emb, issue_keys=uids)`;
-    - (b) `CriticalityScorer.load("bundles/criticality").score(db, emb, issue_keys=uids, stream_dir="var/s1_stream")`, chạy lần 1 (phải build stream) rồi lần 2 (dùng lại stream).
-  - `emb = EmbeddingIndex("data", fallback=OllamaEmbedder())`.
-  - Ghi wall time và RSS đỉnh (`resource.getrusage(RUSAGE_SELF).ru_maxrss`, đo trong subprocess riêng cho mỗi bước) và VRAM đỉnh (`torch.cuda.max_memory_allocated`).
-- [ ] **Step 2: Chạy.**
-  Run: `.venv/bin/python webapp/spikes/s1_batch_cost.py --n 10`
-  Expected: in ra bảng `step | wall_s | rss_gb | vram_gb`, không có exception.
-- [ ] **Step 3: Viết báo cáo** vào file md. So sánh với tiêu chí MVP §8: lô ≤ 30 phút, RAM ≤ 24 GB. Kết luận một trong hai: "giữ nguyên Task 11", hoặc "thu nhỏ nền" (liệt kê instance giữ lại).
-- [ ] **Step 4: Commit.** `git add webapp/spikes/s1_batch_cost.py docs/superpowers/spikes/ && git commit -m "spike(s1): measure batch scoring cost on full base"`
-
-### Task 2: Spike S2 — LLM song ngữ trả JSON theo schema
-
-**Files:**
-- Create: `webapp/spikes/s2_llm_json.py`
-- Create: `webapp/spikes/s2_cases.json` (6 ca: 3 tiếng Anh, 3 tiếng Việt; mỗi ca có `summary`, `status`, `deadline`, `factors[{id,label,value}]`)
-- Create: `docs/superpowers/spikes/2026-11-02-s2-llm-json.md`
-
-- [ ] **Step 1: Viết script.**
-  - Gọi `POST {OLLAMA}/api/chat` với `format` = JSON schema `{explanation:[{text,cites[]}], actions:[{type,params,rationale,cites[],confidence}], advice:[{text,cites[]}]}`.
-  - `type` thuộc enum `comment|reassign|change_priority|move_sprint|change_duedate|add_link|add_label|flag`.
-  - `options={"temperature":0.2,"num_ctx":8192}`.
-  - Với mỗi model trong `--models`, chạy mỗi ca 3 lần và đo:
-    - % parse được JSON;
-    - % mọi `cites` ⊆ id factor của ca;
-    - giây mỗi lần gọi;
-    - đầu ra mẫu để chấm tay chất lượng tiếng Việt.
-- [ ] **Step 2: Pull và chạy.**
-  Run: `ollama pull qwen2.5:7b && ollama pull llama3.1:8b && .venv/bin/python webapp/spikes/s2_llm_json.py --models qwen2.5:7b,llama3.1:8b`
-  Expected: bảng `model | json_ok% | cites_ok% | s/call`.
-- [ ] **Step 3: Báo cáo**, chọn `LLM_MODEL` cho kế hoạch 2. Tiêu chí: JSON hợp lệ ≥ 95% và trích dẫn sai ≤ 5% (TARGET §13 S2).
-- [ ] **Step 4: Commit.** `git commit -m "spike(s2): bilingual JSON-schema LLM check"`
+Không ai trong kế hoạch này thực hiện hai task này. Các task khác chỉ phụ thuộc vào **kết quả**:
+- **S1 →** ngưỡng thời gian và RAM cho smoke test của Task 11, Step 5. Cũng quyết định có cần thu nhỏ nền DuckDB không. Nếu đến lúc làm Task 11 vẫn chưa có kết quả: Step 5 chỉ ghi lại thời gian và RAM quan sát được, không coi là đạt hay trượt.
+- **S2 →** giá trị `llm_model` (mặc định tạm thời `qwen2.5:7b` ở Task 4). Task 11 chỉ dùng tên này để giải phóng VRAM. Việc chọn model chính thức thuộc kế hoạch 2.
 
 ### Task 3: Spike S3 — webhook Jira Cloud qua ngrok domain tĩnh (runbook)
 
@@ -170,7 +135,7 @@ docs/superpowers/spikes/         # báo cáo spike
     - `erw_instance="ERW"`;
     - `tz="Asia/Ho_Chi_Minh"`, `batch_time="06:45"`, `digest_time="08:00"`;
     - `model_mode: Literal["shadow","active"]="shadow"`;
-    - `llm_model="qwen2.5:7b"` (chốt lại sau S2);
+    - `llm_model="qwen2.5:7b"` (giá trị tạm; người dùng chốt sau S2);
     - `pm_name_by_project: dict[str,str] = {}` (env JSON, ví dụ `{"DEMO":"Trần Bình"}`);
     - `status_category_overrides: dict[str,str] = {}` (tên status → `new|indeterminate|done`);
     - `web_base_url="http://localhost:8000"`.
@@ -571,7 +536,7 @@ def test_batch_busy_when_locked(...): ...
 - [ ] **Step 4:** Chạy test. Expected: PASS.
 - [ ] **Step 5: Smoke test với thư viện thật.** Cần site demo đã có vài issue (từ Task 3) và `erw catch-up` đã chạy.
   Run: `.venv/bin/erw run-batch`
-  Expected: in `n_issues ≥ 1` và thời gian chạy; bảng `scores` có hàng `delay_t0`, `criticality_t0`. Thời gian phải trong ngưỡng S1.
+  Expected: in `n_issues ≥ 1` và thời gian chạy; bảng `scores` có hàng `delay_t0`, `criticality_t0`. So với ngưỡng từ kết quả S1 của người dùng; chưa có kết quả thì chỉ ghi lại số đo.
 - [ ] **Step 6: Commit.** `git commit -m "feat(erw): daily model batch over working duckdb with ERW instance"`
 
 ### Task 12: Lịch chạy và digest 8:00
@@ -633,5 +598,5 @@ def test_digest_sent_once_per_day(session, ...): ...   # chạy 2 lần → lầ
 | FR-C1 criticality theo lô; 6.4a delay_t0 | 11 |
 | FR-P2 ghi lại lượt chạy (rút gọn: báo cáo của `run-batch` + bảng `scores`); FR-P3 lịch sử điểm; FR-P4 lô lỗi vẫn gửi digest | 9, 11, 12 |
 | FR-S1…S6 Slack (một kênh, prefix, @tên, digest ≤ 5 task, chống trùng, giới hạn mỗi giờ) | 10, 12 |
-| MVP §8 spike S1–S3 | 1, 2, 3 |
+| MVP §8 spike S1–S2 (người dùng tự làm), S3 | 3 |
 | **Kế hoạch sau:** 6.6 LLM, 6.7 action, 6.9 dashboard, 3 vai trò/auth, FR-DM2 seed, FR-DM3 sim-eval | 2/4, 3/4, 4/4 |
