@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy import Engine
 
 from erw import jobs
-from erw.api import auth, health, webhooks
+from erw.api import auth, health, projects, webhooks
 from erw.db import init_db, make_engine
 from erw.pipeline import alerts, evaluate
 from erw.settings import Settings, get_settings
@@ -64,4 +64,5 @@ def create_app(
     app.include_router(health.router)
     app.include_router(webhooks.router)
     app.include_router(auth.router)
+    app.include_router(projects.projects_router)
     return app

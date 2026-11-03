@@ -6,10 +6,11 @@ import secrets
 import time
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from erw.db import get_session
-from erw.models import User
+from erw.models import ProjectMember, User
 from erw.settings import Settings, get_settings
 
 
@@ -105,3 +106,80 @@ def require_admin(user: User = Depends(require_authenticated_user)) -> User:
             detail="Admin privileges required",
         )
     return user
+
+
+def get_user_project_role(session: Session, user: User, project_key: str) -> str | None:
+    if user.is_admin:
+        return "admin"
+    stmt = select(ProjectMember).where(
+        ProjectMember.project_key == project_key,
+        ProjectMember.user_id == user.id,
+    )
+    member = session.execute(stmt).scalar_one_or_none()
+    if member is not None:
+        return member.role
+    return None
+
+
+def require_project_role(
+    project_key: str,
+    allowed_roles: set[str] | list[str] | tuple[str, ...] | str,
+    *,
+    detail: str | None = None,
+    user: User | None = None,
+    session: Session | None = None,
+):
+    if isinstance(allowed_roles, str):
+        allowed = {allowed_roles}
+    else:
+        allowed = set(allowed_roles)
+
+    error_detail = detail or f"Access denied for project {project_key}"
+
+    def _dependency(
+        user: User = Depends(require_authenticated_user),
+        session: Session = Depends(get_session),
+    ) -> User:
+        role = get_user_project_role(session, user, project_key)
+        if user.is_admin or (role is not None and role in allowed):
+            return user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail,
+        )
+
+    if user is not None and session is not None:
+        return _dependency(user=user, session=session)
+    return _dependency
+
+
+def require_pm(
+    project_key: str,
+    *,
+    user: User | None = None,
+    session: Session | None = None,
+):
+    dep = require_project_role(
+        project_key,
+        {"pm"},
+        detail=f"PM role required for project {project_key}",
+    )
+    if user is not None and session is not None:
+        return dep(user=user, session=session)
+    return dep
+
+
+def require_viewer(
+    project_key: str,
+    *,
+    user: User | None = None,
+    session: Session | None = None,
+):
+    dep = require_project_role(
+        project_key,
+        {"pm", "viewer"},
+        detail=f"Access denied for project {project_key}",
+    )
+    if user is not None and session is not None:
+        return dep(user=user, session=session)
+    return dep

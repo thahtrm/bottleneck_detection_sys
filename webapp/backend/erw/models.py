@@ -22,6 +22,24 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
 
 
+class Project(Base):
+    __tablename__ = "projects"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, default="")
+    tracked: Mapped[bool] = mapped_column(Boolean, default=True)
+    status_map: Mapped[Any] = mapped_column(JSON, default=dict)
+    thresholds: Mapped[Any] = mapped_column(JSON, default=dict)
+
+
+class ProjectMember(Base):
+    __tablename__ = "project_members"
+
+    project_key: Mapped[str] = mapped_column(ForeignKey("projects.key"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    role: Mapped[str] = mapped_column(String)  # "pm" | "viewer"
+
+
 class Issue(Base):
     __tablename__ = "issues"
 
