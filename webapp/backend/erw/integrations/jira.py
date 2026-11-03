@@ -103,6 +103,20 @@ class JiraClient:
     def get_version(self, version_id: int) -> dict | None:
         return self._json("GET", f"/rest/api/3/version/{version_id}", none_on_404=True)
 
+    def board_ids(self, project_key: str) -> list[int]:
+        ids: list[int] = []
+        while True:
+            data = self._json(
+                "GET", "/rest/agile/1.0/board", params={"projectKeyOrId": project_key, "startAt": len(ids), "maxResults": 50}
+            )
+            values = data.get("values", [])
+            ids.extend(int(b["id"]) for b in values)
+            if data.get("isLast", True) or not values:
+                return ids
+
+    def project_id(self, key: str) -> int:
+        return int(self._json("GET", f"/rest/api/3/project/{key}")["id"])
+
     def myself(self) -> dict:
         return self._json("GET", "/rest/api/3/myself")
 

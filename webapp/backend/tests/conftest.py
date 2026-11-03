@@ -28,18 +28,67 @@ def settings() -> Settings:
 
 
 @pytest.fixture
-def session(settings):
-    engine = make_engine(settings.db_url)
-    init_db(engine)
-    with SessionLocal(bind=engine) as s:
-        yield s
-    engine.dispose()
+def engine(settings):
+    """One engine per test, shared by `session`, `client` and the background jobs."""
+    eng = make_engine(settings.db_url)
+    init_db(eng)
+    yield eng
+    eng.dispose()
 
 
 @pytest.fixture
-def client(settings):
-    with TestClient(create_app(settings)) as c:
+def session(engine):
+    with SessionLocal(bind=engine) as s:
+        yield s
+
+
+@pytest.fixture
+def client(settings, engine):
+    with TestClient(create_app(settings, engine=engine, catch_up_on_startup=False)) as c:
         yield c
+
+
+class FakeJira:
+    """Test double of JiraClient; install with jobs.set_client()."""
+
+    def __init__(self):
+        self.issues: dict[str, dict] = {}
+        self.errors: dict[str, Exception] = {}
+        self.get_issue_calls: list[str] = []
+        self.search_jqls: list[str] = []
+        self.search_result: list[str] = []
+        self.boards = {"DEMO": [3]}
+        self.project_ids = {"DEMO": 10002}
+        self.tz = "Asia/Saigon"
+
+    def get_issue(self, key):
+        self.get_issue_calls.append(key)
+        if key in self.errors:
+            raise self.errors[key]
+        return self.issues.get(key)
+
+    def search_keys(self, jql):
+        self.search_jqls.append(jql)
+        return list(self.search_result)
+
+    def board_ids(self, project_key):
+        return list(self.boards.get(project_key, []))
+
+    def project_id(self, key):
+        return self.project_ids[key]
+
+    def myself(self):
+        return {"timeZone": self.tz}
+
+
+@pytest.fixture
+def fake_jira():
+    from erw import jobs
+
+    fake = FakeJira()
+    jobs.set_client(fake)
+    yield fake
+    jobs.set_client(None)
 
 
 def load_fixture(name: str) -> dict:

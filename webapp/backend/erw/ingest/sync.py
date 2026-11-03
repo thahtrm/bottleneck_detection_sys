@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from early_risk_detection.data.normalize import normalize_link_type, normalize_priority
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from erw.db import utcnow
-from erw.integrations.jira import JiraClient
+from erw.integrations.jira import JiraClient, JiraError
+from erw.kv import kv_get, kv_get_json, kv_set, kv_set_json
 from erw.models import Change, Issue, IssueSprint, IssueVersion, Link, Sprint, Version
 from erw.settings import Settings
 
@@ -197,9 +199,38 @@ def sync_sprint(session: Session, raw_sprint: dict) -> list[str]:
     return list(session.scalars(select(IssueSprint.issue_key).where(IssueSprint.sprint_id == sp.id).order_by(IssueSprint.issue_key)))
 
 
-def sync_version(session: Session, raw_version: dict) -> list[str]:
-    v = _set_version(session, raw_version)
+def sync_version(session: Session, raw_version: dict, project_key: str | None = None) -> list[str]:
+    v = _set_version(session, raw_version, project_key)
     session.flush()
     if v is None:
         return []
     return list(session.scalars(select(IssueVersion.issue_key).where(IssueVersion.version_id == v.id).order_by(IssueVersion.issue_key)))
+
+
+def catch_up(session: Session, client: JiraClient, settings: Settings, now: datetime) -> int:
+    """Re-sync issues updated since the last webhook (minus 5 min) plus any pending_sync keys."""
+    from erw.pipeline.evaluate import on_synced
+
+    last = kv_get(session, "last_webhook_at")
+    since = (datetime.fromisoformat(last) if last else now - timedelta(days=1)) - timedelta(minutes=5)
+    tz = ZoneInfo(client.myself().get("timeZone") or "UTC")
+    stamp = since.astimezone(tz).strftime("%Y/%m/%d %H:%M")
+    projects = ", ".join(f'"{p}"' for p in settings.jira_projects)
+    keys = client.search_keys(f'project in ({projects}) AND updated >= "{stamp}"')
+    for k in kv_get_json(session, "pending_sync", []):
+        if k not in keys:
+            keys.append(k)
+
+    results: list[SyncResult] = []
+    still_pending: list[str] = []
+    for k in keys:
+        try:
+            results.append(sync_issue(session, client, k, settings))
+        except JiraError:
+            still_pending.append(k)
+    kv_set_json(session, "pending_sync", still_pending)
+    kv_set(session, "last_catch_up_at", now.isoformat())
+    session.commit()
+    on_synced(session, results, now, settings)
+    session.commit()
+    return len(results)

@@ -90,3 +90,18 @@ def test_register_webhook(jira):
     assert jira.register_webhook("https://h/x", ["jira:issue_created"], "project = DEMO") == {"self": "x"}
     body = route.calls.last.request.content
     assert b"issue-related-events-section" in body and b"project = DEMO" in body
+
+
+@respx.mock
+def test_board_ids_pages_and_project_id(jira):
+    route = respx.get(f"{BASE}/rest/agile/1.0/board").mock(
+        side_effect=[
+            httpx.Response(200, json={"values": [{"id": 3}, {"id": 4}], "isLast": False}),
+            httpx.Response(200, json={"values": [{"id": 9}], "isLast": True}),
+        ]
+    )
+    assert jira.board_ids("DEMO") == [3, 4, 9]
+    assert route.calls[0].request.url.params["projectKeyOrId"] == "DEMO"
+    assert route.calls[1].request.url.params["startAt"] == "2"
+    respx.get(f"{BASE}/rest/api/3/project/DEMO").mock(return_value=httpx.Response(200, json={"id": "10002"}))
+    assert jira.project_id("DEMO") == 10002
