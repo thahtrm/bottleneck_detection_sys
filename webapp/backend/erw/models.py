@@ -183,6 +183,19 @@ class Suggestion(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
 
 
+class Action(Base):
+    __tablename__ = "actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    issue_key: Mapped[str] = mapped_column(String, index=True)
+    suggestion_id: Mapped[int | None] = mapped_column(ForeignKey("suggestions.id"), nullable=True)
+    items: Mapped[Any] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String, default="pending")  # "pending" | "applied" | "conflict" | "failed"
+    confirmed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    result: Mapped[Any] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
 class KV(Base):
     __tablename__ = "kv"
 

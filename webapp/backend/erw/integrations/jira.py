@@ -1,11 +1,27 @@
 from __future__ import annotations
 
+import re
+from datetime import UTC, datetime
+
 import httpx
 from tenacity import Retrying, retry_if_exception_type, stop_after_attempt
 
 RETRY_STATUSES = frozenset({429, 502, 503, 504})
 MAX_ATTEMPTS = 4
 BACKOFF_SECONDS: tuple[float, ...] = (2, 4, 8)  # waits between attempts when no Retry-After
+
+_TZ_NO_COLON = re.compile(r"([+-]\d{2})(\d{2})$")
+
+
+def _parse_jira_datetime(s: str) -> datetime:
+    s = s.strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    s = _TZ_NO_COLON.sub(r"\1:\2", s)
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 class JiraError(Exception):
@@ -129,3 +145,46 @@ class JiraClient:
             "excludeBody": False,
         }
         return self._json("POST", "/rest/webhooks/1.0/webhook", json=body)
+
+    def get_issue_updated(self, key: str) -> datetime:
+        data = self._json("GET", f"/rest/api/3/issue/{key}", params={"fields": "updated"})
+        fields = data.get("fields", {}) if isinstance(data, dict) else {}
+        updated_raw = fields.get("updated")
+        if not updated_raw:
+            raise JiraError(404, f"Updated timestamp not found for issue {key}")
+        return _parse_jira_datetime(updated_raw)
+
+    def update_issue(self, key: str, fields: dict) -> None:
+        self._json("PUT", f"/rest/api/3/issue/{key}", json={"fields": fields})
+
+    def add_comment(self, key: str, body: str) -> None:
+        payload = {
+            "body": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": body}],
+                    }
+                ],
+            }
+        }
+        self._json("POST", f"/rest/api/3/issue/{key}/comment", json=payload)
+
+    def find_transition_id(self, key: str, target_status_name: str) -> str | None:
+        data = self._json("GET", f"/rest/api/3/issue/{key}/transitions")
+        transitions = data.get("transitions", []) if isinstance(data, dict) else []
+        target = target_status_name.strip().lower()
+        for t in transitions:
+            to_name = t.get("to", {}).get("name", "").strip().lower()
+            if to_name == target:
+                return str(t["id"])
+        for t in transitions:
+            trans_name = t.get("name", "").strip().lower()
+            if trans_name == target:
+                return str(t["id"])
+        return None
+
+    def transition_issue(self, key: str, transition_id: str) -> None:
+        self._json("POST", f"/rest/api/3/issue/{key}/transitions", json={"transition": {"id": transition_id}})
