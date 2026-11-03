@@ -165,3 +165,12 @@ def issue_updated() -> dict:
 @pytest.fixture
 def issue_blocked() -> dict:
     return derive_issue_blocked()
+
+
+@pytest.fixture(autouse=True)
+def _clear_stats_cache():
+    from erw.pipeline import evaluate
+
+    evaluate.clear_stats_cache()
+    yield
+    evaluate.clear_stats_cache()

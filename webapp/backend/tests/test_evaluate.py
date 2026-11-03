@@ -12,13 +12,6 @@ NOW = datetime(2026, 11, 4, 3, 0, tzinfo=timezone.utc)
 CREATED = NOW - timedelta(days=2)
 
 
-@pytest.fixture(autouse=True)
-def _clear_cache():
-    ev.clear_stats_cache()
-    yield
-    ev.clear_stats_cache()
-
-
 def mk(session, key="DEMO-1", **kw):
     d = dict(project_key="DEMO", summary="s", issuetype="Task", priority_norm=0.5, status="In Progress",
              status_category="indeterminate", assignee_id="a", assignee_name="A",
@@ -145,3 +138,20 @@ def test_evaluate_all_skips_deleted(session, settings):
     mk(session, "DEMO-2", deleted_at=NOW)
     mk(session, "OTHER-1", project_key="OTHER")
     assert [c.key for c in ev.evaluate_all(session, NOW, settings)] == ["DEMO-1"]
+
+
+@pytest.mark.parametrize("src,tgt,typ,d,blocked", [
+    ("DEMO-1", "DEMO-2", "Depend", "1", True),    # X depends on Y
+    ("DEMO-2", "DEMO-1", "Depend", "0", True),    # Y is depended on by X
+    ("DEMO-1", "DEMO-2", "Depend", "0", False),   # X is depended on by Y
+    ("DEMO-2", "DEMO-1", "Depend", "1", False),   # Y depends on X
+    ("DEMO-1", "DEMO-2", "Block", "1", False),    # X blocks Y
+    ("DEMO-2", "DEMO-1", "Block", "0", False),    # Y is blocked by X
+])
+def test_link_orientation(session, settings, src, tgt, typ, d, blocked):
+    mk(session, "DEMO-1")
+    mk(session, "DEMO-2")
+    session.add(Link(source_key=src, target_key=tgt, type_std=typ, direction=d))
+    session.commit()
+    ev.evaluate_issue(session, "DEMO-1", NOW, settings)
+    assert session.get(RiskState, "DEMO-1").blocked is blocked

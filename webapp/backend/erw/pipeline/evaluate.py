@@ -85,18 +85,23 @@ def latest_model_signals(session: Session, key: str) -> ModelSignals | None:
 
 
 def _blockers(session: Session, issue: Issue, changes: list[Change]) -> list[tuple[str, bool, datetime]]:
-    inward = session.scalars(
-        select(Link.target_key).where(
-            Link.source_key == issue.key, Link.type_std.in_(("Block", "Depend")), Link.direction == "0"
-        )
-    ).all()
-    outward = session.scalars(
-        select(Link.source_key).where(Link.target_key == issue.key, Link.type_std == "Block", Link.direction == "1")
-    ).all()
+    def others(type_std, direction, want):
+        col, other = (Link.source_key, Link.target_key) if want == "target" else (Link.target_key, Link.source_key)
+        return session.scalars(
+            select(other).where(col == issue.key, Link.type_std == type_std, Link.direction == direction)
+        ).all()
+
+    blockers = set()
+    # Block: X "is blocked by" Y (source=X, dir 0) or Y "blocks" X (source=Y, dir 1)
+    blockers |= set(others("Block", "0", "target"))
+    blockers |= set(others("Block", "1", "source"))
+    # Depend: X "depends on" Y (source=X, dir 1) or Y "is depended on by" X (source=Y, dir 0)
+    blockers |= set(others("Depend", "1", "target"))
+    blockers |= set(others("Depend", "0", "source"))
     link_times = [c.at for c in changes if c.field == "link"]
     since = min(link_times) if link_times else issue.created_at
     out = []
-    for k in sorted(set(inward) | set(outward)):
+    for k in sorted(blockers):
         b = session.get(Issue, k)
         done = b is not None and (b.status_category == "done" or b.deleted_at is not None)
         out.append((k, done, since))
