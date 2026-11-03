@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+import logging
+import shutil
+import threading
+import time
+from collections.abc import Callable
+from datetime import datetime
+from pathlib import Path
+from typing import Protocol
+
+import httpx
+import pandas as pd
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from erw.kv import kv_get, kv_set
+from erw.ml.duckdb_sync import ensure_work_db, sync_erw_instance
+from erw.models import Issue, Score
+from erw.pipeline.alerts import dispatch
+from erw.pipeline.evaluate import evaluate_all
+from erw.settings import Settings
+
+log = logging.getLogger(__name__)
+
+_LOCK = threading.Lock()
+STREAM_KV = "last_stream_n_issues"
+
+
+class BatchBusy(RuntimeError):
+    pass
+
+
+class Scorers(Protocol):
+    def delay(self, db: str, keys: list[str]) -> pd.DataFrame: ...
+    def criticality(self, db: str, keys: list[str]) -> pd.DataFrame: ...
+
+
+class LibraryScorers:
+    """Real scorers; bundles and embeddings load on first use (not at import/construct time)."""
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self._delay = self._crit = self._emb = None
+
+    def _load(self):
+        if self._emb is not None:
+            return
+        from early_risk_detection import CriticalityScorer, DelayRiskScorer
+        from early_risk_detection.embeddings import EmbeddingIndex, OllamaEmbedder
+
+        s = self.settings
+        self._emb = EmbeddingIndex(s.emb_dir, fallback=OllamaEmbedder(endpoint=f"{s.ollama_url}/api/embed"))
+        self._delay = DelayRiskScorer.load(Path(s.bundles_dir) / "delay")
+        self._crit = CriticalityScorer.load(Path(s.bundles_dir) / "criticality")
+
+    def delay(self, db: str, keys: list[str]) -> pd.DataFrame:
+        self._load()
+        return self._delay.score(db, self._emb, issue_keys=keys, as_of=None)
+
+    def criticality(self, db: str, keys: list[str]) -> pd.DataFrame:
+        self._load()
+        return self._crit.score(db, self._emb, issue_keys=keys, stream_dir=self.settings.stream_dir)
+
+
+def make_unload_llm(settings: Settings) -> Callable[[], None]:
+    def unload() -> None:
+        try:
+            httpx.post(
+                f"{settings.ollama_url}/api/generate",
+                json={"model": settings.llm_model, "keep_alive": 0},
+                timeout=10,
+            )
+        except Exception:  # best effort
+            log.warning("could not unload LLM", exc_info=True)
+
+    return unload
+
+
+def _key(uid: str) -> str:
+    return uid.split("|", 1)[1] if "|" in uid else uid
+
+
+def run_model_batch(
+    session: Session,
+    settings: Settings,
+    now: datetime,
+    scorers: Scorers,
+    *,
+    unload_llm: Callable[[], None],
+    sender=None,
+) -> dict:
+    if not _LOCK.acquire(blocking=False):
+        raise BatchBusy("another model batch is running")
+    try:
+        unload_llm()
+        issues = session.scalars(select(Issue).where(Issue.deleted_at.is_(None)).order_by(Issue.key)).all()
+        ensure_work_db(settings)
+        n_synced = sync_erw_instance(settings, [i.raw for i in issues])
+        open_keys = [i.key for i in issues if i.status_category != "done"]
+        report = {"n_issues": len(open_keys), "delay_s": 0.0, "crit_s": 0.0}
+        if open_keys:
+            uids = [f"{settings.erw_instance}|{k}" for k in open_keys]
+            db = str(settings.work_duckdb)
+
+            t = time.monotonic()
+            for r in scorers.delay(db, uids).itertuples(index=False):
+                session.add(Score(
+                    issue_key=_key(r.uid), scorer="delay_t0", as_of=now, value=float(r.p_delay),
+                    extra={"predicted_duration_days": float(r.predicted_duration_days), "is_at_risk": bool(r.is_at_risk)},
+                ))
+            report["delay_s"] = round(time.monotonic() - t, 2)
+            session.commit()
+
+            if kv_get(session, STREAM_KV) != str(n_synced):
+                shutil.rmtree(settings.stream_dir, ignore_errors=True)
+            t = time.monotonic()
+            for r in scorers.criticality(db, uids).itertuples(index=False):
+                session.add(Score(
+                    issue_key=_key(r.uid), scorer="criticality_t0", as_of=now, value=float(r.score),
+                    is_critical=bool(r.is_critical), extra={"rank_in_instance": int(r.rank_in_instance)},
+                ))
+            report["crit_s"] = round(time.monotonic() - t, 2)
+            kv_set(session, STREAM_KV, str(n_synced))
+            session.commit()
+
+        changes = evaluate_all(session, now, settings)
+        dispatch(session, changes, now, settings, sender)
+        session.commit()
+        return report
+    finally:
+        _LOCK.release()

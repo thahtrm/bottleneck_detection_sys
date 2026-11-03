@@ -18,13 +18,23 @@ WEBHOOK_EVENTS = [
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="erw")
-    parser.add_argument("command", choices=["init-db", "catch-up", "register-webhook"])
+    parser.add_argument("command", choices=["init-db", "catch-up", "register-webhook", "run-batch"])
     args = parser.parse_args(argv)
     settings = get_settings()
 
     if args.command == "init-db":
         init_db(make_engine(settings.db_url))
         print("database initialised")
+        return 0
+
+    if args.command == "run-batch":
+        from erw.ml.batch import LibraryScorers, make_unload_llm, run_model_batch
+
+        engine = make_engine(settings.db_url)
+        init_db(engine)
+        with SessionLocal(bind=engine) as session:
+            print(run_model_batch(session, settings, utcnow(), LibraryScorers(settings),
+                                  unload_llm=make_unload_llm(settings)))
         return 0
 
     client = JiraClient(settings.jira_base_url, settings.jira_email, settings.jira_api_token)
