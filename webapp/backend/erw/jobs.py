@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
@@ -145,3 +149,74 @@ def run_catch_up() -> None:
             log.info("catch-up synced %d issues", n)
     except Exception:
         log.exception("catch-up failed")
+
+
+def _morning_body() -> None:
+    from erw.ml.batch import BatchBusy, LibraryScorers, make_unload_llm, run_model_batch
+
+    run_catch_up()
+    try:
+        with SessionLocal(bind=_engine) as session:
+            report = run_model_batch(
+                session, _settings, utcnow(), LibraryScorers(_settings), unload_llm=make_unload_llm(_settings)
+            )
+            log.info("morning batch done: %s", report)
+    except BatchBusy:
+        log.warning("morning batch skipped: another batch is running; digest will use previous scores")
+    except Exception:
+        log.exception("morning batch failed; digest will use previous scores")
+
+
+def morning_job() -> None:
+    """06:45: catch-up then model batch, run in the executor thread so writes stay serialised."""
+    try:
+        executor.submit(_morning_body).result()
+    except Exception:
+        log.exception("morning job failed")
+
+
+def _digest_body(now: datetime) -> None:
+    from erw.integrations.slack import SlackSender
+    from erw.pipeline.alerts import AlertSpec, notify
+    from erw.pipeline.digest import build_digest
+
+    sender = SlackSender(_settings.slack_webhook_url) if _settings.slack_webhook_url else None
+    date_iso = now.astimezone(ZoneInfo(_settings.tz)).date().isoformat()
+    for project in _settings.jira_projects:
+        try:
+            with SessionLocal(bind=_engine) as session:
+                text = build_digest(session, project, now, _settings)
+                spec = AlertSpec("digest", None, project, None, f"digest:{project}:{date_iso}")
+                status = notify(session, spec, text, sender, now, _settings.slack_max_per_hour)
+                session.commit()
+                log.info("digest %s: %s", project, status)
+        except Exception:
+            log.exception("digest failed for %s", project)
+
+
+def digest_job(now: datetime | None = None) -> None:
+    """08:00: one Slack digest per project (deduplicated per local day)."""
+    try:
+        executor.submit(_digest_body, now or utcnow()).result()
+    except Exception:
+        log.exception("digest job failed")
+
+
+def start_scheduler(settings: Settings) -> BackgroundScheduler:
+    tz = ZoneInfo(settings.tz)
+    scheduler = BackgroundScheduler(timezone=tz)
+    for job_id, func, hhmm in (
+        ("morning_batch", morning_job, settings.batch_time),
+        ("daily_digest", digest_job, settings.digest_time),
+    ):
+        hour, minute = (int(x) for x in hhmm.split(":"))
+        scheduler.add_job(
+            func,
+            CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone=tz),
+            id=job_id,
+            coalesce=True,
+            max_instances=1,
+            replace_existing=True,
+        )
+    scheduler.start()
+    return scheduler

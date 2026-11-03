@@ -44,7 +44,7 @@ def session(engine):
 
 @pytest.fixture
 def client(settings, engine):
-    with TestClient(create_app(settings, engine=engine, catch_up_on_startup=False)) as c:
+    with TestClient(create_app(settings, engine=engine, catch_up_on_startup=False, start_scheduler_on_startup=False)) as c:
         yield c
 
 

@@ -18,7 +18,8 @@ WEBHOOK_EVENTS = [
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="erw")
-    parser.add_argument("command", choices=["init-db", "catch-up", "register-webhook", "run-batch"])
+    parser.add_argument("command", choices=["init-db", "catch-up", "register-webhook", "run-batch", "digest"])
+    parser.add_argument("--dry-run", action="store_true", help="digest: print instead of sending")
     args = parser.parse_args(argv)
     settings = get_settings()
 
@@ -35,6 +36,18 @@ def main(argv: list[str] | None = None) -> int:
         with SessionLocal(bind=engine) as session:
             print(run_model_batch(session, settings, utcnow(), LibraryScorers(settings),
                                   unload_llm=make_unload_llm(settings)))
+        return 0
+
+    if args.command == "digest":
+        from erw.pipeline.digest import build_digest
+
+        if not args.dry_run:
+            parser.error("digest currently supports --dry-run only; the scheduler sends the real digest")
+        engine = make_engine(settings.db_url)
+        init_db(engine)
+        with SessionLocal(bind=engine) as session:
+            for project in settings.jira_projects:
+                print(build_digest(session, project, utcnow(), settings), end="\n\n")
         return 0
 
     client = JiraClient(settings.jira_base_url, settings.jira_email, settings.jira_api_token)

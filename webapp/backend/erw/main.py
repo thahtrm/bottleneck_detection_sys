@@ -11,19 +11,28 @@ from erw.settings import Settings, get_settings
 
 
 def create_app(
-    settings: Settings | None = None, *, engine: Engine | None = None, catch_up_on_startup: bool = True
+    settings: Settings | None = None, *, engine: Engine | None = None, catch_up_on_startup: bool = True,
+    start_scheduler_on_startup: bool = True,
 ) -> FastAPI:
     settings = settings or get_settings()
+    own_engine = engine is None
     engine = engine or make_engine(settings.db_url)
     init_db(engine)
     jobs.configure(settings, engine)
     evaluate._dispatch = alerts.dispatch  # wired here to avoid an evaluate -> alerts import cycle
 
     @asynccontextmanager
-    async def lifespan(_app: FastAPI):
+    async def lifespan(app: FastAPI):
         if catch_up_on_startup and settings.jira_base_url:
             jobs.executor.submit(jobs.run_catch_up)
-        yield  # Task 12 starts the scheduler here
+        app.state.scheduler = jobs.start_scheduler(settings) if start_scheduler_on_startup else None
+        try:
+            yield
+        finally:
+            if app.state.scheduler is not None:
+                app.state.scheduler.shutdown(wait=False)
+            if own_engine:
+                engine.dispose()
 
     app = FastAPI(title="Early Risk Web", lifespan=lifespan)
     app.state.settings = settings
