@@ -15,6 +15,7 @@ dependencies = [
   "apscheduler>=3.10,<4",
   "httpx",
   "tenacity",
+  "numpy",
 ]
 
 [project.optional-dependencies]

@@ -63,3 +63,36 @@ class IssueTimeline:
     closed_sprints_count: int = 0
     open_blockers: list[str] = field(default_factory=list)
     blocked_since: datetime | None = None
+
+
+@dataclass(frozen=True)
+class Factor:
+    id: str
+    label: str
+    value: str
+    source: str  # changelog | deadline | links | sprint | assignee
+
+
+@dataclass(frozen=True)
+class Thresholds:
+    sprint_elapsed: float = 0.7
+    blocked_long_days: float = 3
+    reopen_min: int = 1
+    deadline_moves_min: int = 2
+    reassign_min: int = 2
+    unassigned_workdays: int = 3
+    p_med: float = 0.39
+    p_high: float = 0.6
+
+
+@dataclass(frozen=True)
+class ProjectStats:
+    dwell_p75_days: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ModelSignals:
+    p_delay: float | None = None
+    predicted_finish: datetime | None = None
+    is_critical: bool = False
+    crit_score: float | None = None
