@@ -2,6 +2,7 @@ import os
 import time
 
 import duckdb
+import pytest
 from conftest import load_fixture
 
 from erw.ml.duckdb_sync import ensure_work_db, sync_erw_instance, to_dump_shape
@@ -71,4 +72,14 @@ def test_ensure_work_db_never_touches_base(tmp_path):
     assert p.exists() and p != __import__("pathlib").Path(s.base_duckdb)
     sync_erw_instance(s, [load_fixture("rest_issue_demo1")])
     assert os.stat(s.base_duckdb).st_mtime == before.st_mtime
+    assert _count(s.base_duckdb) == 0
+
+
+def test_work_db_same_as_base_rejected(tmp_path):
+    s = _work_settings(tmp_path)
+    same = s.model_copy(update={"work_duckdb": str(tmp_path / "." / "base.duckdb")})
+    with pytest.raises(ValueError):
+        ensure_work_db(same)
+    with pytest.raises(ValueError):
+        sync_erw_instance(same, [load_fixture("rest_issue_demo1")])
     assert _count(s.base_duckdb) == 0

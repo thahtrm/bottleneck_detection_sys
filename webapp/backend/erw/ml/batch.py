@@ -14,7 +14,6 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from erw.kv import kv_get, kv_set
 from erw.ml.duckdb_sync import ensure_work_db, sync_erw_instance
 from erw.models import Issue, Score
 from erw.pipeline.alerts import dispatch
@@ -24,7 +23,6 @@ from erw.settings import Settings
 log = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
-STREAM_KV = "last_stream_n_issues"
 
 
 class BatchBusy(RuntimeError):
@@ -96,7 +94,7 @@ def run_model_batch(
         unload_llm()
         issues = session.scalars(select(Issue).where(Issue.deleted_at.is_(None)).order_by(Issue.key)).all()
         ensure_work_db(settings)
-        n_synced = sync_erw_instance(settings, [i.raw for i in issues])
+        sync_erw_instance(settings, [i.raw for i in issues])
         open_keys = [i.key for i in issues if i.status_category != "done"]
         report = {"n_issues": len(open_keys), "delay_s": 0.0, "crit_s": 0.0}
         if open_keys:
@@ -112,8 +110,8 @@ def run_model_batch(
             report["delay_s"] = round(time.monotonic() - t, 2)
             session.commit()
 
-            if kv_get(session, STREAM_KV) != str(n_synced):
-                shutil.rmtree(settings.stream_dir, ignore_errors=True)
+            # event stream is rebuilt every batch: changelog/link events can change at constant issue count
+            shutil.rmtree(settings.stream_dir, ignore_errors=True)
             t = time.monotonic()
             for r in scorers.criticality(db, uids).itertuples(index=False):
                 session.add(Score(
@@ -121,7 +119,6 @@ def run_model_batch(
                     is_critical=bool(r.is_critical), extra={"rank_in_instance": int(r.rank_in_instance)},
                 ))
             report["crit_s"] = round(time.monotonic() - t, 2)
-            kv_set(session, STREAM_KV, str(n_synced))
             session.commit()
 
         changes = evaluate_all(session, now, settings)

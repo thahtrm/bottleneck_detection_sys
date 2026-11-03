@@ -7,7 +7,6 @@ from conftest import load_fixture
 from sqlalchemy import select
 
 from erw.ingest.sync import upsert_issue_json
-from erw.kv import kv_get
 from erw.ml import batch
 from erw.ml.batch import BatchBusy, run_model_batch
 from erw.models import Issue, Score
@@ -81,21 +80,39 @@ def test_batch_passes_erw_uids(session, wsettings, seeded):
     assert fake.calls[0] == ("delay", ["ERW|DEMO-1"])
 
 
-def test_stream_dir_removed_when_issue_count_changes(session, wsettings, seeded):
+def test_stream_dir_removed_before_criticality_every_batch(session, wsettings, seeded):
     stream = Path(wsettings.stream_dir)
-    run_model_batch(session, wsettings, NOW, FakeScorers(), unload_llm=lambda: None)
-    assert kv_get(session, "last_stream_n_issues") == "1"
-    stream.mkdir()
-    (stream / "meta.json").write_text("{}")
-    run_model_batch(session, wsettings, NOW, FakeScorers(), unload_llm=lambda: None)
-    assert (stream / "meta.json").exists()  # same count: kept
+    seen = []
+
+    class Probe(FakeScorers):
+        def criticality(self, db, keys):
+            seen.append(stream.exists())
+            return super().criticality(db, keys)
+
+    for _ in range(2):  # constant issue count both times
+        stream.mkdir(exist_ok=True)
+        (stream / "meta.json").write_text("{}")
+        run_model_batch(session, wsettings, NOW, Probe(), unload_llm=lambda: None)
+    assert seen == [False, False]
+
+
+def test_soft_deleted_issue_excluded_from_sync_and_scoring(session, wsettings, seeded):
+    import duckdb
+
     other = load_fixture("rest_issue_demo1")
     other["key"], other["id"] = "DEMO-2", "10002"
     upsert_issue_json(session, other, wsettings)
+    session.get(Issue, "DEMO-2").status_category = "indeterminate"
+    session.get(Issue, "DEMO-2").deleted_at = NOW
     session.commit()
-    run_model_batch(session, wsettings, NOW, FakeScorers(), unload_llm=lambda: None)
-    assert not stream.exists()
-    assert kv_get(session, "last_stream_n_issues") == "2"
+    fake = FakeScorers()
+    rep = run_model_batch(session, wsettings, NOW, fake, unload_llm=lambda: None)
+    assert rep["n_issues"] == 1 and fake.calls[0] == ("delay", ["ERW|DEMO-1"])
+    con = duckdb.connect(wsettings.work_duckdb, read_only=True)
+    try:
+        assert con.execute("SELECT count(*) FROM issues WHERE instance='ERW'").fetchone()[0] == 1
+    finally:
+        con.close()
 
 
 def test_batch_busy_when_locked(session, wsettings, seeded):

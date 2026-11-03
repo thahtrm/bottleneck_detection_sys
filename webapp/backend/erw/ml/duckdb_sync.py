@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import shutil
 from pathlib import Path
 
@@ -34,8 +35,18 @@ def to_dump_shape(raw: dict) -> dict:
     return doc
 
 
+def _check_not_base(settings: Settings) -> None:
+    base, work = Path(settings.base_duckdb), Path(settings.work_duckdb)
+    same = base.resolve() == work.resolve()
+    if not same and base.exists() and work.exists():
+        same = os.path.samefile(base, work)
+    if same:
+        raise ValueError(f"work_duckdb must differ from the read-only base_duckdb: {work}")
+
+
 def ensure_work_db(settings: Settings) -> Path:
     """Copy the (read-only) base DuckDB to the working path once. Never writes to the base."""
+    _check_not_base(settings)
     work = Path(settings.work_duckdb)
     if not work.exists():
         work.parent.mkdir(parents=True, exist_ok=True)
@@ -45,6 +56,7 @@ def ensure_work_db(settings: Settings) -> Path:
 
 def sync_erw_instance(settings: Settings, raws: list[dict]) -> int:
     """Replace the ERW instance in the working DuckDB with `raws`; returns the issue count."""
+    _check_not_base(settings)
     from early_risk_detection.data.etl.loader import DuckDBLoader
     from early_risk_detection.data.etl.transformer import JiraTransformer
 
