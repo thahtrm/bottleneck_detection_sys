@@ -61,6 +61,9 @@ def main(argv: list[str] | None = None) -> int:
     engine = make_engine(settings.db_url)
     init_db(engine)
     jobs.configure(settings, engine)
+    from erw.pipeline import alerts, evaluate
+
+    evaluate._dispatch = alerts.dispatch
     with SessionLocal(bind=engine) as session:
         print(f"synced {catch_up(session, client, settings, utcnow())} issues")
     return 0

@@ -1,18 +1,23 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from erw.models import Issue, IssueSprint, Notification, RiskState, Sprint
 from erw.pipeline.alerts import AlertSpec, notify
 from erw.pipeline.digest import build_digest
 
-NOW = datetime(2026, 11, 4, 1, 0, tzinfo=timezone.utc)  # 08:00 ICT
+NOW = datetime(2026, 11, 4, 1, 0, tzinfo=UTC)  # 08:00 ICT
 
 
 def add(session, n, level="HIGH", crit=None, sp=None, cat="indeterminate", created=None, blocked=False,
-        prev=None, updated=None, summary="Task <x>"):
+        prev=None, updated=None, raised_at=None, summary="Task <x>"):
     key = f"DEMO-{n}"
+    if raised_at is None and prev and prev != level:
+        from erw.domain.types import Level
+        if Level[level] > Level[prev]:
+            raised_at = updated or NOW
     session.add(Issue(key=key, project_key="DEMO", summary=summary, status_category=cat, story_points=sp,
                       assignee_name="An", created_at=created or NOW - timedelta(days=10)))
-    session.add(RiskState(issue_key=key, level=level, prev_level=prev, crit_score=crit, blocked=blocked,
+    session.add(RiskState(issue_key=key, level=level, prev_level=prev, level_raised_at=raised_at,
+                          crit_score=crit, blocked=blocked,
                           deadline_label="Trễ due date", updated_at=updated or NOW, is_critical=crit is not None))
     session.flush()
 
@@ -79,3 +84,35 @@ def test_digest_sent_once_per_day(session, settings):
     assert notify(session, spec, "x", S(), NOW, 20) == "sent"
     assert notify(session, spec, "x", S(), NOW, 20) == "duplicate"
     assert session.query(Notification).count() == 1
+
+
+def test_digest_level_raised_preserved_across_morning_reevaluation(session, settings):
+    from erw.pipeline.evaluate import evaluate_issue
+
+    t0 = NOW - timedelta(hours=17)
+    # Issue initially exists at LOW
+    session.add(Issue(
+        key="DEMO-1", project_key="DEMO", summary="Overdue task", status_category="indeterminate",
+        created_at=t0 - timedelta(days=5), duedate=t0 - timedelta(days=1),  # overdue at t0
+    ))
+    session.add(RiskState(issue_key="DEMO-1", level="LOW"))
+    session.flush()
+
+    # Raise at T: LOW -> HIGH
+    evaluate_issue(session, "DEMO-1", t0, settings)
+    rs = session.get(RiskState, "DEMO-1")
+    assert rs.level == "HIGH"
+    assert rs.level_raised_at == t0
+
+    # Morning re-evaluation at T+15h (level remains HIGH)
+    t_morning = t0 + timedelta(hours=15)
+    evaluate_issue(session, "DEMO-1", t_morning, settings)
+    rs = session.get(RiskState, "DEMO-1")
+    assert rs.level == "HIGH"
+    assert rs.prev_level == "HIGH"
+    assert rs.level_raised_at == t0  # preserved!
+
+    # Digest at T+17h (2h after morning re-evaluation): still within 24h of T
+    t_digest = t0 + timedelta(hours=17)
+    text = build_digest(session, "DEMO", t_digest, settings)
+    assert "(1 tăng bậc 24h)" in text

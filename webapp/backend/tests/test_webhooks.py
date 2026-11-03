@@ -128,3 +128,44 @@ def test_sprint_event_jira_error_queued_in_pending_events(client, fake_jira, ses
 def test_non_object_body_400_but_wrong_secret_404(client):
     assert client.post(f"/webhooks/jira/{SECRET}", json=[1, 2]).status_code == 400
     assert client.post("/webhooks/jira/nope", json=[1, 2]).status_code == 404
+
+
+def test_mask_webhook_secret():
+    import logging
+
+    from erw.main import WebhookSecretFilter, mask_webhook_secret
+
+    assert mask_webhook_secret("/webhooks/jira/secret-abc-123") == "/webhooks/jira/***"
+    assert mask_webhook_secret("/webhooks/jira/secret-abc-123?foo=bar") == "/webhooks/jira/***?foo=bar"
+    assert mask_webhook_secret("POST /webhooks/jira/secret-abc-123 HTTP/1.1") == "POST /webhooks/jira/*** HTTP/1.1"
+    assert mask_webhook_secret("/api/healthz") == "/api/healthz"
+
+    # Log record with tuple args (standard uvicorn access format)
+    record = logging.LogRecord(
+        "uvicorn.access", logging.INFO, "h11.py", 42,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:54321", "POST", "/webhooks/jira/topsecret", "1.1", 200),
+        None,
+    )
+    filt = WebhookSecretFilter()
+    assert filt.filter(record) is True
+    assert record.args[2] == "/webhooks/jira/***"
+    assert "topsecret" not in record.getMessage()
+    assert "/webhooks/jira/***" in record.getMessage()
+
+    # Log record with formatted string msg
+    record2 = logging.LogRecord(
+        "uvicorn.access", logging.INFO, "h11.py", 42,
+        "POST /webhooks/jira/topsecret2 HTTP/1.1", (), None,
+    )
+    assert filt.filter(record2) is True
+    assert record2.msg == "POST /webhooks/jira/*** HTTP/1.1"
+
+
+def test_create_app_installs_webhook_filter_on_uvicorn_access(client):
+    import logging
+
+    from erw.main import WebhookSecretFilter
+
+    logger = logging.getLogger("uvicorn.access")
+    assert any(isinstance(f, WebhookSecretFilter) for f in logger.filters)

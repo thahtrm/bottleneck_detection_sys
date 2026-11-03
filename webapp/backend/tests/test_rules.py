@@ -1,9 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from erw.domain.rules import evaluate_rules
 from erw.domain.types import Deadline, IssueTimeline, ProjectStats, SprintInfo, Thresholds
 
-NOW = datetime(2026, 11, 4, 5, tzinfo=timezone.utc)  # Wed 12:00 local
+NOW = datetime(2026, 11, 4, 5, tzinfo=UTC)  # Wed 12:00 local
 TH = Thresholds()
 ST = ProjectStats(dwell_p75_days={"In Progress": 4.0})
 FAR = Deadline("duedate", NOW + timedelta(days=30), "x")

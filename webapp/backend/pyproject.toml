@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "erw"
 version = "0.1.0"
 description = "Early Risk Web backend"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "fastapi",
   "uvicorn[standard]",
@@ -16,6 +16,9 @@ dependencies = [
   "httpx",
   "tenacity",
   "numpy",
+  "early-risk-detection",
+  "pandas",
+  "duckdb",
 ]
 
 [project.optional-dependencies]
@@ -32,7 +35,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

@@ -116,6 +116,7 @@ class RiskState(Base):
     issue_key: Mapped[str] = mapped_column(String, primary_key=True)
     level: Mapped[str | None] = mapped_column(String)
     prev_level: Mapped[str | None] = mapped_column(String)
+    level_raised_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     delay_value: Mapped[float | None] = mapped_column(Float)
     crit_score: Mapped[float | None] = mapped_column(Float)
     is_critical: Mapped[bool] = mapped_column(Boolean, default=False)

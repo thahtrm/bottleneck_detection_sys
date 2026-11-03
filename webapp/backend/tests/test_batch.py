@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -11,7 +11,7 @@ from erw.ml import batch
 from erw.ml.batch import BatchBusy, run_model_batch
 from erw.models import Issue, Score
 
-NOW = datetime(2026, 11, 4, 3, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 4, 3, 0, tzinfo=UTC)
 
 
 class FakeScorers:
@@ -82,18 +82,43 @@ def test_batch_passes_erw_uids(session, wsettings, seeded):
 
 def test_stream_dir_removed_before_criticality_every_batch(session, wsettings, seeded):
     stream = Path(wsettings.stream_dir)
-    seen = []
+    seen_meta = []
+    seen_sentinel = []
 
     class Probe(FakeScorers):
         def criticality(self, db, keys):
-            seen.append(stream.exists())
+            seen_meta.append((stream / "meta.json").exists())
+            seen_sentinel.append((stream / ".erw_stream").exists())
             return super().criticality(db, keys)
 
     for _ in range(2):  # constant issue count both times
         stream.mkdir(exist_ok=True)
         (stream / "meta.json").write_text("{}")
         run_model_batch(session, wsettings, NOW, Probe(), unload_llm=lambda: None)
-    assert seen == [False, False]
+    assert seen_meta == [False, False]
+    assert seen_sentinel == [True, True]
+
+
+def test_reset_stream_dir_accepts_sentinel_with_partial_files(wsettings):
+    import shutil
+
+    from erw.ml.batch import _reset_stream_dir
+
+    stream = Path(wsettings.stream_dir)
+    stream.mkdir(parents=True, exist_ok=True)
+    (stream / ".erw_stream").touch()
+    (stream / "events.parquet").write_text("dummy")
+    (stream / "part.tmp").write_text("partial")
+    _reset_stream_dir(wsettings)
+    assert not stream.exists()
+
+    # rejecting arbitrary dirs without sentinel or meta.json
+    stream.mkdir(parents=True, exist_ok=True)
+    (stream / "random.txt").write_text("data")
+    with pytest.raises(ValueError, match="not an event stream"):
+        _reset_stream_dir(wsettings)
+    assert stream.exists()
+    shutil.rmtree(stream)
 
 
 def test_soft_deleted_issue_excluded_from_sync_and_scoring(session, wsettings, seeded):

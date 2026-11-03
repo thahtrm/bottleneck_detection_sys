@@ -208,15 +208,22 @@ def sync_version(session: Session, raw_version: dict, project_key: str | None = 
 
 
 def catch_up(session: Session, client: JiraClient, settings: Settings, now: datetime) -> int:
-    """Re-sync issues updated since the last webhook (minus 5 min) plus any pending_sync keys."""
+    """Re-sync issues updated since the last webhook/catch-up (minus 5 min) plus any pending_sync keys."""
     from erw.pipeline.evaluate import on_synced
 
-    last = kv_get(session, "last_webhook_at")
-    since = (datetime.fromisoformat(last) if last else now - timedelta(days=1)) - timedelta(minutes=5)
-    tz = ZoneInfo(client.myself().get("timeZone") or "UTC")
-    stamp = since.astimezone(tz).strftime("%Y/%m/%d %H:%M")
     projects = ", ".join(f'"{p}"' for p in settings.jira_projects)
-    keys = client.search_keys(f'project in ({projects}) AND updated >= "{stamp}"')
+    last_catch = kv_get(session, "last_catch_up_at")
+    if last_catch is None:
+        jql = f"project in ({projects})"
+    else:
+        catch_dt = datetime.fromisoformat(last_catch)
+        last_wh = kv_get(session, "last_webhook_at")
+        m = max(datetime.fromisoformat(last_wh), catch_dt) if last_wh else catch_dt
+        since = m - timedelta(minutes=5)
+        tz = ZoneInfo(client.myself().get("timeZone") or "UTC")
+        stamp = since.astimezone(tz).strftime("%Y/%m/%d %H:%M")
+        jql = f'project in ({projects}) AND updated >= "{stamp}"'
+    keys = client.search_keys(jql)
     for k in kv_get_json(session, "pending_sync", []):
         if k not in keys:
             keys.append(k)

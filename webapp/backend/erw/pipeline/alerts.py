@@ -41,7 +41,7 @@ def alerts_for(change: RiskChange) -> list[AlertSpec]:
         out.append(spec("risk_up"))
     if change.newly_blocked:
         out.append(spec("blocked"))  # dispatch refines the dedup key with the blocker keys
-    if change.became_critical:
+    if change.is_new and change.became_critical:
         out.append(spec("critical"))
     return out
 
@@ -79,6 +79,48 @@ def notify(
     return status
 
 
+def flush_pending(
+    session: Session, sender, now: datetime, max_per_hour: int
+) -> int:
+    """Retry unsent notifications ('rate_limited', 'failed', or 'disabled' if sender configured), oldest first."""
+    if sender is None:
+        return 0
+    has_url = bool(getattr(sender, "url", True))
+    statuses = ["rate_limited", "failed"]
+    if has_url:
+        statuses.append("disabled")
+    rows = session.scalars(
+        select(Notification)
+        .where(Notification.status.in_(statuses))
+        .order_by(Notification.id.asc())
+    ).all()
+    if not rows:
+        return 0
+
+    sent = session.scalar(
+        select(func.count()).select_from(Notification).where(
+            Notification.status == "sent", Notification.sent_at > now - timedelta(minutes=60)
+        )
+    ) or 0
+
+    delivered = 0
+    for row in rows:
+        if sent >= max_per_hour:
+            row.status = "rate_limited"
+            continue
+        try:
+            sender.post(row.text)
+            row.status = "sent"
+            row.sent_at = now
+            sent += 1
+            delivered += 1
+        except Exception:
+            log.exception("Slack post retry failed for %s", row.dedup_key)
+            row.status = "failed"
+    session.flush()
+    return delivered
+
+
 def dispatch(
     session: Session, changes: list[RiskChange], now: datetime, settings: Settings, sender=None
 ) -> None:
@@ -100,4 +142,5 @@ def dispatch(
             sent_any = sent_any or status == "sent"
         if sent_any:
             rs.last_alerted_level = change.level.name
+    flush_pending(session, sender, now, settings.slack_max_per_hour)
     session.flush()

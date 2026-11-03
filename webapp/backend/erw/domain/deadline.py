@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from early_risk_detection.data.normalize import ISSUE_THEME_MAP
@@ -10,7 +10,7 @@ DISPLAY_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 def end_of_day_utc(d: date) -> datetime:
     """Deadline instant for a date-only value: 23:59:59 on that day in Asia/Ho_Chi_Minh, as UTC."""
-    return datetime.combine(d, time(23, 59, 59), tzinfo=DISPLAY_TZ).astimezone(timezone.utc)
+    return datetime.combine(d, time(23, 59, 59), tzinfo=DISPLAY_TZ).astimezone(UTC)
 
 
 def _ddmm(dt: datetime) -> str:

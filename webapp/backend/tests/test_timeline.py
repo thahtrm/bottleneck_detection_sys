@@ -1,9 +1,9 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from erw.domain.timeline import build_timeline
 from erw.models import Change, Issue, Sprint, Version
 
-T0 = datetime(2026, 10, 1, tzinfo=timezone.utc)
+T0 = datetime(2026, 10, 1, tzinfo=UTC)
 
 
 def d(n):

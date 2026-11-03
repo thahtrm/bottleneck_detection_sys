@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
@@ -16,6 +17,8 @@ from erw.domain.types import Level, ModelSignals, ProjectStats, Thresholds
 from erw.ingest.sync import SyncResult
 from erw.models import Change, Issue, IssueSprint, IssueVersion, Link, RiskState, Score, Sprint, Version
 from erw.settings import Settings
+
+log = logging.getLogger(__name__)
 
 STATS_TTL_SECONDS = 3600.0
 _stats_cache: dict[str, tuple[float, ProjectStats]] = {}
@@ -147,6 +150,10 @@ def evaluate_issue(
         session.add(rs)
     rs.prev_level = rs.level
     rs.level = level.name
+    if prev_level is not None and level > prev_level:
+        rs.level_raised_at = now
+    elif prev_level is not None and level < prev_level:
+        rs.level_raised_at = None
     rs.blocked = blocked
     rs.delay_value = model.p_delay if model else None
     rs.crit_score = model.crit_score if model else None
@@ -167,13 +174,24 @@ def evaluate_all(session: Session, now: datetime, settings: Settings) -> list[Ri
     keys = session.scalars(
         select(Issue.key).where(Issue.project_key.in_(settings.jira_projects), Issue.deleted_at.is_(None)).order_by(Issue.key)
     ).all()
-    return [c for k in keys if (c := evaluate_issue(session, k, now, settings)) is not None]
+    changes: list[RiskChange] = []
+    for k in keys:
+        try:
+            with session.begin_nested():
+                c = evaluate_issue(session, k, now, settings)
+                if c is not None:
+                    changes.append(c)
+        except Exception:
+            log.exception("failed to evaluate issue %s, skipping", k)
+    return changes
 
 
 def on_synced(session: Session, results: list[SyncResult], now: datetime, settings: Settings) -> list[RiskChange]:
     """Re-evaluate risk for synced issues; deleted issues lose their RiskState."""
     changes: list[RiskChange] = []
+    synced_keys: set[str] = set()
     for r in results:
+        synced_keys.add(r.key)
         if r.kind in ("created", "updated"):
             c = evaluate_issue(session, r.key, now, settings, is_new=r.kind == "created")
             if c is not None:
@@ -182,6 +200,25 @@ def on_synced(session: Session, results: list[SyncResult], now: datetime, settin
             rs = session.get(RiskState, r.key)
             if rs is not None:
                 session.delete(rs)
+
+    if synced_keys:
+        linked_rows = session.execute(
+            select(Link.source_key, Link.target_key).where(
+                Link.type_std.in_(["Block", "Depend"]),
+                (Link.source_key.in_(synced_keys)) | (Link.target_key.in_(synced_keys)),
+            )
+        ).all()
+        dep_keys = set()
+        for src, tgt in linked_rows:
+            if src not in synced_keys:
+                dep_keys.add(src)
+            if tgt not in synced_keys:
+                dep_keys.add(tgt)
+        for k in sorted(dep_keys):
+            c = evaluate_issue(session, k, now, settings, is_new=False)
+            if c is not None:
+                changes.append(c)
+
     if _dispatch is not None:
         _dispatch(session, changes, now, settings)
     session.commit()

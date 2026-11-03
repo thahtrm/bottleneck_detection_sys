@@ -1,11 +1,11 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 from erw.domain.deadline import resolve_deadline, sla_days
 from erw.domain.types import IssueTimeline, Level, SprintInfo, VersionInfo
 
-T0 = datetime(2026, 10, 1, tzinfo=timezone.utc)
+T0 = datetime(2026, 10, 1, tzinfo=UTC)
 
 
 def tl(**kw) -> IssueTimeline:
@@ -18,15 +18,15 @@ def tl(**kw) -> IssueTimeline:
     return IssueTimeline(**base)
 
 
-S23 = SprintInfo(23, "Sprint 23", "closed", T0, datetime(2026, 10, 20, tzinfo=timezone.utc))
-S24 = SprintInfo(24, "Sprint 24", "active", T0, datetime(2026, 11, 4, 10, tzinfo=timezone.utc))
-S25 = SprintInfo(25, "Sprint 25", "future", None, datetime(2026, 11, 18, tzinfo=timezone.utc))
+S23 = SprintInfo(23, "Sprint 23", "closed", T0, datetime(2026, 10, 20, tzinfo=UTC))
+S24 = SprintInfo(24, "Sprint 24", "active", T0, datetime(2026, 11, 4, 10, tzinfo=UTC))
+S25 = SprintInfo(25, "Sprint 25", "future", None, datetime(2026, 11, 18, tzinfo=UTC))
 
 
 def test_duedate_wins():
     d = resolve_deadline(tl(duedate=date(2026, 11, 5), sprints=[S24]))
     assert d.type == "duedate"
-    assert d.at == datetime(2026, 11, 5, 16, 59, 59, tzinfo=timezone.utc)
+    assert d.at == datetime(2026, 11, 5, 16, 59, 59, tzinfo=UTC)
     assert d.label == "Trễ due date 05/11"
 
 

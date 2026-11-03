@@ -1,9 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from erw.domain.risk import aggregate
 from erw.domain.types import Deadline, Factor, Level, ModelSignals, Thresholds
 
-NOW = datetime(2026, 11, 4, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 4, tzinfo=UTC)
 DL = Deadline("duedate", NOW + timedelta(days=5), "x")
 TH = Thresholds()
 

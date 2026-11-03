@@ -69,7 +69,7 @@ def build_digest(session: Session, project: str, now: datetime, settings: Settin
     raised = sum(
         1
         for _, r in risky
-        if r.prev_level is not None and _level(r.level) > _level(r.prev_level) and r.updated_at and r.updated_at >= since
+        if r.level_raised_at and r.level_raised_at >= since
     )
     blocked = sum(1 for _, r in open_rows if r is not None and r.blocked)
     new = [(i, r) for i, r in rows if i.created_at and i.created_at >= since]

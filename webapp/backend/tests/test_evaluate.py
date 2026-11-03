@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -8,7 +8,7 @@ from erw.ingest.sync import SyncResult, upsert_issue_json
 from erw.models import Change, Issue, Link, RiskState, Score
 from erw.pipeline import evaluate as ev
 
-NOW = datetime(2026, 11, 4, 3, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 4, 3, 0, tzinfo=UTC)
 CREATED = NOW - timedelta(days=2)
 
 
@@ -140,6 +140,23 @@ def test_evaluate_all_skips_deleted(session, settings):
     assert [c.key for c in ev.evaluate_all(session, NOW, settings)] == ["DEMO-1"]
 
 
+def test_evaluate_all_isolates_issue_exceptions(session, settings, monkeypatch):
+    mk(session, "DEMO-1")
+    mk(session, "DEMO-2")
+    real_eval = ev.evaluate_issue
+
+    def flaky_eval(sess, key, now, s, is_new=False):
+        if key == "DEMO-1":
+            raise RuntimeError("flaky evaluation error")
+        return real_eval(sess, key, now, s, is_new=is_new)
+
+    monkeypatch.setattr(ev, "evaluate_issue", flaky_eval)
+    changes = ev.evaluate_all(session, NOW, settings)
+    assert [c.key for c in changes] == ["DEMO-2"]
+    assert session.get(RiskState, "DEMO-1") is None
+    assert session.get(RiskState, "DEMO-2") is not None
+
+
 @pytest.mark.parametrize("src,tgt,typ,d,blocked", [
     ("DEMO-1", "DEMO-2", "Depend", "1", True),    # X depends on Y
     ("DEMO-2", "DEMO-1", "Depend", "0", True),    # Y is depended on by X
@@ -155,3 +172,28 @@ def test_link_orientation(session, settings, src, tgt, typ, d, blocked):
     session.commit()
     ev.evaluate_issue(session, "DEMO-1", NOW, settings)
     assert session.get(RiskState, "DEMO-1").blocked is blocked
+
+
+def test_on_synced_reevaluates_dependents_when_blocker_resolved(session, settings):
+    # DEMO-1 is blocked by DEMO-2
+    mk(session, "DEMO-1", status="Open", status_category="new")
+    i2 = mk(session, "DEMO-2", status="In Progress", status_category="indeterminate")
+    session.add(Link(source_key="DEMO-1", target_key="DEMO-2", type_std="Block", direction="0"))
+    session.commit()
+
+    # Initial evaluation: DEMO-1 is blocked
+    ev.evaluate_issue(session, "DEMO-1", NOW, settings)
+    assert session.get(RiskState, "DEMO-1").blocked is True
+
+    # Now DEMO-2 is marked Done and synced (DEMO-1 is NOT in the sync results list)
+    i2.status_category = "done"
+    i2.status = "Done"
+    session.commit()
+
+    changes = ev.on_synced(session, [SyncResult("updated", "DEMO-2", frozenset({"status"}))], NOW + timedelta(minutes=5), settings)
+    # Both DEMO-2 and dependent DEMO-1 are re-evaluated
+    keys = [c.key for c in changes]
+    assert "DEMO-2" in keys
+    assert "DEMO-1" in keys
+    # DEMO-1 is no longer blocked
+    assert session.get(RiskState, "DEMO-1").blocked is False

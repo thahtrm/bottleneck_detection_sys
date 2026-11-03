@@ -90,8 +90,9 @@ def _reset_stream_dir(settings: Settings) -> None:
         raise ValueError(f"refusing to delete unsafe stream_dir: {path}")
     if not path.exists():
         return
-    if not path.is_dir() or (any(path.iterdir()) and not (path / "meta.json").exists()):
-        raise ValueError(f"stream_dir is not an event stream (no meta.json), refusing to delete: {path}")
+    is_stream = not any(path.iterdir()) or (path / "meta.json").exists() or (path / ".erw_stream").exists()
+    if not path.is_dir() or not is_stream:
+        raise ValueError(f"stream_dir is not an event stream (no meta.json or .erw_stream), refusing to delete: {path}")
     shutil.rmtree(path)
 
 
@@ -132,6 +133,9 @@ def run_model_batch(
 
             # event stream is rebuilt every batch: changelog/link events can change at constant issue count
             _reset_stream_dir(settings)
+            stream_dir_path = Path(settings.stream_dir)
+            stream_dir_path.mkdir(parents=True, exist_ok=True)
+            (stream_dir_path / ".erw_stream").touch()
             t = time.monotonic()
             for r in scorers.criticality(db, uids).itertuples(index=False):
                 session.add(Score(

@@ -153,18 +153,33 @@ def run_catch_up() -> None:
 
 def _morning_body() -> None:
     from erw.ml.batch import BatchBusy, LibraryScorers, make_unload_llm, run_model_batch
+    from erw.pipeline.alerts import dispatch
+    from erw.pipeline.evaluate import evaluate_all
 
     run_catch_up()
+    batch_ok = False
     try:
         with SessionLocal(bind=_engine) as session:
             report = run_model_batch(
                 session, _settings, utcnow(), LibraryScorers(_settings), unload_llm=make_unload_llm(_settings)
             )
             log.info("morning batch done: %s", report)
+            batch_ok = True
     except BatchBusy:
         log.warning("morning batch skipped: another batch is running; digest will use previous scores")
     except Exception:
         log.exception("morning batch failed; digest will use previous scores")
+
+    if not batch_ok:
+        try:
+            with SessionLocal(bind=_engine) as session:
+                now = utcnow()
+                changes = evaluate_all(session, now, _settings)
+                dispatch(session, changes, now, _settings)
+                session.commit()
+                log.info("fallback evaluate_all and dispatch completed after batch failure/skip")
+        except Exception:
+            log.exception("fallback evaluate_all failed")
 
 
 def morning_job() -> None:
@@ -177,7 +192,7 @@ def morning_job() -> None:
 
 def _digest_body(now: datetime) -> None:
     from erw.integrations.slack import SlackSender
-    from erw.pipeline.alerts import AlertSpec, notify
+    from erw.pipeline.alerts import AlertSpec, flush_pending, notify
     from erw.pipeline.digest import build_digest
 
     sender = SlackSender(_settings.slack_webhook_url) if _settings.slack_webhook_url else None
@@ -192,6 +207,15 @@ def _digest_body(now: datetime) -> None:
                 log.info("digest %s: %s", project, status)
         except Exception:
             log.exception("digest failed for %s", project)
+
+    try:
+        with SessionLocal(bind=_engine) as session:
+            flushed = flush_pending(session, sender, now, _settings.slack_max_per_hour)
+            session.commit()
+            if flushed:
+                log.info("flushed %d pending notifications", flushed)
+    except Exception:
+        log.exception("flush pending notifications failed")
 
 
 def digest_job(now: datetime | None = None) -> None:
@@ -217,6 +241,7 @@ def start_scheduler(settings: Settings) -> BackgroundScheduler:
             coalesce=True,
             max_instances=1,
             replace_existing=True,
+            misfire_grace_time=3 * 3600,
         )
     scheduler.start()
     return scheduler
