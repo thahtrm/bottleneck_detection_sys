@@ -20,7 +20,7 @@ from erw.settings import Settings
 STATS_TTL_SECONDS = 3600.0
 _stats_cache: dict[str, tuple[float, ProjectStats]] = {}
 
-# Task 10 sets this to a callable (session, changes, now, settings) -> None.
+# Set to alerts.dispatch by create_app: callable (session, changes, now, settings) -> None.
 _dispatch = None
 
 

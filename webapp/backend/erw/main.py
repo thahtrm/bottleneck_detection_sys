@@ -6,6 +6,7 @@ from sqlalchemy import Engine
 from erw import jobs
 from erw.api import health, webhooks
 from erw.db import init_db, make_engine
+from erw.pipeline import alerts, evaluate
 from erw.settings import Settings, get_settings
 
 
@@ -16,6 +17,7 @@ def create_app(
     engine = engine or make_engine(settings.db_url)
     init_db(engine)
     jobs.configure(settings, engine)
+    evaluate._dispatch = alerts.dispatch  # wired here to avoid an evaluate -> alerts import cycle
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
