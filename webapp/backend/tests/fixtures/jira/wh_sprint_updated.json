@@ -1,0 +1,24 @@
+{
+  "timestamp": 1793725655967,
+  "webhookEvent": "sprint_updated",
+  "sprint": {
+    "id": 2,
+    "self": "https://example.atlassian.net/rest/agile/1.0/sprint/2",
+    "state": "active",
+    "name": "Sprint S3",
+    "startDate": "2026-11-03T17:07:22.199Z",
+    "endDate": "2026-11-10T17:07:22.199Z",
+    "createdDate": "2026-11-03T17:07:22.430Z",
+    "originBoardId": 3
+  },
+  "oldValue": {
+    "id": 2,
+    "self": "https://example.atlassian.net/rest/agile/1.0/sprint/2",
+    "state": "active",
+    "name": "Sprint S3",
+    "startDate": "2026-11-03T17:07:22.199Z",
+    "endDate": "2026-11-13T17:07:22.199Z",
+    "createdDate": "2026-11-03T17:07:22.430Z",
+    "originBoardId": 3
+  }
+}

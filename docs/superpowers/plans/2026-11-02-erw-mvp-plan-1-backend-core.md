@@ -96,7 +96,7 @@ Không ai trong kế hoạch này thực hiện hai task này. Các task khác c
 
 **Files:**
 - Create: `webapp/spikes/s3_receiver.py` (FastAPI một route `POST /webhooks/jira/{secret}`, ghi payload vào `var/s3/<ts>-<event>.json`)
-- Create: `docs/superpowers/spikes/2026-11-02-s3-webhook.md`
+- Create: `docs/superpowers/spikes/2026-11-03-s3-webhook.md`
 
 - [ ] **Step 1:** Tạo site Jira Cloud free và một dự án Scrum `DEMO`. Tạo API token cho tài khoản dịch vụ, và lấy domain tĩnh ngrok.
 - [ ] **Step 2:** Chạy receiver, `ngrok http --url=<static-domain> 8000`. Đăng ký webhook bằng `curl -u email:token -X POST https://<site>/rest/webhooks/1.0/webhook` với các sự kiện ở MVP §6.1 bước 1 và `filters.issue-related-events-section = "project = DEMO"`.
@@ -182,7 +182,7 @@ def test_init_db_creates_tables(session):
 
 **Files:**
 - Create: `erw/integrations/jira.py`, `erw/ingest/sync.py`, `tests/test_jira_client.py`, `tests/test_sync.py`
-- Fixtures: `tests/fixtures/jira/issue_new.json`, `issue_updated.json` (thêm 1 history đổi status và Sprint), `issue_blocked.json` (có `issuelinks` "is blocked by" tới DEMO-2), `sprint.json`, `version.json`. Dùng shape thật lấy từ Task 3.
+- Fixtures: **đã có từ S3** (`tests/fixtures/jira/rest_issue_demo1.json` = `GET issue?expand=changelog` thật, đã ẩn danh; các `wh_*.json`). Dựng thêm các biến thể bằng cách sửa bản sao của `rest_issue_demo1.json` trong `conftest.py`: `issue_new` (cắt `changelog.histories` về các history của lúc tạo), `issue_updated` (thêm 1 history đổi `status` và `customfield_10020`), `issue_blocked` (thêm `fields.issuelinks` loại "Blocks" với `inwardIssue` DEMO-2). Sprint/version dùng `wh_sprint_updated.json["sprint"]`, `wh_version_updated.json["version"]`.
 
 **Interfaces:**
 - Consumes: `Settings`, ORM models (Task 4).
@@ -248,10 +248,11 @@ def test_deleted_issue_marked(session, settings): ...        # mark_deleted → 
 - Produces:
   - `jobs.executor: ThreadPoolExecutor(max_workers=1)` (tuần tự hoá ghi SQLite).
   - `jobs.handle_webhook(payload: dict) -> None`: phân nhánh theo `payload["webhookEvent"]`:
-    - `jira:issue_created|jira:issue_updated|issuelink_*` → `sync_issue(key)` (với `issuelink_*`, sync **cả hai** đầu link: `sourceIssueId`/`destinationIssueId` → key qua `get_issue`);
+    - `jira:issue_created|jira:issue_updated` → `sync_issue(payload.issue.key)`;
+    - `issuelink_created|issuelink_deleted` → `sync_issue(str(id))` cho **cả hai** đầu `issueLink.sourceIssueId` và `issueLink.destinationIssueId` (payload chỉ có id; `GET /issue/{id}` chấp nhận id; Jira **không** gửi kèm `issue_updated`, S3);
     - `jira:issue_deleted` → `mark_deleted`;
-    - `sprint_*` → `get_sprint` + `sync_sprint`;
-    - `jira:version_*` → `get_version` + `sync_version`.
+    - `sprint_*` → bỏ qua nếu `sprint.originBoardId` không thuộc board của dự án theo dõi (lấy qua `GET /rest/agile/1.0/board?projectKeyOrId=`, cache trong `KV tracked_boards`); ngược lại `sync_sprint(payload.sprint)` (payload đã đủ trường, không cần `get_sprint`). Sự kiện sprint/version **không** đi qua bộ lọc JQL của webhook (S3);
+    - `jira:version_*` → bỏ qua nếu `version.projectId` không thuộc dự án theo dõi; ngược lại `sync_version(payload.version)`.
 
     Sau mỗi lần sync, gọi `pipeline.evaluate.on_synced(session, results, now, settings)` (Task 9; trước Task 9 là hàm rỗng cùng chữ ký). Ghi `KV last_webhook_at`. Gặp `JiraError` thì thêm key vào `KV pending_sync` (JSON list).
   - `POST /webhooks/jira/{secret}`: secret sai (so bằng `hmac.compare_digest`) thì trả 404; đúng thì `executor.submit(handle_webhook, payload)` rồi trả `200 {"accepted": true}`.
@@ -275,6 +276,8 @@ def test_valid_webhook_accepted_and_synced(client, fake_jira, session):
     assert session.get(Issue, "DEMO-1") is not None
 
 def test_jira_error_goes_to_pending_sync(...): ...    # fake_jira.get_issue raise JiraError(500) → KV pending_sync == ["DEMO-1"]
+def test_issuelink_syncs_both_ends_by_id(...): ...      # wh_issuelink_created → fake_jira.get_issue gọi với cả sourceIssueId và destinationIssueId
+def test_sprint_event_of_untracked_board_ignored(...): ... # originBoardId=99 → không có Sprint row
 def test_catch_up_uses_last_webhook_minus_5_minutes(...): ...  # JQL chứa mốc đúng tz; pending_sync được xử lý và xoá
 ```
 `fake_jira` là một double của `JiraClient`, được inject qua `jobs.set_client()` (test hook duy nhất).
@@ -582,7 +585,7 @@ def test_digest_sent_once_per_day(session, ...): ...   # chạy 2 lần → lầ
   - Trên Jira: tạo một issue có due date là hôm qua → trong khoảng ≤ 15 giây, kênh Slack có `[Nguy cơ trễ][DEMO] … Trễ due date …`.
   - Tạo link "is blocked by" → có `[Bị block]`.
   - `erw digest --dry-run` in ra digest.
-  - Ghi độ trễ quan sát được vào `docs/superpowers/spikes/2026-11-02-s3-webhook.md`.
+  - Ghi độ trễ quan sát được vào `docs/superpowers/spikes/2026-11-03-s3-webhook.md`.
 - [ ] **Step 6: Commit.** `git commit -m "feat(erw): scheduler for morning batch and daily slack digest"`
 
 ---
