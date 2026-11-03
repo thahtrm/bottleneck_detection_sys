@@ -23,6 +23,8 @@ from erw.settings import Settings
 log = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
+_batch_lock = _LOCK
+
 
 
 class BatchBusy(RuntimeError):

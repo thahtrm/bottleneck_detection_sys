@@ -27,3 +27,8 @@ def kv_get_json(session: Session, key: str, default=None):
 
 def kv_set_json(session: Session, key: str, value) -> None:
     kv_set(session, key, json.dumps(value))
+
+
+get_kv = kv_get
+set_kv = kv_set
+

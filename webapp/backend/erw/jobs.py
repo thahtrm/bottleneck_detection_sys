@@ -7,13 +7,15 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import Engine
+from sqlalchemy import Engine, case, select
 from sqlalchemy.orm import Session
 
 from erw.db import SessionLocal, utcnow
 from erw.ingest.sync import SyncResult, catch_up, mark_deleted, sync_issue, sync_sprint, sync_version
 from erw.integrations.jira import JiraClient, JiraError
+from erw.integrations.llm import generate_suggestion, get_cached_suggestion
 from erw.kv import kv_get_json, kv_set, kv_set_json
+from erw.models import Issue, Project, RiskState
 from erw.pipeline.evaluate import on_synced
 from erw.settings import Settings
 
@@ -151,6 +153,45 @@ def run_catch_up() -> None:
         log.exception("catch-up failed")
 
 
+def pregenerate_top_risky_suggestions(session: Session, settings: Settings) -> int:
+    has_any_project = session.scalars(select(Project.key).limit(1)).first() is not None
+    if has_any_project:
+        project_keys = list(session.scalars(select(Project.key).where(Project.tracked.is_(True))).all())
+    else:
+        project_keys = list(settings.jira_projects)
+
+    count = 0
+    for project_key in project_keys:
+        stmt = (
+            select(Issue)
+            .join(RiskState, Issue.key == RiskState.issue_key)
+            .where(
+                Issue.project_key == project_key,
+                Issue.status_category != "done",
+                Issue.deleted_at.is_(None),
+                RiskState.level.in_(["HIGH", "MED"]),
+            )
+            .order_by(
+                case((RiskState.level == "HIGH", 2), else_=1).desc(),
+                RiskState.crit_score.desc().nulls_last(),
+                RiskState.delay_value.desc().nulls_last(),
+                Issue.key.asc(),
+            )
+            .limit(5)
+        )
+        top_issues = session.scalars(stmt).all()
+        for issue in top_issues:
+            cached = get_cached_suggestion(session, issue.key, issue.updated_at)
+            if cached is None:
+                try:
+                    generate_suggestion(session, issue.key, settings)
+                    count += 1
+                except Exception:
+                    log.warning("failed to pregenerate suggestion for %s", issue.key, exc_info=True)
+
+    return count
+
+
 def _morning_body() -> None:
     from erw.ml.batch import BatchBusy, LibraryScorers, make_unload_llm, run_model_batch
     from erw.pipeline.alerts import dispatch
@@ -180,6 +221,14 @@ def _morning_body() -> None:
                 log.info("fallback evaluate_all and dispatch completed after batch failure/skip")
         except Exception:
             log.exception("fallback evaluate_all failed")
+
+    try:
+        with SessionLocal(bind=_engine) as session:
+            n_sugg = pregenerate_top_risky_suggestions(session, _settings)
+            log.info("pregenerated %d top risky suggestions", n_sugg)
+    except Exception:
+        log.exception("pregenerate_top_risky_suggestions failed")
+
 
 
 def morning_job() -> None:
