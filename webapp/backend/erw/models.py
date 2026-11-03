@@ -171,6 +171,18 @@ class Notification(Base):
     status: Mapped[str] = mapped_column(String, default="pending")
 
 
+class Suggestion(Base):
+    __tablename__ = "suggestions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    issue_key: Mapped[str] = mapped_column(String, index=True)
+    issue_updated_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    model: Mapped[str] = mapped_column(String)
+    output: Mapped[Any] = mapped_column(JSON, default=dict)
+    valid: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
 class KV(Base):
     __tablename__ = "kv"
 
