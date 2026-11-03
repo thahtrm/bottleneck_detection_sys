@@ -229,8 +229,22 @@ def catch_up(session: Session, client: JiraClient, settings: Settings, now: date
         except JiraError:
             still_pending.append(k)
     kv_set_json(session, "pending_sync", still_pending)
+    session.commit()
+
+    from erw.jobs import dispatch_event
+
+    n_issues = len(results)
+    still_events: list[dict] = []
+    for ev in kv_get_json(session, "pending_events", []):
+        try:
+            results.extend(dispatch_event(session, ev, client, settings))
+            session.commit()
+        except JiraError:
+            session.rollback()
+            still_events.append(ev)
+    kv_set_json(session, "pending_events", still_events)
     kv_set(session, "last_catch_up_at", now.isoformat())
     session.commit()
     on_synced(session, results, now, settings)
     session.commit()
-    return len(results)
+    return n_issues

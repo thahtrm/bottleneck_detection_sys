@@ -70,6 +70,7 @@ def _sync_keys(session: Session, client, settings: Settings, keys: list[str]) ->
     for k in keys:
         try:
             results.append(sync_issue(session, client, k, settings))
+            session.commit()  # persist each key so a later failure cannot discard it
         except JiraError as e:
             log.warning("Jira error syncing %s: %s", k, e)
             session.rollback()
@@ -82,7 +83,7 @@ def _member_results(keys: list[str], field: str) -> list[SyncResult]:
     return [SyncResult("updated", k, frozenset({field})) for k in keys]
 
 
-def _dispatch(session: Session, payload: dict, client, settings: Settings) -> list[SyncResult]:
+def dispatch_event(session: Session, payload: dict, client, settings: Settings) -> list[SyncResult]:
     event = payload.get("webhookEvent", "")
     if event in ("jira:issue_created", "jira:issue_updated"):
         return _sync_keys(session, client, settings, [payload["issue"]["key"]])
@@ -112,7 +113,19 @@ def handle_webhook(payload: dict) -> None:
     try:
         with SessionLocal(bind=_engine) as session:
             try:
-                results = _dispatch(session, payload, client, settings)
+                try:
+                    results = dispatch_event(session, payload, client, settings)
+                except JiraError as e:
+                    event = payload.get("webhookEvent", "")
+                    if not (event.startswith("sprint_") or event.startswith("jira:version_")):
+                        raise
+                    log.warning("Jira error on %s, queued for catch-up: %s", event, e)
+                    session.rollback()
+                    pending = kv_get_json(session, "pending_events", [])
+                    pending.append(payload)
+                    kv_set_json(session, "pending_events", pending)
+                    session.commit()
+                    results = []
                 now = utcnow()
                 session.commit()
                 on_synced(session, results, now, settings)

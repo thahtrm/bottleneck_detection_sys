@@ -102,3 +102,29 @@ def test_version_event_of_untracked_project_ignored(client, fake_jira, session):
     client.post(f"/webhooks/jira/{SECRET}", json=payload)
     _drain()
     assert session.scalars(select(Version)).all() == []
+
+
+def test_partial_failure_keeps_successful_key(client, fake_jira, session, issue_new):
+    issue_new["id"] = "10013"
+    fake_jira.issues["10013"] = issue_new
+    fake_jira.errors["10014"] = JiraError(500, "boom")
+    _post(client, "wh_issuelink_created")
+    _drain()
+    session.expire_all()
+    assert session.get(Issue, "DEMO-1") is not None
+    assert json.loads(session.get(KV, "pending_sync").value) == ["10014"]
+
+
+def test_sprint_event_jira_error_queued_in_pending_events(client, fake_jira, session):
+    fake_jira.board_ids = lambda key: (_ for _ in ()).throw(JiraError(503, "down"))
+    _post(client, "wh_sprint_updated")
+    _drain()
+    session.expire_all()
+    pending = json.loads(session.get(KV, "pending_events").value)
+    assert [e["webhookEvent"] for e in pending] == ["sprint_updated"]
+    assert session.scalars(select(Sprint)).all() == []
+
+
+def test_non_object_body_400_but_wrong_secret_404(client):
+    assert client.post(f"/webhooks/jira/{SECRET}", json=[1, 2]).status_code == 400
+    assert client.post("/webhooks/jira/nope", json=[1, 2]).status_code == 404

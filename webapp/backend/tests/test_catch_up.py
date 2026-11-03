@@ -30,3 +30,24 @@ def test_catch_up_without_last_webhook_looks_back_one_day(session, settings, fak
     now = datetime(2026, 11, 4, 5, 0, tzinfo=UTC)
     assert catch_up(session, fake_jira, settings, now) == 0
     assert 'updated >= "2026/11/03 11:55"' in fake_jira.search_jqls[0]
+
+
+def test_catch_up_replays_pending_events(session, settings, fake_jira):
+    from erw.models import Sprint
+    from tests.conftest import load_fixture
+
+    ev = load_fixture("wh_sprint_updated")
+    _kv(session, "pending_events", json.dumps([ev]))
+    now = datetime(2026, 11, 4, 5, 0, tzinfo=UTC)
+    catch_up(session, fake_jira, settings, now)
+    session.expire_all()
+    assert session.get(Sprint, 2) is not None
+    assert json.loads(session.get(KV, "pending_events").value) == []
+
+    # replay that fails again stays queued
+    fake_jira.board_ids = lambda k: (_ for _ in ()).throw(__import__("erw.integrations.jira", fromlist=["x"]).JiraError(503))
+    session.merge(KV(key="tracked_boards", value=None)); session.commit()
+    _kv(session, "pending_events", json.dumps([ev]))
+    catch_up(session, fake_jira, settings, now)
+    session.expire_all()
+    assert len(json.loads(session.get(KV, "pending_events").value)) == 1

@@ -16,5 +16,7 @@ async def jira_webhook(secret: str, request: Request) -> dict:
         payload = await request.json()
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid JSON") from None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="payload must be a JSON object")
     jobs.executor.submit(jobs.handle_webhook, payload)
     return {"accepted": True}
