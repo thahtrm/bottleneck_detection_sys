@@ -75,6 +75,26 @@ def make_unload_llm(settings: Settings) -> Callable[[], None]:
     return unload
 
 
+def _reset_stream_dir(settings: Settings) -> None:
+    """Delete the library event stream dir, refusing anything that is not clearly one."""
+    raw = str(settings.stream_dir).strip()
+    if not raw:
+        raise ValueError("stream_dir is empty")
+    path = Path(raw).resolve()
+    protected = [Path.cwd().resolve(), Path(path.anchor), Path.home().resolve()]
+    for other in (Path(settings.base_duckdb).parent, Path(settings.bundles_dir), Path(settings.emb_dir)):
+        o = other.resolve()
+        if path == o or path in o.parents:
+            protected.append(path)
+    if path in protected:
+        raise ValueError(f"refusing to delete unsafe stream_dir: {path}")
+    if not path.exists():
+        return
+    if not path.is_dir() or (any(path.iterdir()) and not (path / "meta.json").exists()):
+        raise ValueError(f"stream_dir is not an event stream (no meta.json), refusing to delete: {path}")
+    shutil.rmtree(path)
+
+
 def _key(uid: str) -> str:
     return uid.split("|", 1)[1] if "|" in uid else uid
 
@@ -111,7 +131,7 @@ def run_model_batch(
             session.commit()
 
             # event stream is rebuilt every batch: changelog/link events can change at constant issue count
-            shutil.rmtree(settings.stream_dir, ignore_errors=True)
+            _reset_stream_dir(settings)
             t = time.monotonic()
             for r in scorers.criticality(db, uids).itertuples(index=False):
                 session.add(Score(

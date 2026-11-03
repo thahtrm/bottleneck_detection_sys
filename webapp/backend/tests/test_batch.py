@@ -136,3 +136,32 @@ def test_lock_released_after_failure(session, wsettings, seeded):
 def test_library_scorers_construct_is_lazy(wsettings):
     s = batch.LibraryScorers(wsettings)  # no bundles/embeddings needed to construct
     assert s._emb is None
+
+
+def test_reset_stream_dir_refuses_unsafe_paths(wsettings, tmp_path):
+    for bad in (".", "", str(Path(wsettings.base_duckdb).parent), str(tmp_path.parent)):
+        with pytest.raises(ValueError):
+            batch._reset_stream_dir(wsettings.model_copy(update={"stream_dir": bad}))
+    assert Path(wsettings.base_duckdb).exists()
+
+
+def test_reset_stream_dir_refuses_foreign_dir(wsettings, tmp_path):
+    d = tmp_path / "foreign"
+    d.mkdir()
+    (d / "x.txt").write_text("keep")
+    with pytest.raises(ValueError, match="foreign"):
+        batch._reset_stream_dir(wsettings.model_copy(update={"stream_dir": str(d)}))
+    assert (d / "x.txt").exists()
+
+
+def test_reset_stream_dir_deletes_event_stream_and_empty(wsettings, tmp_path):
+    d = tmp_path / "stream"
+    d.mkdir()
+    (d / "meta.json").write_text("{}")
+    (d / "a.npy").write_text("x")
+    batch._reset_stream_dir(wsettings)
+    assert not d.exists()
+    batch._reset_stream_dir(wsettings)  # missing: no-op
+    d.mkdir()
+    batch._reset_stream_dir(wsettings)  # empty: removed
+    assert not d.exists()
