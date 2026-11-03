@@ -6,8 +6,9 @@ from fastapi import FastAPI
 from sqlalchemy import Engine
 
 from erw import jobs
-from erw.api import auth, health, projects, webhooks
+from erw.api import actions, auth, health, issues, projects, webhooks
 from erw.db import init_db, make_engine
+from erw.integrations import llm
 from erw.pipeline import alerts, evaluate
 from erw.settings import Settings, get_settings
 
@@ -38,6 +39,7 @@ def create_app(
     engine = engine or make_engine(settings.db_url)
     init_db(engine)
     jobs.configure(settings, engine)
+    llm.set_engine(engine)
     evaluate._dispatch = alerts.dispatch  # wired here to avoid an evaluate -> alerts import cycle
 
     access_logger = logging.getLogger("uvicorn.access")
@@ -65,4 +67,6 @@ def create_app(
     app.include_router(webhooks.router)
     app.include_router(auth.router)
     app.include_router(projects.projects_router)
+    app.include_router(issues.issues_router)
+    app.include_router(actions.actions_router)
     return app

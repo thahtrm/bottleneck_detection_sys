@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 from tenacity import Retrying, retry_if_exception_type, stop_after_attempt
@@ -45,8 +46,19 @@ def _wait(retry_state) -> float:
 
 
 class JiraClient:
-    def __init__(self, base_url: str, email: str, token: str, *, http: httpx.Client | None = None):
-        self.base_url = base_url.rstrip("/")
+    def __init__(
+        self,
+        base_url: str | Any,
+        email: str = "",
+        token: str = "",
+        *,
+        http: httpx.Client | None = None,
+    ):
+        if hasattr(base_url, "jira_base_url"):
+            email = getattr(base_url, "jira_email", email)
+            token = getattr(base_url, "jira_api_token", token)
+            base_url = getattr(base_url, "jira_base_url", "")
+        self.base_url = str(base_url).rstrip("/")
         self._auth = (email, token)
         self._http = http or httpx.Client(timeout=30)
 

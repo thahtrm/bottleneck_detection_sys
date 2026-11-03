@@ -155,6 +155,7 @@ class RiskState(Base):
     deadline_label: Mapped[str | None] = mapped_column(String)
     factors: Mapped[Any] = mapped_column(JSON, default=list)
     last_alerted_level: Mapped[str | None] = mapped_column(String)
+    dismissed_at_level: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
 
