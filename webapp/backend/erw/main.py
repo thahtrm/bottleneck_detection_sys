@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy import Engine
 
 from erw import jobs
-from erw.api import health, webhooks
+from erw.api import auth, health, webhooks
 from erw.db import init_db, make_engine
 from erw.pipeline import alerts, evaluate
 from erw.settings import Settings, get_settings
@@ -60,6 +60,8 @@ def create_app(
     app = FastAPI(title="Early Risk Web", lifespan=lifespan)
     app.state.settings = settings
     app.state.engine = engine
+    app.dependency_overrides[get_settings] = lambda: settings
     app.include_router(health.router)
     app.include_router(webhooks.router)
+    app.include_router(auth.router)
     return app

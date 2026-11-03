@@ -1,9 +1,11 @@
+from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
 
+from fastapi import Request
 from sqlalchemy import DateTime, Engine, create_engine, event
 from sqlalchemy.engine import make_url
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.types import TypeDecorator
 
@@ -28,6 +30,16 @@ class UTCDateTime(TypeDecorator):
 
 
 SessionLocal = sessionmaker(autoflush=False, expire_on_commit=False)
+
+
+def get_session(request: Request) -> Generator[Session, None, None]:
+    engine = getattr(request.app.state, "engine", None)
+    if engine is not None:
+        with Session(engine) as session:
+            yield session
+    else:
+        with SessionLocal() as session:
+            yield session
 
 
 def make_engine(url: str) -> Engine:

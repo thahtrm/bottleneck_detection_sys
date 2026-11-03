@@ -35,7 +35,13 @@ class Settings(BaseSettings):
     batch_time: str = "06:45"
     digest_time: str = "08:00"
     model_mode: Literal["shadow", "active"] = "shadow"
-    llm_model: str = "qwen2.5:7b"
+    llm_model: str = "qwen3:1.7b"
+    delay_threshold: float = 0.39
+    criticality_top_pct: float = 0.05
+
+    session_secret: str = "erw-secret-key-change-in-production"
+    session_cookie_name: str = "erw_session"
+    session_max_age_seconds: int = 86400 * 7
 
     pm_name_by_project: dict[str, str] = {}
     status_category_overrides: dict[str, str] = {}

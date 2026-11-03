@@ -18,10 +18,56 @@ WEBHOOK_EVENTS = [
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="erw")
-    parser.add_argument("command", choices=["init-db", "catch-up", "register-webhook", "run-batch", "digest"])
-    parser.add_argument("--dry-run", action="store_true", help="digest: print instead of sending")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("init-db")
+    subparsers.add_parser("catch-up")
+    subparsers.add_parser("register-webhook")
+    subparsers.add_parser("run-batch")
+
+    digest_parser = subparsers.add_parser("digest")
+    digest_parser.add_argument("--dry-run", action="store_true", help="digest: print instead of sending")
+
+    admin_parser = subparsers.add_parser("create-admin")
+    admin_parser.add_argument("--email", required=True, help="admin email")
+    admin_parser.add_argument("--name", required=True, help="admin name")
+    admin_parser.add_argument("--password", required=True, help="admin password")
+
     args = parser.parse_args(argv)
     settings = get_settings()
+
+    if args.command == "create-admin":
+        import sys
+
+        from sqlalchemy import func, select
+
+        from erw.auth import hash_password
+        from erw.models import User
+
+        email = args.email.strip()
+        name = args.name.strip()
+        password = args.password
+
+        engine = make_engine(settings.db_url)
+        init_db(engine)
+        with SessionLocal(bind=engine) as session:
+            existing = session.execute(
+                select(User).where(func.lower(User.email) == email.lower())
+            ).scalar_one_or_none()
+            if existing is not None:
+                print(f"Error: user with email '{email}' already exists", file=sys.stderr)
+                return 1
+            user = User(
+                email=email,
+                name=name,
+                password_hash=hash_password(password),
+                is_admin=True,
+                created_at=utcnow(),
+            )
+            session.add(user)
+            session.commit()
+            print(f"admin user created: {email}")
+            return 0
 
     if args.command == "init-db":
         init_db(make_engine(settings.db_url))
