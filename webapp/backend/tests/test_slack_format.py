@@ -73,7 +73,9 @@ def test_max_three_factors(S):
 def test_sender_posts_json():
     r = respx.post("https://h.test/x").mock(return_value=httpx.Response(200))
     SlackSender("https://h.test/x").post("hi")
-    assert r.calls[0].request.content == b'{"text":"hi"}' or b'"hi"' in r.calls[0].request.content
+    import json
+
+    assert json.loads(r.calls[0].request.content) == {"text": "hi"}
 
 
 @respx.mock

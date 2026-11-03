@@ -80,7 +80,7 @@ def format_alert(spec: AlertSpec, issue: Issue, rs: RiskState, settings: Setting
     lines = [f"{PREFIX[spec.kind]}[{issue.project_key}] " + " · ".join(parts)]
     factors = [f for f in (rs.factors or [])][:MAX_FACTORS]
     if factors:
-        reasons = "; ".join(escape(f"{f.get('label', '')} {f.get('value', '')}".strip()) for f in factors)
+        reasons = "; ".join(escape(f"{(f.get('label') or '')} {(f.get('value') or '')}".strip()) for f in factors)
         lines.append(f"Lý do: {reasons}")
     lines.append(f"<{web}/issues/{issue.key}|Mở trên Early Risk>")
     return "\n".join(lines)

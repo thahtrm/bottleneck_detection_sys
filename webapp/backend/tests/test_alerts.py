@@ -123,3 +123,19 @@ def test_create_app_registers_dispatch(client):
     from erw.pipeline import alerts
 
     assert evaluate._dispatch is alerts.dispatch
+
+
+def test_rate_limited_row_sent_once_window_clears(session):
+    s = FakeSender()
+    notify(session, spec("A-1"), "x", s, NOW, 1)
+    assert notify(session, spec("A-2"), "x", s, NOW, 1) == "rate_limited"
+    assert notify(session, spec("A-2"), "x", s, NOW + timedelta(minutes=61), 1) == "sent"
+    assert session.query(Notification).filter_by(issue_key="A-2").one().status == "sent"
+    assert notify(session, spec("A-2"), "x", s, NOW + timedelta(minutes=62), 1) == "duplicate"
+
+
+def test_disabled_row_sent_after_url_configured(session):
+    assert notify(session, spec(), "x", None, NOW, 20) == "disabled"
+    s = FakeSender()
+    assert notify(session, spec(), "x", s, NOW, 20) == "sent" and s.calls == 1
+    assert session.query(Notification).count() == 1

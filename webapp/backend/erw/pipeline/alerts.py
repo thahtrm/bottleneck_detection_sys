@@ -51,7 +51,7 @@ def notify(
 ) -> NotifyStatus:
     """Send once per dedup_key, honouring an hourly cap. `sender=None` records status 'disabled'."""
     row = session.scalar(select(Notification).where(Notification.dedup_key == spec.dedup_key))
-    if row is not None and row.status != "failed":
+    if row is not None and row.status == "sent":
         return "duplicate"
     if row is None:
         row = Notification(kind=spec.kind, issue_key=spec.issue_key, project_key=spec.project, dedup_key=spec.dedup_key)

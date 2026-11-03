@@ -23,7 +23,7 @@ def settings() -> Settings:
         jira_projects=["DEMO"],
         jira_webhook_secret="secret",
         public_base_url="https://example.ngrok.test",
-        slack_webhook_url="https://hooks.slack.test/x",
+        slack_webhook_url="",
     )
 
 
@@ -174,3 +174,12 @@ def _clear_stats_cache():
     evaluate.clear_stats_cache()
     yield
     evaluate.clear_stats_cache()
+
+
+@pytest.fixture(autouse=True)
+def _restore_dispatch():
+    from erw.pipeline import evaluate
+
+    prev = evaluate._dispatch
+    yield
+    evaluate._dispatch = prev
