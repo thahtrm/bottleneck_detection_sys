@@ -1,55 +1,102 @@
 import React from 'react';
 import {
-  Container,
-  Title,
+  AppShell,
+  Center,
+  Loader,
   Text,
-  Button,
-  Badge,
   Group,
-  Stack,
-  Card,
   ThemeIcon,
+  Title,
+  Badge,
+  Button,
+  Container,
+  Card,
+  Stack,
 } from '@mantine/core';
-import { IconAlertTriangle, IconCheck, IconRocket } from '@tabler/icons-react';
-import { notifications } from '@mantine/notifications';
+import { IconLogout, IconRocket, IconUser } from '@tabler/icons-react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './pages/Login';
 
-export default function App() {
-  const handleTestNotification = () => {
-    notifications.show({
-      title: 'Hệ thống sẵn sàng',
-      message: 'Kết nối frontend Mantine và backend FastAPI thành công!',
-      color: 'teal',
-      icon: <IconCheck size={18} />,
-    });
-  };
+function AppContent() {
+  const { user, loading, logout } = useAuth();
+
+  if (loading) {
+    return (
+      <Center h="100vh">
+        <Stack align="center" gap="sm">
+          <Loader size="lg" type="dots" />
+          <Text c="dimmed" size="sm">
+            Đang tải dữ liệu...
+          </Text>
+        </Stack>
+      </Center>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   return (
-    <Container size="md" py="xl">
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Stack align="center" gap="md">
-          <ThemeIcon size={48} radius="xl" color="blue" variant="light">
-            <IconRocket size={28} />
-          </ThemeIcon>
-          <Badge size="lg" color="blue" variant="light">
-            Early Risk Web MVP
-          </Badge>
-          <Title order={1} ta="center">
-            Quản lý Tiến độ Dự án Jira
-          </Title>
-          <Text c="dimmed" size="lg" ta="center" maw={520}>
-            Hệ thống phát hiện và cảnh báo sớm rủi ro trễ hạn bằng AI &amp; Temporal Graph Networks
-          </Text>
-          <Group mt="md">
-            <Button
-              leftSection={<IconAlertTriangle size={18} />}
-              color="orange"
-              onClick={handleTestNotification}
+    <AppShell header={{ height: 60 }} padding="md">
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between">
+          <Group gap="sm">
+            <ThemeIcon size="lg" radius="md" color="blue" variant="filled">
+              <IconRocket size={20} />
+            </ThemeIcon>
+            <div>
+              <Title order={4}>Early Risk Web</Title>
+            </div>
+          </Group>
+
+          <Group gap="md">
+            <Badge
+              color={user.is_admin ? 'red' : 'blue'}
+              variant="light"
+              size="lg"
             >
-              Kiểm tra thông báo
+              {user.is_admin ? 'Admin' : 'PM / Viewer'}
+            </Badge>
+            <Group gap="xs">
+              <IconUser size={18} />
+              <Text fw={500} size="sm">
+                {user.name || user.email}
+              </Text>
+            </Group>
+            <Button
+              variant="light"
+              color="gray"
+              size="xs"
+              leftSection={<IconLogout size={16} />}
+              onClick={logout}
+            >
+              Đăng xuất
             </Button>
           </Group>
-        </Stack>
-      </Card>
-    </Container>
+        </Group>
+      </AppShell.Header>
+
+      <AppShell.Main>
+        <Container size="lg" py="xl">
+          <Card shadow="sm" padding="xl" radius="md" withBorder>
+            <Stack gap="sm">
+              <Title order={2}>Xin chào, {user.name}!</Title>
+              <Text c="dimmed" size="md">
+                Chào mừng bạn quay trở lại với hệ thống phát hiện và cảnh báo sớm rủi ro tiến độ dự án Jira.
+              </Text>
+            </Stack>
+          </Card>
+        </Container>
+      </AppShell.Main>
+    </AppShell>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
