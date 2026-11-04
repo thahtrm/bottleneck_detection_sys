@@ -1,8 +1,11 @@
 import logging
 import re
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Engine
 
 from erw import jobs
@@ -33,6 +36,7 @@ class WebhookSecretFilter(logging.Filter):
 def create_app(
     settings: Settings | None = None, *, engine: Engine | None = None, catch_up_on_startup: bool = True,
     start_scheduler_on_startup: bool = True,
+    frontend_dist: Path | str | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     own_engine = engine is None
@@ -71,4 +75,33 @@ def create_app(
     app.include_router(actions.actions_router)
     app.include_router(dashboard.dashboard_router)
     app.include_router(admin.admin_router)
+
+    if frontend_dist is None:
+        frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+    else:
+        frontend_dist = Path(frontend_dist)
+
+    if frontend_dist.is_dir():
+        assets_dir = frontend_dist / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+        index_html = frontend_dist / "index.html"
+        if index_html.is_file():
+
+            @app.middleware("http")
+            async def spa_fallback_middleware(request: Request, call_next):
+                response = await call_next(request)
+                if (
+                    response.status_code == 404
+                    and request.method == "GET"
+                    and not request.url.path.startswith(("/api", "/webhooks", "/healthz"))
+                ):
+                    clean_path = request.url.path.lstrip("/")
+                    target_file = frontend_dist / clean_path
+                    if clean_path and target_file.is_file():
+                        return FileResponse(target_file)
+                    return FileResponse(index_html)
+                return response
+
     return app
