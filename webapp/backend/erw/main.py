@@ -105,3 +105,10 @@ def create_app(
                 return response
 
     return app
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("erw.main:create_app", factory=True, host="0.0.0.0", port=8000)
+
