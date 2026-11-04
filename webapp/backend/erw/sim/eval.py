@@ -346,8 +346,8 @@ def reconstruct_issue_snapshot(
             is_open = True
             if meta is not None:
                 b_res = meta.get("resolved_ts")
-                if b_res is not None and b_res <= d_ts:
-                    is_open = False
+                if b_res is not None:
+                    is_open = (b_res > d_ts)
                 else:
                     b_status = (meta.get("status") or "").lower()
                     if b_status in ("resolved", "closed", "done"):
@@ -553,7 +553,7 @@ def run_simulation(
 
             # 5. Lead Time (lead_time_days)
             lead_time_days: float | None = None
-            if pred_hybrid and actual_delayed and snap.resolved_ts is not None:
+            if actual_delayed and snap.resolved_ts is not None:
                 lead_time_days = round(max(0.0, (snap.resolved_ts - d_ts) / 86400.0), 2)
 
             records.append(
