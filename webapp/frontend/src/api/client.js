@@ -143,4 +143,58 @@ export async function getDashboardIssues(params = {}) {
   });
 }
 
+/**
+ * Lấy chi tiết toàn diện của một công việc (issue) kèm điểm số, rủi ro, liên kết và lịch sử
+ * @param {string} key - Mã issue (ví dụ: 'DEMO-1')
+ */
+export async function getIssueDetail(key) {
+  if (!key) throw new Error('Mã công việc không được để trống');
+  return await apiFetch(`/api/issues/${encodeURIComponent(key)}`, {
+    method: 'GET',
+  });
+}
+
+/**
+ * Lấy đề xuất hành động từ AI cho công việc (có thể trả về 202 pending nếu đang phân tích)
+ * @param {string} key - Mã issue
+ */
+export async function getIssueSuggestion(key) {
+  if (!key) throw new Error('Mã công việc không được để trống');
+  return await apiFetch(`/api/issues/${encodeURIComponent(key)}/suggestion`, {
+    method: 'GET',
+  });
+}
+
+/**
+ * Bỏ qua cảnh báo rủi ro ở mức hiện tại của công việc (chỉ dành cho PM/Admin)
+ * @param {string} key - Mã issue
+ * @param {string} [reason=""] - Lý do bỏ qua (tùy chọn)
+ */
+export async function dismissIssueRisk(key, reason = '') {
+  if (!key) throw new Error('Mã công việc không được để trống');
+  return await apiFetch(`/api/issues/${encodeURIComponent(key)}/dismiss`, {
+    method: 'POST',
+    body: { reason },
+  });
+}
+
+/**
+ * Tạo một đề xuất hành động (Draft proposal) từ gợi ý LLM để chuẩn bị xác nhận
+ * @param {string} issueKey - Mã issue
+ * @param {number|null} [suggestionId=null] - ID của suggestion từ LLM
+ * @param {Array} [items=[]] - Danh sách các action items đề xuất
+ */
+export async function proposeAction(issueKey, suggestionId = null, items = []) {
+  if (!issueKey) throw new Error('Mã công việc không được để trống');
+  return await apiFetch('/api/actions/propose', {
+    method: 'POST',
+    body: {
+      issue_key: issueKey,
+      suggestion_id: suggestionId,
+      items,
+    },
+  });
+}
+
+
 

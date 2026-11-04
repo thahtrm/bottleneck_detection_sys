@@ -30,6 +30,12 @@ function AppContent() {
   const [activeFilter, setActiveFilter] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedIssueKey, setSelectedIssueKey] = useState(null);
+  const [confirmModalData, setConfirmModalData] = useState(null);
+
+  // Callback mở modal xác nhận hành động PM (sẵn sàng tích hợp Task 6)
+  const handleOpenConfirmAction = (proposalData) => {
+    setConfirmModalData(proposalData);
+  };
 
   // Reset selected issue khi đổi dự án
   useEffect(() => {
@@ -146,6 +152,9 @@ function AppContent() {
                   key={selectedIssueKey || 'placeholder'}
                   issueKey={selectedIssueKey}
                   onClose={() => setSelectedIssueKey(null)}
+                  onOpenConfirmAction={handleOpenConfirmAction}
+                  projects={projects}
+                  onSelectIssue={setSelectedIssueKey}
                 />
               </Grid.Col>
             </Grid>
