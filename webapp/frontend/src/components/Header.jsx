@@ -19,6 +19,8 @@ import {
   IconUser,
   IconLogout,
   IconX,
+  IconLayoutDashboard,
+  IconSettings,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
@@ -53,6 +55,8 @@ export default function Header({
   onSearchChange,
   onRefresh,
   isRefreshing = false,
+  currentView = 'dashboard',
+  onViewChange,
 }) {
   const { user, logout } = useAuth();
 
@@ -119,6 +123,37 @@ export default function Header({
           checkIconPosition="right"
           aria-label="Chọn dự án theo dõi"
         />
+
+        {/* Nút chuyển đổi điều hướng dành cho Admin */}
+        {user?.is_admin && (
+          <Group gap={4} wrap="nowrap" ml="xs">
+            <Tooltip label="Bảng điều khiển" withArrow position="bottom">
+              <Button
+                variant={currentView === 'dashboard' ? 'filled' : 'subtle'}
+                color="blue"
+                size="xs"
+                leftSection={<IconLayoutDashboard size={15} stroke={1.5} />}
+                onClick={() => onViewChange && onViewChange('dashboard')}
+                aria-label="Chuyển sang Bảng điều khiển"
+              >
+                <Text span visibleFrom="md">Bảng điều khiển</Text>
+              </Button>
+            </Tooltip>
+
+            <Tooltip label="Quản trị hệ thống" withArrow position="bottom">
+              <Button
+                variant={currentView === 'settings' ? 'filled' : 'subtle'}
+                color="blue"
+                size="xs"
+                leftSection={<IconSettings size={15} stroke={1.5} />}
+                onClick={() => onViewChange && onViewChange('settings')}
+                aria-label="Chuyển sang Quản trị hệ thống"
+              >
+                <Text span visibleFrom="md">Quản trị hệ thống</Text>
+              </Button>
+            </Tooltip>
+          </Group>
+        )}
       </Group>
 
       {/* Khối ở giữa: Tìm kiếm nhanh */}

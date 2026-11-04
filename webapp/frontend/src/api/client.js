@@ -215,6 +215,38 @@ export async function confirmAction(actionId, expectedUpdated) {
   });
 }
 
+/**
+ * Cập nhật cấu hình quản trị hệ thống (ngưỡng trễ hạn, ngưỡng quan trọng, LLM model)
+ * @param {Object} data - { delay_threshold, criticality_top_pct, llm_model }
+ */
+export async function updateAdminSettings(data) {
+  return await apiFetch('/api/admin/settings', {
+    method: 'POST',
+    body: data,
+  });
+}
+
+/**
+ * Kích hoạt chạy lô mô hình tính toán rủi ro ngay lập tức trong tiến trình nền
+ */
+export async function runModelBatch() {
+  return await apiFetch('/api/admin/run-batch', {
+    method: 'POST',
+  });
+}
+
+/**
+ * Bật/tắt trạng thái theo dõi của một dự án Jira (Admin)
+ * @param {string} key - Mã dự án (Key)
+ */
+export async function toggleProjectTracking(key) {
+  if (!key) throw new Error('Mã dự án không được để trống');
+  return await apiFetch(`/api/admin/projects/${encodeURIComponent(key)}/toggle-tracking`, {
+    method: 'POST',
+  });
+}
+
+
 
 
 

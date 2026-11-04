@@ -16,6 +16,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { getProjects } from './api/client';
 import Login from './pages/Login';
+import Settings from './pages/Settings';
 import Header from './components/Header';
 import StatCards from './components/StatCards';
 import TaskTable from './components/TaskTable';
@@ -26,6 +27,7 @@ function AppContent() {
   const { user, loading } = useAuth();
   const queryClient = useQueryClient();
 
+  const [currentView, setCurrentView] = useState('dashboard');
   const [selectedProject, setSelectedProject] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('');
@@ -33,6 +35,13 @@ function AppContent() {
   const [selectedIssueKey, setSelectedIssueKey] = useState(null);
   const [confirmModalData, setConfirmModalData] = useState(null);
   const [confirmModalOpened, setConfirmModalOpened] = useState(false);
+
+  // Nếu người dùng không phải admin thì tự động quay về dashboard
+  useEffect(() => {
+    if (user && !user.is_admin && currentView === 'settings') {
+      setCurrentView('dashboard');
+    }
+  }, [user, currentView]);
 
   // Callback mở modal xác nhận hành động PM
   const handleOpenConfirmAction = (proposalData) => {
@@ -112,68 +121,76 @@ function AppContent() {
           onSearchChange={setSearchQuery}
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
+          currentView={currentView}
+          onViewChange={setCurrentView}
         />
       </AppShell.Header>
 
       <AppShell.Main>
-        <Container size="xl" py="md">
-          <Stack gap="lg">
-            {/* Bộ thẻ thống kê rủi ro thời gian thực */}
-            <StatCards
-              selectedProject={selectedProject}
-              onFilterByCard={handleFilterByCard}
-              activeFilter={activeFilter}
-            />
+        {currentView === 'settings' ? (
+          <Container size="xl" py="md">
+            <Settings onBackToDashboard={() => setCurrentView('dashboard')} />
+          </Container>
+        ) : (
+          <Container size="xl" py="md">
+            <Stack gap="lg">
+              {/* Bộ thẻ thống kê rủi ro thời gian thực */}
+              <StatCards
+                selectedProject={selectedProject}
+                onFilterByCard={handleFilterByCard}
+                activeFilter={activeFilter}
+              />
 
-            {/* Thông báo bộ lọc thẻ đang kích hoạt */}
-            {activeFilter && (
-              <Card
-                withBorder
-                padding="sm"
-                radius="md"
-                bg="var(--mantine-color-blue-light)"
-              >
-                <Group justify="space-between" align="center">
-                  <Text size="sm" fw={500}>
-                    Đang lọc theo tiêu chí: <strong>{activeFilter}</strong>
-                  </Text>
-                  <Button
-                    variant="subtle"
-                    size="xs"
-                    color="blue"
-                    onClick={() => setActiveFilter('')}
-                  >
-                    Bỏ lọc
-                  </Button>
-                </Group>
-              </Card>
-            )}
+              {/* Thông báo bộ lọc thẻ đang kích hoạt */}
+              {activeFilter && (
+                <Card
+                  withBorder
+                  padding="sm"
+                  radius="md"
+                  bg="var(--mantine-color-blue-light)"
+                >
+                  <Group justify="space-between" align="center">
+                    <Text size="sm" fw={500}>
+                      Đang lọc theo tiêu chí: <strong>{activeFilter}</strong>
+                    </Text>
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      color="blue"
+                      onClick={() => setActiveFilter('')}
+                    >
+                      Bỏ lọc
+                    </Button>
+                  </Group>
+                </Card>
+              )}
 
-            {/* Bố cục lưới 2 cột: Danh sách Task (trái) và Panel Chi tiết (phải) */}
-            <Grid gutter="md" align="stretch">
-              <Grid.Col span={{ base: 12, lg: 7 }}>
-                <TaskTable
-                  selectedProject={selectedProject}
-                  searchQuery={searchQuery}
-                  activeCardFilter={activeFilter}
-                  onSelectIssue={setSelectedIssueKey}
-                  selectedIssueKey={selectedIssueKey}
-                />
-              </Grid.Col>
+              {/* Bố cục lưới 2 cột: Danh sách Task (trái) và Panel Chi tiết (phải) */}
+              <Grid gutter="md" align="stretch">
+                <Grid.Col span={{ base: 12, lg: 7 }}>
+                  <TaskTable
+                    selectedProject={selectedProject}
+                    searchQuery={searchQuery}
+                    activeCardFilter={activeFilter}
+                    onSelectIssue={setSelectedIssueKey}
+                    selectedIssueKey={selectedIssueKey}
+                  />
+                </Grid.Col>
 
-              <Grid.Col span={{ base: 12, lg: 5 }}>
-                <IssuePanel
-                  key={selectedIssueKey || 'placeholder'}
-                  issueKey={selectedIssueKey}
-                  onClose={() => setSelectedIssueKey(null)}
-                  onOpenConfirmAction={handleOpenConfirmAction}
-                  projects={projects}
-                  onSelectIssue={setSelectedIssueKey}
-                />
-              </Grid.Col>
-            </Grid>
-          </Stack>
-        </Container>
+                <Grid.Col span={{ base: 12, lg: 5 }}>
+                  <IssuePanel
+                    key={selectedIssueKey || 'placeholder'}
+                    issueKey={selectedIssueKey}
+                    onClose={() => setSelectedIssueKey(null)}
+                    onOpenConfirmAction={handleOpenConfirmAction}
+                    projects={projects}
+                    onSelectIssue={setSelectedIssueKey}
+                  />
+                </Grid.Col>
+              </Grid>
+            </Stack>
+          </Container>
+        )}
 
         {/* Modal Xác nhận & Ghi Jira */}
         <ActionConfirmModal
