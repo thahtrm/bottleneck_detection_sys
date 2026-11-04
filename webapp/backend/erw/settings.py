@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     base_duckdb: str = "data/jira.duckdb"
     work_duckdb: str = "var/erw_scoring.duckdb"
     bundles_dir: str = "bundles"
+    default_bundle: str = "tgn_dual_head"
     emb_dir: str = "data"
     stream_dir: str = "var/stream"
 

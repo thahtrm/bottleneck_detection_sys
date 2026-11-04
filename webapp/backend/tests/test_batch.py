@@ -163,6 +163,59 @@ def test_library_scorers_construct_is_lazy(wsettings):
     assert s._emb is None
 
 
+def test_library_scorers_uses_dual_head_in_single_pass(wsettings, tmp_path, monkeypatch):
+    from early_risk_detection.criticality.dual_head import DUAL_COLUMNS
+
+    bundles = tmp_path / "bundles"
+    dual_dir = bundles / "tgn_dual_head"
+    dual_dir.mkdir(parents=True)
+    (dual_dir / "manifest.json").write_text("{}")
+
+    calls = []
+
+    class DummyDualScorer:
+        def score(self, db, emb, issue_keys=None, as_of=None, stream_dir=None, top_pct=None, delay_threshold=None):
+            calls.append((db, list(issue_keys)))
+            return pd.DataFrame(
+                [
+                    {
+                        "uid": k,
+                        "instance": "ERW",
+                        "issue_key": k.split("|")[-1],
+                        "project": "DEMO",
+                        "created_ts": 1000.0,
+                        "score": 0.91,
+                        "rank_in_instance": 1,
+                        "is_critical": True,
+                        "planned_duration_days": 14.0,
+                        "predicted_duration_days": 21.5,
+                        "p_delay": 0.78,
+                        "is_at_risk": True,
+                        "p_delay_raw": 0.78,
+                        "gated": False,
+                        "p_non_work": 0.0,
+                        "p_early_non_work": 0.0,
+                        "max_sim_resolved": 0.0,
+                    }
+                    for k in issue_keys
+                ],
+                columns=DUAL_COLUMNS,
+            )
+
+    import early_risk_detection
+    import early_risk_detection.embeddings
+
+    monkeypatch.setattr(early_risk_detection.DualHeadScorer, "load", lambda path: DummyDualScorer())
+    monkeypatch.setattr(early_risk_detection.embeddings, "EmbeddingIndex", lambda *a, **kw: object())
+
+    s = batch.LibraryScorers(wsettings.model_copy(update={"bundles_dir": str(bundles)}))
+    d_df = s.delay("work.duckdb", ["ERW|DEMO-1"])
+    c_df = s.criticality("work.duckdb", ["ERW|DEMO-1"])
+    assert len(calls) == 1  # single DualHeadScorer pass serves both delay() and criticality()!
+    assert float(d_df.iloc[0]["p_delay"]) == pytest.approx(0.78)
+    assert float(c_df.iloc[0]["score"]) == pytest.approx(0.91)
+
+
 def test_reset_stream_dir_refuses_unsafe_paths(wsettings, tmp_path):
     for bad in (".", "", str(Path(wsettings.base_duckdb).parent), str(tmp_path.parent)):
         with pytest.raises(ValueError):

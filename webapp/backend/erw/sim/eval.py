@@ -176,17 +176,20 @@ class SimScorers(Protocol):
 
 
 class DefaultSimScorers:
-    """Default scorer using early_risk_detection library bundles or fallback heuristics."""
+    """Default scorer using Dual-Head TGN (bundles/tgn_dual_head) or fallback bundles/heuristics."""
 
     def __init__(
         self,
         bundles_dir: str | Path | None = None,
         emb_dir: str | Path | None = None,
         ollama_url: str | None = None,
+        default_bundle: str = "tgn_dual_head",
     ):
         self.bundles_dir = Path(bundles_dir) if bundles_dir else Path("bundles")
         self.emb_dir = Path(emb_dir) if emb_dir else Path("data")
         self.ollama_url = ollama_url or "http://localhost:11434"
+        self.default_bundle = default_bundle
+        self._dual_scorer = None
         self._delay_scorer = None
         self._crit_scorer = None
         self._emb = None
@@ -197,15 +200,19 @@ class DefaultSimScorers:
             return
         self._load_attempted = True
         try:
-            from early_risk_detection import CriticalityScorer, DelayRiskScorer
+            from early_risk_detection import CriticalityScorer, DelayRiskScorer, DualHeadScorer
             from early_risk_detection.embeddings import EmbeddingIndex, OllamaEmbedder
 
-            delay_path = self.bundles_dir / "delay"
-            crit_path = self.bundles_dir / "criticality"
-            if delay_path.exists():
-                self._delay_scorer = DelayRiskScorer.load(delay_path)
-            if crit_path.exists():
-                self._crit_scorer = CriticalityScorer.load(crit_path)
+            dual_path = self.bundles_dir / self.default_bundle
+            if (dual_path / "manifest.json").exists():
+                self._dual_scorer = DualHeadScorer.load(dual_path)
+            else:
+                delay_path = self.bundles_dir / "delay"
+                crit_path = self.bundles_dir / "criticality"
+                if delay_path.exists():
+                    self._delay_scorer = DelayRiskScorer.load(delay_path)
+                if crit_path.exists():
+                    self._crit_scorer = CriticalityScorer.load(crit_path)
             self._emb = EmbeddingIndex(
                 self.emb_dir, fallback=OllamaEmbedder(endpoint=f"{self.ollama_url}/api/embed")
             )
@@ -219,27 +226,39 @@ class DefaultSimScorers:
         delay_scores: dict[str, float] = {}
         crit_scores: dict[str, float] = {}
 
-        if self._delay_scorer is not None and self._emb is not None:
+        if self._dual_scorer is not None and self._emb is not None:
             try:
-                df = self._delay_scorer.score(
+                df = self._dual_scorer.score(
                     duckdb_path, self._emb, issue_keys=issue_keys, as_of=as_of
                 )
                 for row in df.itertuples(index=False):
                     k = getattr(row, "issue_key", None) or getattr(row, "uid", "").split("|")[-1]
                     delay_scores[k] = float(getattr(row, "p_delay", 0.0))
-            except Exception as e:
-                logger.warning("Delay scorer failed, falling back: %s", e)
-
-        if self._crit_scorer is not None and self._emb is not None:
-            try:
-                df = self._crit_scorer.score(
-                    duckdb_path, self._emb, issue_keys=issue_keys, as_of=as_of
-                )
-                for row in df.itertuples(index=False):
-                    k = getattr(row, "issue_key", None) or getattr(row, "uid", "").split("|")[-1]
                     crit_scores[k] = float(getattr(row, "score", 0.0))
             except Exception as e:
-                logger.warning("Criticality scorer failed, falling back: %s", e)
+                logger.warning("DualHeadScorer failed, falling back: %s", e)
+        else:
+            if self._delay_scorer is not None and self._emb is not None:
+                try:
+                    df = self._delay_scorer.score(
+                        duckdb_path, self._emb, issue_keys=issue_keys, as_of=as_of
+                    )
+                    for row in df.itertuples(index=False):
+                        k = getattr(row, "issue_key", None) or getattr(row, "uid", "").split("|")[-1]
+                        delay_scores[k] = float(getattr(row, "p_delay", 0.0))
+                except Exception as e:
+                    logger.warning("Delay scorer failed, falling back: %s", e)
+
+            if self._crit_scorer is not None and self._emb is not None:
+                try:
+                    df = self._crit_scorer.score(
+                        duckdb_path, self._emb, issue_keys=issue_keys, as_of=as_of
+                    )
+                    for row in df.itertuples(index=False):
+                        k = getattr(row, "issue_key", None) or getattr(row, "uid", "").split("|")[-1]
+                        crit_scores[k] = float(getattr(row, "score", 0.0))
+                except Exception as e:
+                    logger.warning("Criticality scorer failed, falling back: %s", e)
 
         # Ensure every requested key has a score
         for k in issue_keys:

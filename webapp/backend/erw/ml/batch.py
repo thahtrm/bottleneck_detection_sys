@@ -37,29 +37,71 @@ class Scorers(Protocol):
 
 
 class LibraryScorers:
-    """Real scorers; bundles and embeddings load on first use (not at import/construct time)."""
+    """Real scorers; uses DualHeadScorer (bundles/tgn_dual_head) by default, loaded on first use."""
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self._delay = self._crit = self._emb = None
+        self._dual = self._delay = self._crit = self._emb = None
+        self._cached_dual_key: tuple[str, tuple[str, ...]] | None = None
+        self._cached_dual_df: pd.DataFrame | None = None
 
     def _load(self):
         if self._emb is not None:
             return
-        from early_risk_detection import CriticalityScorer, DelayRiskScorer
+        from early_risk_detection import CriticalityScorer, DelayRiskScorer, DualHeadScorer
         from early_risk_detection.embeddings import EmbeddingIndex, OllamaEmbedder
 
         s = self.settings
         self._emb = EmbeddingIndex(s.emb_dir, fallback=OllamaEmbedder(endpoint=f"{s.ollama_url}/api/embed"))
-        self._delay = DelayRiskScorer.load(Path(s.bundles_dir) / "delay")
-        self._crit = CriticalityScorer.load(Path(s.bundles_dir) / "criticality")
+        bdir = Path(s.bundles_dir)
+        dual_name = getattr(s, "default_bundle", "tgn_dual_head")
+        dual_path = bdir / dual_name
+        if (dual_path / "manifest.json").exists():
+            self._dual = DualHeadScorer.load(dual_path)
+        else:
+            self._delay = DelayRiskScorer.load(bdir / "delay")
+            self._crit = CriticalityScorer.load(bdir / "criticality")
+
+    def _run_dual(self, db: str, keys: list[str]) -> pd.DataFrame:
+        cache_key = (str(db), tuple(keys))
+        if self._cached_dual_key == cache_key and self._cached_dual_df is not None:
+            df = self._cached_dual_df
+            self._cached_dual_key = None
+            self._cached_dual_df = None
+            return df
+        _reset_stream_dir(self.settings)
+        stream_dir_path = Path(self.settings.stream_dir)
+        stream_dir_path.mkdir(parents=True, exist_ok=True)
+        (stream_dir_path / ".erw_stream").touch()
+        df = self._dual.score(
+            db,
+            self._emb,
+            issue_keys=keys,
+            as_of=None,
+            stream_dir=self.settings.stream_dir,
+            top_pct=self.settings.criticality_top_pct,
+            delay_threshold=self.settings.delay_threshold,
+        )
+        self._cached_dual_key = cache_key
+        self._cached_dual_df = df
+        return df
 
     def delay(self, db: str, keys: list[str]) -> pd.DataFrame:
         self._load()
+        if self._dual is not None:
+            from early_risk_detection.criticality.dual_head import DELAY_COLUMNS
+
+            df = self._run_dual(db, keys)
+            return df[DELAY_COLUMNS].sort_values("p_delay", ascending=False).reset_index(drop=True)
         return self._delay.score(db, self._emb, issue_keys=keys, as_of=None)
 
     def criticality(self, db: str, keys: list[str]) -> pd.DataFrame:
         self._load()
+        if self._dual is not None:
+            from early_risk_detection.criticality.dual_head import CRITICALITY_COLUMNS
+
+            df = self._run_dual(db, keys)
+            return df[CRITICALITY_COLUMNS].sort_values(["instance", "rank_in_instance"]).reset_index(drop=True)
         return self._crit.score(db, self._emb, issue_keys=keys, stream_dir=self.settings.stream_dir)
 
 
