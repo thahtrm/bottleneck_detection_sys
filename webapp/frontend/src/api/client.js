@@ -42,8 +42,12 @@ export async function apiFetch(path, options = {}) {
     } catch {
       // Body is not JSON
     }
+    const detailMsg =
+      errorData?.detail && typeof errorData.detail === 'object'
+        ? errorData.detail.message || errorData.detail.error || JSON.stringify(errorData.detail)
+        : errorData?.detail;
     const message =
-      errorData?.detail ||
+      detailMsg ||
       errorData?.message ||
       `Yêu cầu thất bại với mã trạng thái ${response.status}: ${response.statusText}`;
     const error = new Error(message);
@@ -195,6 +199,22 @@ export async function proposeAction(issueKey, suggestionId = null, items = []) {
     },
   });
 }
+
+/**
+ * Xác nhận thực thi hành động đã đề xuất (Ghi ngược Jira)
+ * @param {number|string} actionId - ID của hành động đề xuất (Action ID)
+ * @param {string} expectedUpdated - Mốc thời gian updated_at dự kiến của issue trên Jira (ISO string)
+ */
+export async function confirmAction(actionId, expectedUpdated) {
+  if (!actionId) throw new Error('ID hành động không được để trống');
+  return await apiFetch(`/api/actions/${encodeURIComponent(actionId)}/confirm`, {
+    method: 'POST',
+    body: {
+      expected_updated: expectedUpdated,
+    },
+  });
+}
+
 
 
 

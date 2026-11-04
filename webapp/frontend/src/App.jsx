@@ -20,6 +20,7 @@ import Header from './components/Header';
 import StatCards from './components/StatCards';
 import TaskTable from './components/TaskTable';
 import IssuePanel from './components/IssuePanel';
+import ActionConfirmModal from './components/ActionConfirmModal';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -31,10 +32,23 @@ function AppContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedIssueKey, setSelectedIssueKey] = useState(null);
   const [confirmModalData, setConfirmModalData] = useState(null);
+  const [confirmModalOpened, setConfirmModalOpened] = useState(false);
 
-  // Callback mở modal xác nhận hành động PM (sẵn sàng tích hợp Task 6)
+  // Callback mở modal xác nhận hành động PM
   const handleOpenConfirmAction = (proposalData) => {
     setConfirmModalData(proposalData);
+    setConfirmModalOpened(true);
+  };
+
+  // Callback làm mới dữ liệu sau khi xác nhận & ghi Jira thành công
+  const handleActionSuccess = async () => {
+    const key = confirmModalData?.issueKey || selectedIssueKey;
+    await Promise.all([
+      key ? queryClient.invalidateQueries({ queryKey: ['issue-detail', key] }) : Promise.resolve(),
+      key ? queryClient.invalidateQueries({ queryKey: ['issue-suggestion', key] }) : Promise.resolve(),
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard-issues'] }),
+    ]);
   };
 
   // Reset selected issue khi đổi dự án
@@ -160,6 +174,14 @@ function AppContent() {
             </Grid>
           </Stack>
         </Container>
+
+        {/* Modal Xác nhận & Ghi Jira */}
+        <ActionConfirmModal
+          opened={confirmModalOpened}
+          onClose={() => setConfirmModalOpened(false)}
+          proposalData={confirmModalData}
+          onSuccess={handleActionSuccess}
+        />
       </AppShell.Main>
     </AppShell>
   );
