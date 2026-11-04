@@ -122,3 +122,25 @@ export async function getAdminSettings() {
   });
 }
 
+/**
+ * Lấy danh sách task rủi ro từ dashboard
+ * @param {Object} [params={}] - Các tham số lọc (project, level, status_category, is_critical, blocked, assignee_id, q, sort_by, order, limit, offset)
+ * @returns {Promise<{total: number, limit: number, offset: number, items: Array}>}
+ */
+export async function getDashboardIssues(params = {}) {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      searchParams.append(key, String(value));
+    }
+  });
+
+  const queryString = searchParams.toString();
+  const path = `/api/dashboard/issues${queryString ? `?${queryString}` : ''}`;
+  return await apiFetch(path, {
+    method: 'GET',
+  });
+}
+
+

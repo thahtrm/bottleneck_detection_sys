@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AppShell,
   Center,
@@ -10,6 +10,7 @@ import {
   Title,
   Group,
   Button,
+  Grid,
 } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -17,6 +18,8 @@ import { getProjects } from './api/client';
 import Login from './pages/Login';
 import Header from './components/Header';
 import StatCards from './components/StatCards';
+import TaskTable from './components/TaskTable';
+import IssuePanel from './components/IssuePanel';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -26,6 +29,12 @@ function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedIssueKey, setSelectedIssueKey] = useState(null);
+
+  // Reset selected issue khi đổi dự án
+  useEffect(() => {
+    setSelectedIssueKey(null);
+  }, [selectedProject]);
 
   // Lấy danh sách dự án từ API
   const { data: projects = [] } = useQuery({
@@ -41,6 +50,7 @@ function AppContent() {
     try {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard-issues'] }),
         queryClient.invalidateQueries({ queryKey: ['projects'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-settings'] }),
       ]);
@@ -119,24 +129,26 @@ function AppContent() {
               </Card>
             )}
 
-            {/* Khối thông tin dự án hiện tại */}
-            <Card shadow="xs" padding="lg" radius="md" withBorder>
-              <Stack gap="xs">
-                <Title order={3}>
-                  {selectedProject
-                    ? `Dự án: ${
-                        projects.find(
-                          (p) => (p.key || p.id) === selectedProject
-                        )?.name || selectedProject
-                      }`
-                    : 'Tổng quan tất cả dự án'}
-                </Title>
-                <Text c="dimmed" size="sm">
-                  Hệ thống phát hiện sớm rủi ro tiến độ công việc từ Jira.
-                  Danh sách công việc và đề xuất hỗ trợ từ mô hình AI sẽ được hiển thị tại đây.
-                </Text>
-              </Stack>
-            </Card>
+            {/* Bố cục lưới 2 cột: Danh sách Task (trái) và Panel Chi tiết (phải) */}
+            <Grid gutter="md" align="stretch">
+              <Grid.Col span={{ base: 12, lg: 7 }}>
+                <TaskTable
+                  selectedProject={selectedProject}
+                  searchQuery={searchQuery}
+                  activeCardFilter={activeFilter}
+                  onSelectIssue={setSelectedIssueKey}
+                  selectedIssueKey={selectedIssueKey}
+                />
+              </Grid.Col>
+
+              <Grid.Col span={{ base: 12, lg: 5 }}>
+                <IssuePanel
+                  key={selectedIssueKey || 'placeholder'}
+                  issueKey={selectedIssueKey}
+                  onClose={() => setSelectedIssueKey(null)}
+                />
+              </Grid.Col>
+            </Grid>
           </Stack>
         </Container>
       </AppShell.Main>
