@@ -33,6 +33,9 @@ def main(argv: list[str] | None = None) -> int:
     admin_parser.add_argument("--name", required=True, help="admin name")
     admin_parser.add_argument("--password", required=True, help="admin password")
 
+    seed_parser = subparsers.add_parser("seed-demo", help="seed demo data and scenarios")
+    seed_parser.add_argument("--reset", action="store_true", help="wipe existing demo data before seeding")
+
     args = parser.parse_args(argv)
     settings = get_settings()
 
@@ -68,6 +71,16 @@ def main(argv: list[str] | None = None) -> int:
             session.commit()
             print(f"admin user created: {email}")
             return 0
+
+    if args.command == "seed-demo":
+        from erw.demo.seed import seed_demo_data
+
+        engine = make_engine(settings.db_url)
+        init_db(engine)
+        with SessionLocal(bind=engine) as session:
+            summary = seed_demo_data(session, reset=args.reset)
+            print(f"Seed demo data completed successfully: {summary}")
+        return 0
 
     if args.command == "init-db":
         init_db(make_engine(settings.db_url))
