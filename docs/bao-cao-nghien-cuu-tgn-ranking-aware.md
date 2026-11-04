@@ -47,7 +47,7 @@ TRẠNG THÁI TỔNG THỂ          4/4 Targets    ⚠️ CONSTRAINTS PENDING   
 ### 2.1. Đồ thị Động Thời gian Liên tục (CTDG) trong Phần mềm
 Quy trình phát triển phần mềm trên Jira được mô hình hóa dưới dạng một đồ thị động thời gian liên tục $\mathcal{G} = (\mathcal{V}, \mathcal{E})$, trong đó:
 * Tập đỉnh $\mathcal{V}$: Gồm $69,154$ issues (kèm các kỹ sư xử lý).
-* Dòng sự kiện $\mathcal{E} = \{e_k = (u_k, v_k, t_k, \mathbf{x}_k)\}_{k=1}^M$: Với $M = 372,553$ sự kiện theo thứ tự thời gian $t_1 \le t_2 \le \dots \le t_M$.
+* Dòng sự kiện $\mathcal{E} = \{e_k = (u_k, v_k, t_k, \mathbf{x}_k)\}_{k=1}^M$: Với $M = 372,553$ sự kiện theo thứ tự thời gian $t_1 \leq t_2 \leq \cdots \leq t_M$.
 * Vector thuộc tính sự kiện $\mathbf{x}_k \in \mathbb{R}^8$: Mã hóa loại hoạt động (`status_transition`, `assignee_assignment`, `comment_interaction`, `priority_change`, `link_dependency`), hướng tác động và logarit khoảng trễ thời gian $\ln(1 + \Delta t / 3600)$.
 
 ```mermaid

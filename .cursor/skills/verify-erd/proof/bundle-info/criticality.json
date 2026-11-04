@@ -1,0 +1,113 @@
+{
+  "format_version": 1,
+  "kind": "criticality",
+  "library_version": "0.1.0",
+  "created_at": "2026-10-28T19:58:16+00:00",
+  "config": {
+    "model": "tgn_hybrid",
+    "z_tag": "_lr5e-4_e2_s45",
+    "chunk": 10000,
+    "seeds": [
+      45,
+      47,
+      49
+    ],
+    "readout_files": [
+      "readout_seed45.pt",
+      "readout_seed47.pt",
+      "readout_seed49.pt"
+    ],
+    "dropout": 0.2,
+    "static_features": "<119 entries>",
+    "instances": [
+      "Apache",
+      "Hyperledger",
+      "IntelDAOS",
+      "JFrog",
+      "Jira",
+      "JiraEcosystem",
+      "MariaDB",
+      "Mindville",
+      "Mojang",
+      "MongoDB",
+      "Qt",
+      "RedHat",
+      "Sakai",
+      "SecondLife",
+      "Sonatype",
+      "Spring"
+    ],
+    "types": [
+      "Bug",
+      "Improvement",
+      "Task",
+      "Suggestion",
+      "Sub-task",
+      "New Feature",
+      "Feature Request",
+      "New Project",
+      "Enhancement",
+      "Story",
+      "Test",
+      "Wish",
+      "Question",
+      "Epic",
+      "Component Upgrade",
+      "Documentation",
+      "Support Request",
+      "Technical task",
+      "Dependency upgrade",
+      "(Deprecated) Contributed Patch",
+      "Release",
+      "Defect",
+      "User Story",
+      "Pruning",
+      "Quality Risk",
+      "Refactoring",
+      "Component Upgrade Subtask",
+      "Patch",
+      "Problem",
+      "Requirement"
+    ],
+    "propensity_backoff": "<9 entries>",
+    "top_pct": 0.05,
+    "readout_hyperparams": {
+      "use_z": true,
+      "gamma": 0.3983482944992373,
+      "lam": 0.0983762971123252,
+      "lr": 0.000608287043865367,
+      "aux_w": 0.7728901747553505
+    },
+    "memory_training": {
+      "epochs": 2,
+      "lr": 0.0005,
+      "seed": 45
+    },
+    "train_cutoff_ts": 1531410693.0
+  },
+  "metrics": {
+    "val": {
+      "ndcg_10_grouped": 0.8428,
+      "precision_top5pct": 0.3526,
+      "recall_top5pct": 0.3437,
+      "spearman_rho": 0.5615,
+      "roc_auc": 0.8221,
+      "pr_auc": 0.3136
+    },
+    "test": {
+      "ndcg_10_grouped": 0.8547,
+      "precision_top5pct": 0.2386,
+      "recall_top5pct": 0.2386,
+      "spearman_rho": 0.5937,
+      "roc_auc": 0.8382,
+      "pr_auc": 0.2082
+    }
+  },
+  "files": [
+    "normalizers.npz",
+    "readout_seed45.pt",
+    "readout_seed47.pt",
+    "readout_seed49.pt",
+    "tgn_memory.pt"
+  ]
+}

@@ -19,6 +19,8 @@ pip install "early-risk-detection[mongo]"   # + ETL từ MongoDB
 pip install -e ".[train,dev]"               # phát triển / huấn luyện lại (từ repo)
 ```
 
+Phát triển từ mã nguồn: xem [Cài đặt cho developer](#cài-đặt-cho-developer).
+
 Yêu cầu Python ≥ 3.10. GPU (CUDA) được dùng nếu có: chấm criticality phải replay toàn bộ dòng
 sự kiện (≈1,5 phút trên RTX 4060 Ti cho 2,68 triệu issue), trên CPU chậm hơn nhiều.
 
@@ -129,13 +131,53 @@ Mã của nghiên cứu gốc (trước khi tái cấu trúc) nằm ở commit `
   back-off chỉ fit trên train. Metric test: NDCG@10 grouped 0,8547 / Precision@Top-5% 0,2386
   (gốc 0,8545 / 0,2390).
 
-## Phát triển
+## Cài đặt cho developer
+
+**1. Lấy mã nguồn và tạo môi trường ảo** (Python ≥ 3.10; bundle được huấn luyện trên CPython 3.13):
 
 ```bash
-pytest                    # 20 test, ~5 giây, không cần GPU / dữ liệu thật
-ruff check src tests training
-uv build                  # wheel + sdist trong dist/
+git clone https://github.com/thahtrm/bottleneck_detection_sys.git
+cd bottleneck_detection_sys
+python3.13 -m venv .venv && source .venv/bin/activate      # hoặc: uv venv -p 3.13 && source .venv/bin/activate
+python -m pip install -U pip
 ```
+
+**2. Cài thư viện ở chế độ editable** — chọn một trong hai:
+
+```bash
+# a) Sửa thư viện / chạy test (phiên bản dependency mới nhất trong khoảng của pyproject.toml)
+pip install -e ".[dev]"
+
+# b) Huấn luyện lại hoặc tái lập đúng bundle đã công bố (phiên bản ghim, CUDA 13)
+pip install -r requirements-lock.txt
+pip install -e ".[train,dev,mongo]"      # các gói đã ghim được giữ nguyên, chỉ thêm pytest/ruff/build
+```
+
+`requirements-lock.txt` kéo `torch` bản CUDA 13; máy không có GPU NVIDIA nên cài `torch` bản CPU
+trước (`pip install torch --index-url https://download.pytorch.org/whl/cpu`) rồi mới cài phần còn lại.
+
+**3. Kiểm tra môi trường:**
+
+```bash
+python -m pytest                     # 20 test, ~5 giây, không cần GPU / dữ liệu thật
+ruff check src tests training
+erd --help                           # entry point CLI đã được cài
+```
+
+**4. Dữ liệu và bundle** (không nằm trong git — `data/`, `bundles/` bị `.gitignore`):
+
+* `data/jira.duckdb`: dựng bằng `erd etl` từ MongoDB chứa The Public Jira Dataset (cần extra `[mongo]`).
+* Embedding: cài [Ollama](https://ollama.com), `ollama pull nomic-embed-text`, rồi `erd embed ...`
+  (xem [Dùng nhanh](#dùng-nhanh)).
+* `bundles/delay`, `bundles/criticality`: chép từ người đã huấn luyện, hoặc tự tạo theo
+  [Huấn luyện lại](#huấn-luyện-lại).
+
+Test chỉ dùng DuckDB tổng hợp (`tests/conftest.py`), nên bước 3 chạy được mà không cần mục 4.
+
+**Quy trình làm việc:** trước khi commit, `ruff check src tests training` và `python -m pytest` phải
+sạch; quy tắc kiến trúc (đặc trưng chỉ dùng thông tin tại T0, một cài đặt duy nhất trong `src/`,
+tăng `FORMAT_VERSION` khi đổi định dạng bundle) nằm trong [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Đóng gói phát hành: `uv build` (hoặc `python -m build`) → wheel + sdist trong `dist/`.
 
 ## Giấy phép
 
