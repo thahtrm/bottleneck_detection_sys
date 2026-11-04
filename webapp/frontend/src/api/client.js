@@ -101,3 +101,24 @@ export async function getProjects() {
     method: 'GET',
   });
 }
+
+/**
+ * Lấy dữ liệu thống kê tổng quan (Dashboard stats)
+ * @param {string|null} [project=null] - Key của dự án, hoặc null/rỗng để lấy tất cả
+ */
+export async function getDashboardStats(project = null) {
+  const query = project ? `?project=${encodeURIComponent(project)}` : '';
+  return await apiFetch(`/api/dashboard/stats${query}`, {
+    method: 'GET',
+  });
+}
+
+/**
+ * Lấy cấu hình hệ thống và trạng thái webhook (Admin settings)
+ */
+export async function getAdminSettings() {
+  return await apiFetch('/api/admin/settings', {
+    method: 'GET',
+  });
+}
+
