@@ -417,11 +417,24 @@ def select_issues(df: pd.DataFrame, issue_keys=None, as_of=None, open_only: bool
     if issue_keys is not None:
         uid = pd.Index(df["instance"] + "|" + df["issue_key"])
         keys = list(issue_keys)
-        pos = uid.get_indexer(keys)
+        pos = uid.get_indexer(keys).copy()
+        if np.any(pos < 0):
+            short_idx = pd.Index(df["issue_key"])
+            for idx_k, (k, p) in enumerate(zip(keys, pos)):
+                if p < 0 and "|" not in str(k) and k in short_idx:
+                    loc = short_idx.get_loc(k)
+                    if isinstance(loc, (int, np.integer)):
+                        pos[idx_k] = int(loc)
+                    elif isinstance(loc, slice):
+                        pos[idx_k] = int(loc.start)
+                    else:
+                        nz = np.flatnonzero(loc)
+                        if len(nz):
+                            pos[idx_k] = int(nz[0])
         missing = [k for k, p in zip(keys, pos) if p < 0]
         if missing:
             raise KeyError(f"{len(missing)} issue keys not found, e.g. {missing[:3]}")
-        return np.sort(pos)
+        return np.sort(np.unique(pos))
     t = pd.Timestamp.now(tz="UTC").timestamp() if as_of is None else \
         (as_of.timestamp() if isinstance(as_of, pd.Timestamp) else float(as_of))
     mask = df["created_ts"].values <= t

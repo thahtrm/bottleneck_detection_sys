@@ -37,7 +37,9 @@ def _embeddings(args):
 
 
 def _score(args) -> None:
-    if args.model == "criticality":
+    if args.model == "dual":
+        from .criticality import DualHeadScorer as Scorer
+    elif args.model == "criticality":
         from .criticality import CriticalityScorer as Scorer
     else:
         from .delay import DelayRiskScorer as Scorer
@@ -88,8 +90,8 @@ def main(argv: list[str] | None = None) -> None:
                                      f"{k} ({v[1]})" for k, v in PASSTHROUGH.items()).replace("eval-", "eval "))
     sub = ap.add_subparsers(dest="cmd", required=True)
     sc = sub.add_parser("score", help="score issues of a Jira DuckDB with a model bundle")
-    sc.add_argument("model", choices=["criticality", "delay"])
-    sc.add_argument("--bundle", required=True)
+    sc.add_argument("model", nargs="?", default="dual", choices=["dual", "criticality", "delay"])
+    sc.add_argument("--bundle", default="bundles/tgn_dual_head", help="model bundle path (default: bundles/tgn_dual_head)")
     sc.add_argument("--db", required=True, help="Jira DuckDB (schema of early_risk_detection.data.etl)")
     sc.add_argument("--emb-dir", help="directory with emb_uid_all.parquet + emb_unique_all_fp16.npy")
     sc.add_argument("--ollama", nargs="?", const="http://localhost:11434/api/embed",

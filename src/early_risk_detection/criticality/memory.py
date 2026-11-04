@@ -187,3 +187,86 @@ def load_memory(path: str | Path, n_nodes: int, device: torch.device) -> TGNMemo
     model = TGNMemory(n_nodes, device)
     model.load_state_dict(torch.load(path, map_location=device))
     return model
+
+
+def _sub_chunk(ch: dict, mask: torch.Tensor) -> dict:
+    return {k: v[mask] for k, v in ch.items()}
+
+
+@torch.no_grad()
+def snapshot_memory_at_change(model: TGNMemory, stream: EventStream, t_snap: np.ndarray, neigh: np.ndarray,
+                              rows: np.ndarray | None = None, z_out: np.ndarray | None = None,
+                              dynamic_assignee: bool = True):
+    """Replay the stream and freeze each issue's memory AT its project-change timestamp ``t_snap[i]``.
+
+    Within the chunk containing ``t_snap[i]``, all active (non-closing, ``scat != 0``) events with
+    ``ts <= t_snap[u]`` (and ``ts <= t_snap[v]`` for issue-link events) are applied *before* the
+    snapshot is read out, while events after ``t_snap`` or resolution events are applied *after*
+    the snapshot so future chunks still see the complete history.
+    """
+    n_issue = len(t_snap)
+    rows = np.arange(n_issue, dtype=np.int64) if rows is None else np.asarray(rows, np.int64)
+    Z = z_out if z_out is not None else np.zeros((len(rows), 4 * MEM), np.float16)
+    aux = np.zeros((len(rows), 5), np.float32)
+    applied_issue_last = np.full(len(rows), -np.inf)
+    n_chunks = len(stream.starts)
+    snap_chunk_all = np.minimum(np.searchsorted(stream.max_ts, t_snap, side="left"), n_chunks - 1)
+    snap_chunk = snap_chunk_all[rows]
+    order = np.argsort(snap_chunk, kind="stable")
+    bounds = np.searchsorted(snap_chunk[order], np.arange(n_chunks + 1))
+    last_needed = int(snap_chunk.max()) if len(rows) else -1
+    neigh_t = torch.from_numpy(neigh.astype(np.int64)).to(model.device)
+    t_snap_dev = torch.from_numpy(t_snap.astype(np.float64)).to(model.device)
+    sc_dev = torch.from_numpy(snap_chunk_all.astype(np.int64)).to(model.device)
+    model.reset()
+    model.eval()
+    t0 = time.time()
+    for c in range(n_chunks):
+        if c > last_needed:
+            break
+        ch = stream.get(c)
+        u, v, ts, kind, scat = ch["u"], ch["v"], ch["ts"], ch["kind"], ch["scat"]
+        v_safe = v.clamp(max=n_issue - 1)
+        u_ok = (sc_dev[u] < c) | ((ts <= t_snap_dev[u]) & (scat != 0))
+        v_ok = (kind != 4) | (v >= n_issue) | (sc_dev[v_safe] < c) | (ts <= t_snap_dev[v_safe])
+        pre_mask = u_ok & v_ok
+        if pre_mask.any():
+            ch_pre = _sub_chunk(ch, pre_mask)
+            model.commit(*model.apply(model.raw_messages(ch_pre)))
+            if dynamic_assignee:
+                m_ass = ch_pre["kind"] == 1
+                if m_ass.any():
+                    neigh_t[ch_pre["u"][m_ass], 1] = ch_pre["v"][m_ass]
+
+        k = order[bounds[c]:bounds[c + 1]]
+        if len(k):
+            idx = rows[k]
+            it = torch.from_numpy(idx).to(model.device)
+            nb = neigh_t[it]
+            parts, dts = [model.mem[it]], [model.last[it]]
+            for j in range(3):
+                q = nb[:, j].clamp(min=0)
+                ok = (nb[:, j] >= 0).unsqueeze(1)
+                parts.append(torch.where(ok, model.mem[q], torch.zeros_like(model.mem[q])))
+                dts.append(torch.where(nb[:, j] >= 0, model.last[q], torch.full_like(model.last[q], -1.0)))
+            Z[k] = torch.cat(parts, 1).half().cpu().numpy()
+            t_now = torch.from_numpy(t_snap[idx]).to(model.device)
+            for j, d in enumerate(dts):
+                aux[k, j] = torch.where(d < 0, torch.full_like(d, 12.0),
+                                        torch.log1p((t_now - d).clamp(min=0) / 3600.0)).float().cpu().numpy()
+            aux[k, 4] = torch.log1p(model.n_upd[nb[:, 0].clamp(min=0)].float()).cpu().numpy()
+            applied_issue_last[k] = dts[0].cpu().numpy()
+
+        post_mask = ~pre_mask
+        if post_mask.any():
+            ch_post = _sub_chunk(ch, post_mask)
+            model.commit(*model.apply(model.raw_messages(ch_post)))
+            if dynamic_assignee:
+                m_ass = ch_post["kind"] == 1
+                if m_ass.any():
+                    neigh_t[ch_post["u"][m_ass], 1] = ch_post["v"][m_ass]
+
+        if c % 300 == 0:
+            logger.info(f"    project-change snapshot pass chunk {c}/{n_chunks} ({time.time() - t0:.0f}s)")
+    return Z, aux, applied_issue_last
+

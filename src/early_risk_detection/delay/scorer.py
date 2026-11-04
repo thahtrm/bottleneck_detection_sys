@@ -18,7 +18,8 @@ import pandas as pd
 import torch
 import xgboost as xgb
 
-from ..bundle import ModelBundle
+from ..bundle import BundleError, ModelBundle
+from ..criticality.dual_head import DEFAULT_BUNDLE_PATH, DUAL_HEAD_KIND, DualHeadScorer
 from ..embeddings import embed_issues
 from ..features.t0 import load_issues_t0, load_timed_links, select_issues
 from .features import DelayFeaturizer, TextRiskFeatures, chronological_features
@@ -39,10 +40,14 @@ KIND = "delay"
 
 class DelayRiskScorer:
     def __init__(self, bundle: ModelBundle, device: str | torch.device | None = None):
-        from catboost import CatBoostRegressor
-
         self.bundle = bundle
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        if bundle.kind == DUAL_HEAD_KIND:
+            self._dual: DualHeadScorer | None = DualHeadScorer(bundle, self.device)
+            return
+        self._dual = None
+        from catboost import CatBoostRegressor
+
         self.text = TextRiskFeatures.load(bundle)
         self.fx = DelayFeaturizer.load(bundle, "xgb")
         self.fs = DelayFeaturizer.load(bundle, "surv")
@@ -65,16 +70,26 @@ class DelayRiskScorer:
         self.blend_cfg = bundle.load_json("blend_gate.json")
 
     @classmethod
-    def load(cls, path: str | Path, device: str | torch.device | None = None) -> DelayRiskScorer:
-        return cls(ModelBundle.load(path, kind=KIND), device)
+    def load(
+        cls,
+        path: str | Path = DEFAULT_BUNDLE_PATH,
+        device: str | torch.device | None = None,
+    ) -> DelayRiskScorer:
+        b = ModelBundle.load(path)
+        if b.kind not in (KIND, DUAL_HEAD_KIND):
+            raise BundleError(f"{path} is a '{b.kind}' bundle, expected '{DUAL_HEAD_KIND}' or '{KIND}'")
+        return cls(b, device)
 
     @property
     def threshold(self) -> float:
+        if self._dual is not None:
+            return self._dual.threshold
         return float(self.blend_cfg["threshold"])
 
     def score(self, duckdb_path: str | Path, embeddings, issue_keys: list[str] | None = None,
               as_of: float | pd.Timestamp | None = None, open_only: bool = True,
-              stream_dir: str | Path | None = None) -> pd.DataFrame:
+              stream_dir: str | Path | None = None,
+              at_project_change: bool | None = None) -> pd.DataFrame:
         """Delay risk of issues of a Jira DuckDB (schema of ``early_risk_detection.data.etl``).
 
         embeddings  ``EmbeddingIndex`` / ``OllamaEmbedder``; also used for the semantic kNN
@@ -85,6 +100,16 @@ class DelayRiskScorer:
         predicted_duration_days, p_delay, is_at_risk, p_delay_raw, gated, p_non_work,
         p_early_non_work, max_sim_resolved``. ``stream_dir`` is accepted for CLI symmetry.
         """
+        if self._dual is not None:
+            return self._dual.score_delay(
+                duckdb_path,
+                embeddings=embeddings,
+                issue_keys=issue_keys,
+                as_of=as_of,
+                open_only=open_only,
+                stream_dir=stream_dir,
+                at_project_change=at_project_change,
+            )
         con = duckdb.connect(str(duckdb_path), read_only=True)
         try:
             logger.info("Loading issues and T0 attributes...")
