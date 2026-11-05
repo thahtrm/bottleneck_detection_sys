@@ -1,0 +1,2309 @@
+{
+  "experiment_name": "DualHead_TGN_Jira_Full_2.68M",
+  "leaderboard": [
+    {
+      "track": "DualTGN_Crit_T0_pre",
+      "iteration": 1,
+      "split": "val",
+      "timestamp": "2026-11-03T22:36:31.056849+00:00",
+      "n_samples": 346172,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T0_pre/criticality_val.csv",
+      "metrics": {
+        "ndcg_10": 0.9366,
+        "ndcg_10_grouped": 0.8442,
+        "ndcg_10_global": 0.9366,
+        "ndcg_50_grouped": 0.8923,
+        "precision_top5pct": 0.3499,
+        "recall_top5pct": 0.3411,
+        "spearman_rho": 0.5603,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.3022,
+        "roc_auc": 0.8157,
+        "tp_top5": 6057,
+        "k_top5": 17309,
+        "total_p0": 17758
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": true,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": false,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Apache",
+          "n": 96818,
+          "p0": 6049,
+          "ndcg_10": 0.7936,
+          "ndcg_10_grouped": 0.8698,
+          "precision_top5pct": 0.296,
+          "recall_top5pct": 0.2369,
+          "spearman_rho": 0.5473
+        },
+        {
+          "instance": "Mojang",
+          "n": 96674,
+          "p0": 65,
+          "ndcg_10": 0.7719,
+          "ndcg_10_grouped": 0.6988,
+          "precision_top5pct": 0.0008,
+          "recall_top5pct": 0.0615,
+          "spearman_rho": 0.4909
+        },
+        {
+          "instance": "RedHat",
+          "n": 47175,
+          "p0": 4078,
+          "ndcg_10": 0.9136,
+          "ndcg_10_grouped": 0.8721,
+          "precision_top5pct": 0.4171,
+          "recall_top5pct": 0.2413,
+          "spearman_rho": 0.4633
+        },
+        {
+          "instance": "MongoDB",
+          "n": 26878,
+          "p0": 3621,
+          "ndcg_10": 0.9772,
+          "ndcg_10_grouped": 0.8101,
+          "precision_top5pct": 0.8266,
+          "recall_top5pct": 0.3068,
+          "spearman_rho": 0.5444
+        },
+        {
+          "instance": "Qt",
+          "n": 19461,
+          "p0": 1031,
+          "ndcg_10": 0.9142,
+          "ndcg_10_grouped": 0.6894,
+          "precision_top5pct": 0.271,
+          "recall_top5pct": 0.2561,
+          "spearman_rho": 0.2244
+        },
+        {
+          "instance": "Sonatype",
+          "n": 16151,
+          "p0": 84,
+          "ndcg_10": 0.8556,
+          "ndcg_10_grouped": 0.8678,
+          "precision_top5pct": 0.0829,
+          "recall_top5pct": 0.7976,
+          "spearman_rho": 0.3559
+        },
+        {
+          "instance": "Jira",
+          "n": 14455,
+          "p0": 558,
+          "ndcg_10": 0.8737,
+          "ndcg_10_grouped": 0.7852,
+          "precision_top5pct": 0.3167,
+          "recall_top5pct": 0.4104,
+          "spearman_rho": 0.5004
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 10099,
+          "p0": 636,
+          "ndcg_10": 0.9326,
+          "ndcg_10_grouped": 0.7965,
+          "precision_top5pct": 0.3584,
+          "recall_top5pct": 0.2846,
+          "spearman_rho": 0.4835
+        },
+        {
+          "instance": "MariaDB",
+          "n": 5649,
+          "p0": 827,
+          "ndcg_10": 0.9821,
+          "ndcg_10_grouped": 0.8884,
+          "precision_top5pct": 0.6926,
+          "recall_top5pct": 0.237,
+          "spearman_rho": 0.4372
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3708,
+          "p0": 180,
+          "ndcg_10": 0.8899,
+          "ndcg_10_grouped": 0.7168,
+          "precision_top5pct": 0.0323,
+          "recall_top5pct": 0.0333,
+          "spearman_rho": 0.1556
+        },
+        {
+          "instance": "Spring",
+          "n": 3560,
+          "p0": 73,
+          "ndcg_10": 0.7616,
+          "ndcg_10_grouped": 0.7729,
+          "precision_top5pct": 0.118,
+          "recall_top5pct": 0.2877,
+          "spearman_rho": 0.4979
+        },
+        {
+          "instance": "Sakai",
+          "n": 2550,
+          "p0": 191,
+          "ndcg_10": 0.909,
+          "ndcg_10_grouped": 0.8794,
+          "precision_top5pct": 0.2734,
+          "recall_top5pct": 0.1832,
+          "spearman_rho": 0.6362
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1480,
+          "p0": 138,
+          "ndcg_10": 0.9449,
+          "ndcg_10_grouped": 0.8857,
+          "precision_top5pct": 0.4054,
+          "recall_top5pct": 0.2174,
+          "spearman_rho": 0.3682
+        },
+        {
+          "instance": "JFrog",
+          "n": 1244,
+          "p0": 211,
+          "ndcg_10": 0.8422,
+          "ndcg_10_grouped": 0.8768,
+          "precision_top5pct": 0.3968,
+          "recall_top5pct": 0.1185,
+          "spearman_rho": 0.4726
+        },
+        {
+          "instance": "Mindville",
+          "n": 267,
+          "p0": 16,
+          "ndcg_10": 0.9083,
+          "ndcg_10_grouped": 0.895,
+          "precision_top5pct": 0.4286,
+          "recall_top5pct": 0.375,
+          "spearman_rho": 0.6219
+        },
+        {
+          "instance": "SecondLife",
+          "n": 3,
+          "p0": 0,
+          "ndcg_10": 0.9456,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": -1.0
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T0_pre",
+      "iteration": 1,
+      "split": "test",
+      "timestamp": "2026-11-03T22:36:37.349476+00:00",
+      "n_samples": 346174,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T0_pre/criticality_test.csv",
+      "metrics": {
+        "ndcg_10": 0.8719,
+        "ndcg_10_grouped": 0.8551,
+        "ndcg_10_global": 0.8719,
+        "ndcg_50_grouped": 0.9016,
+        "precision_top5pct": 0.2417,
+        "recall_top5pct": 0.2417,
+        "spearman_rho": 0.5776,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.2052,
+        "roc_auc": 0.824,
+        "tp_top5": 4184,
+        "k_top5": 17309,
+        "total_p0": 17311
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": true,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": false,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Mojang",
+          "n": 151046,
+          "p0": 413,
+          "ndcg_10": 0.5425,
+          "ndcg_10_grouped": 0.6447,
+          "precision_top5pct": 0.031,
+          "recall_top5pct": 0.5666,
+          "spearman_rho": 0.5061
+        },
+        {
+          "instance": "Apache",
+          "n": 70263,
+          "p0": 5208,
+          "ndcg_10": 0.9181,
+          "ndcg_10_grouped": 0.9091,
+          "precision_top5pct": 0.2592,
+          "recall_top5pct": 0.1749,
+          "spearman_rho": 0.571
+        },
+        {
+          "instance": "RedHat",
+          "n": 48816,
+          "p0": 7078,
+          "ndcg_10": 0.892,
+          "ndcg_10_grouped": 0.9035,
+          "precision_top5pct": 0.3986,
+          "recall_top5pct": 0.1375,
+          "spearman_rho": 0.5035
+        },
+        {
+          "instance": "MongoDB",
+          "n": 24120,
+          "p0": 2283,
+          "ndcg_10": 0.4453,
+          "ndcg_10_grouped": 0.7063,
+          "precision_top5pct": 0.2222,
+          "recall_top5pct": 0.1174,
+          "spearman_rho": 0.3846
+        },
+        {
+          "instance": "Sonatype",
+          "n": 20125,
+          "p0": 115,
+          "ndcg_10": 0.9026,
+          "ndcg_10_grouped": 0.9233,
+          "precision_top5pct": 0.0576,
+          "recall_top5pct": 0.5043,
+          "spearman_rho": 0.2843
+        },
+        {
+          "instance": "Qt",
+          "n": 16094,
+          "p0": 836,
+          "ndcg_10": 0.9912,
+          "ndcg_10_grouped": 0.6756,
+          "precision_top5pct": 0.2559,
+          "recall_top5pct": 0.2464,
+          "spearman_rho": 0.124
+        },
+        {
+          "instance": "Jira",
+          "n": 4608,
+          "p0": 171,
+          "ndcg_10": 0.8837,
+          "ndcg_10_grouped": 0.6201,
+          "precision_top5pct": 0.0173,
+          "recall_top5pct": 0.0234,
+          "spearman_rho": 0.3023
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3208,
+          "p0": 331,
+          "ndcg_10": 0.8279,
+          "ndcg_10_grouped": 0.7386,
+          "precision_top5pct": 0.2112,
+          "recall_top5pct": 0.1027,
+          "spearman_rho": -0.04
+        },
+        {
+          "instance": "Sakai",
+          "n": 1842,
+          "p0": 209,
+          "ndcg_10": 0.9408,
+          "ndcg_10_grouped": 0.9505,
+          "precision_top5pct": 0.3548,
+          "recall_top5pct": 0.1579,
+          "spearman_rho": 0.6753
+        },
+        {
+          "instance": "MariaDB",
+          "n": 1739,
+          "p0": 222,
+          "ndcg_10": 0.7028,
+          "ndcg_10_grouped": 0.92,
+          "precision_top5pct": 0.3333,
+          "recall_top5pct": 0.1306,
+          "spearman_rho": 0.473
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1338,
+          "p0": 243,
+          "ndcg_10": 0.8735,
+          "ndcg_10_grouped": 0.9193,
+          "precision_top5pct": 0.2687,
+          "recall_top5pct": 0.0741,
+          "spearman_rho": 0.4145
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 1173,
+          "p0": 79,
+          "ndcg_10": 0.9488,
+          "ndcg_10_grouped": 0.8374,
+          "precision_top5pct": 0.2373,
+          "recall_top5pct": 0.1772,
+          "spearman_rho": 0.4742
+        },
+        {
+          "instance": "Spring",
+          "n": 1091,
+          "p0": 24,
+          "ndcg_10": 0.9408,
+          "ndcg_10_grouped": 0.7263,
+          "precision_top5pct": 0.1818,
+          "recall_top5pct": 0.4167,
+          "spearman_rho": 0.521
+        },
+        {
+          "instance": "JFrog",
+          "n": 618,
+          "p0": 95,
+          "ndcg_10": 0.7973,
+          "ndcg_10_grouped": 0.8756,
+          "precision_top5pct": 0.1935,
+          "recall_top5pct": 0.0632,
+          "spearman_rho": 0.4609
+        },
+        {
+          "instance": "Mindville",
+          "n": 91,
+          "p0": 4,
+          "ndcg_10": 0.895,
+          "ndcg_10_grouped": 0.8855,
+          "precision_top5pct": 0.4,
+          "recall_top5pct": 0.5,
+          "spearman_rho": 0.5474
+        },
+        {
+          "instance": "SecondLife",
+          "n": 2,
+          "p0": 0,
+          "ndcg_10": 1.0,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": NaN
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T0_create",
+      "iteration": 1,
+      "split": "val",
+      "timestamp": "2026-11-03T22:36:44.984779+00:00",
+      "n_samples": 346172,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T0_create/criticality_val.csv",
+      "metrics": {
+        "ndcg_10": 0.8419,
+        "ndcg_10_grouped": 0.8419,
+        "ndcg_10_global": 0.734,
+        "ndcg_50_grouped": 0.8912,
+        "precision_top5pct": 0.3193,
+        "recall_top5pct": 0.3112,
+        "spearman_rho": 0.5316,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.2466,
+        "roc_auc": 0.8032,
+        "tp_top5": 5527,
+        "k_top5": 17309,
+        "total_p0": 17758
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": false,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": false,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Apache",
+          "n": 96818,
+          "p0": 6049,
+          "ndcg_10": 0.6921,
+          "ndcg_10_grouped": 0.8666,
+          "precision_top5pct": 0.2795,
+          "recall_top5pct": 0.2237,
+          "spearman_rho": 0.5288
+        },
+        {
+          "instance": "Mojang",
+          "n": 96674,
+          "p0": 65,
+          "ndcg_10": 0.7477,
+          "ndcg_10_grouped": 0.6947,
+          "precision_top5pct": 0.0012,
+          "recall_top5pct": 0.0923,
+          "spearman_rho": 0.4793
+        },
+        {
+          "instance": "RedHat",
+          "n": 47175,
+          "p0": 4078,
+          "ndcg_10": 0.8659,
+          "ndcg_10_grouped": 0.8723,
+          "precision_top5pct": 0.4133,
+          "recall_top5pct": 0.2391,
+          "spearman_rho": 0.4595
+        },
+        {
+          "instance": "MongoDB",
+          "n": 26878,
+          "p0": 3621,
+          "ndcg_10": 0.9689,
+          "ndcg_10_grouped": 0.7991,
+          "precision_top5pct": 0.7857,
+          "recall_top5pct": 0.2916,
+          "spearman_rho": 0.5041
+        },
+        {
+          "instance": "Qt",
+          "n": 19461,
+          "p0": 1031,
+          "ndcg_10": 0.4295,
+          "ndcg_10_grouped": 0.6839,
+          "precision_top5pct": 0.2033,
+          "recall_top5pct": 0.192,
+          "spearman_rho": 0.1974
+        },
+        {
+          "instance": "Sonatype",
+          "n": 16151,
+          "p0": 84,
+          "ndcg_10": 0.8069,
+          "ndcg_10_grouped": 0.8675,
+          "precision_top5pct": 0.0829,
+          "recall_top5pct": 0.7976,
+          "spearman_rho": 0.3075
+        },
+        {
+          "instance": "Jira",
+          "n": 14455,
+          "p0": 558,
+          "ndcg_10": 0.9343,
+          "ndcg_10_grouped": 0.782,
+          "precision_top5pct": 0.3264,
+          "recall_top5pct": 0.4229,
+          "spearman_rho": 0.4913
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 10099,
+          "p0": 636,
+          "ndcg_10": 0.9484,
+          "ndcg_10_grouped": 0.798,
+          "precision_top5pct": 0.3564,
+          "recall_top5pct": 0.283,
+          "spearman_rho": 0.4763
+        },
+        {
+          "instance": "MariaDB",
+          "n": 5649,
+          "p0": 827,
+          "ndcg_10": 0.9774,
+          "ndcg_10_grouped": 0.8881,
+          "precision_top5pct": 0.5265,
+          "recall_top5pct": 0.1802,
+          "spearman_rho": 0.4177
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3708,
+          "p0": 180,
+          "ndcg_10": 0.8643,
+          "ndcg_10_grouped": 0.6964,
+          "precision_top5pct": 0.0323,
+          "recall_top5pct": 0.0333,
+          "spearman_rho": 0.0886
+        },
+        {
+          "instance": "Spring",
+          "n": 3560,
+          "p0": 73,
+          "ndcg_10": 0.6991,
+          "ndcg_10_grouped": 0.7831,
+          "precision_top5pct": 0.1067,
+          "recall_top5pct": 0.2603,
+          "spearman_rho": 0.5031
+        },
+        {
+          "instance": "Sakai",
+          "n": 2550,
+          "p0": 191,
+          "ndcg_10": 0.9179,
+          "ndcg_10_grouped": 0.8717,
+          "precision_top5pct": 0.2734,
+          "recall_top5pct": 0.1832,
+          "spearman_rho": 0.6154
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1480,
+          "p0": 138,
+          "ndcg_10": 0.9285,
+          "ndcg_10_grouped": 0.8826,
+          "precision_top5pct": 0.3919,
+          "recall_top5pct": 0.2101,
+          "spearman_rho": 0.344
+        },
+        {
+          "instance": "JFrog",
+          "n": 1244,
+          "p0": 211,
+          "ndcg_10": 0.8318,
+          "ndcg_10_grouped": 0.87,
+          "precision_top5pct": 0.4286,
+          "recall_top5pct": 0.128,
+          "spearman_rho": 0.4946
+        },
+        {
+          "instance": "Mindville",
+          "n": 267,
+          "p0": 16,
+          "ndcg_10": 0.8945,
+          "ndcg_10_grouped": 0.9073,
+          "precision_top5pct": 0.2857,
+          "recall_top5pct": 0.25,
+          "spearman_rho": 0.6828
+        },
+        {
+          "instance": "SecondLife",
+          "n": 3,
+          "p0": 0,
+          "ndcg_10": 0.9541,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": -0.5
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T0_create",
+      "iteration": 1,
+      "split": "test",
+      "timestamp": "2026-11-03T22:36:50.701814+00:00",
+      "n_samples": 346174,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T0_create/criticality_test.csv",
+      "metrics": {
+        "ndcg_10": 0.8518,
+        "ndcg_10_grouped": 0.8518,
+        "ndcg_10_global": 0.7475,
+        "ndcg_50_grouped": 0.8994,
+        "precision_top5pct": 0.2171,
+        "recall_top5pct": 0.217,
+        "spearman_rho": 0.5448,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.1867,
+        "roc_auc": 0.8187,
+        "tp_top5": 3757,
+        "k_top5": 17309,
+        "total_p0": 17311
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": false,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": false,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Mojang",
+          "n": 151046,
+          "p0": 413,
+          "ndcg_10": 0.5003,
+          "ndcg_10_grouped": 0.6163,
+          "precision_top5pct": 0.0165,
+          "recall_top5pct": 0.3027,
+          "spearman_rho": 0.4529
+        },
+        {
+          "instance": "Apache",
+          "n": 70263,
+          "p0": 5208,
+          "ndcg_10": 0.9357,
+          "ndcg_10_grouped": 0.9077,
+          "precision_top5pct": 0.2251,
+          "recall_top5pct": 0.1519,
+          "spearman_rho": 0.5546
+        },
+        {
+          "instance": "RedHat",
+          "n": 48816,
+          "p0": 7078,
+          "ndcg_10": 0.8162,
+          "ndcg_10_grouped": 0.9024,
+          "precision_top5pct": 0.3859,
+          "recall_top5pct": 0.1331,
+          "spearman_rho": 0.4955
+        },
+        {
+          "instance": "MongoDB",
+          "n": 24120,
+          "p0": 2283,
+          "ndcg_10": 0.7033,
+          "ndcg_10_grouped": 0.6965,
+          "precision_top5pct": 0.1609,
+          "recall_top5pct": 0.085,
+          "spearman_rho": 0.3617
+        },
+        {
+          "instance": "Sonatype",
+          "n": 20125,
+          "p0": 115,
+          "ndcg_10": 0.9107,
+          "ndcg_10_grouped": 0.9207,
+          "precision_top5pct": 0.0546,
+          "recall_top5pct": 0.4783,
+          "spearman_rho": 0.2688
+        },
+        {
+          "instance": "Qt",
+          "n": 16094,
+          "p0": 836,
+          "ndcg_10": 0.9114,
+          "ndcg_10_grouped": 0.6555,
+          "precision_top5pct": 0.2311,
+          "recall_top5pct": 0.2225,
+          "spearman_rho": 0.1028
+        },
+        {
+          "instance": "Jira",
+          "n": 4608,
+          "p0": 171,
+          "ndcg_10": 0.8843,
+          "ndcg_10_grouped": 0.6212,
+          "precision_top5pct": 0.026,
+          "recall_top5pct": 0.0351,
+          "spearman_rho": 0.2939
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3208,
+          "p0": 331,
+          "ndcg_10": 0.9161,
+          "ndcg_10_grouped": 0.708,
+          "precision_top5pct": 0.2236,
+          "recall_top5pct": 0.1088,
+          "spearman_rho": -0.0957
+        },
+        {
+          "instance": "Sakai",
+          "n": 1842,
+          "p0": 209,
+          "ndcg_10": 0.9252,
+          "ndcg_10_grouped": 0.9396,
+          "precision_top5pct": 0.4194,
+          "recall_top5pct": 0.1866,
+          "spearman_rho": 0.6556
+        },
+        {
+          "instance": "MariaDB",
+          "n": 1739,
+          "p0": 222,
+          "ndcg_10": 0.832,
+          "ndcg_10_grouped": 0.9181,
+          "precision_top5pct": 0.3333,
+          "recall_top5pct": 0.1306,
+          "spearman_rho": 0.486
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1338,
+          "p0": 243,
+          "ndcg_10": 0.8686,
+          "ndcg_10_grouped": 0.9171,
+          "precision_top5pct": 0.2239,
+          "recall_top5pct": 0.0617,
+          "spearman_rho": 0.3951
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 1173,
+          "p0": 79,
+          "ndcg_10": 0.9554,
+          "ndcg_10_grouped": 0.8413,
+          "precision_top5pct": 0.2373,
+          "recall_top5pct": 0.1772,
+          "spearman_rho": 0.4412
+        },
+        {
+          "instance": "Spring",
+          "n": 1091,
+          "p0": 24,
+          "ndcg_10": 0.9252,
+          "ndcg_10_grouped": 0.7233,
+          "precision_top5pct": 0.1818,
+          "recall_top5pct": 0.4167,
+          "spearman_rho": 0.5309
+        },
+        {
+          "instance": "JFrog",
+          "n": 618,
+          "p0": 95,
+          "ndcg_10": 0.7699,
+          "ndcg_10_grouped": 0.8778,
+          "precision_top5pct": 0.2581,
+          "recall_top5pct": 0.0842,
+          "spearman_rho": 0.4883
+        },
+        {
+          "instance": "Mindville",
+          "n": 91,
+          "p0": 4,
+          "ndcg_10": 0.8955,
+          "ndcg_10_grouped": 0.9035,
+          "precision_top5pct": 0.4,
+          "recall_top5pct": 0.5,
+          "spearman_rho": 0.5571
+        },
+        {
+          "instance": "SecondLife",
+          "n": 2,
+          "p0": 0,
+          "ndcg_10": 1.0,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": NaN
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T3_change",
+      "iteration": 1,
+      "split": "val",
+      "timestamp": "2026-11-03T22:36:57.906929+00:00",
+      "n_samples": 346172,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T3_change/criticality_val.csv",
+      "metrics": {
+        "ndcg_10": 0.9565,
+        "ndcg_10_grouped": 0.8579,
+        "ndcg_10_global": 0.9565,
+        "ndcg_50_grouped": 0.9023,
+        "precision_top5pct": 0.4024,
+        "recall_top5pct": 0.3922,
+        "spearman_rho": 0.5966,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.3699,
+        "roc_auc": 0.8349,
+        "tp_top5": 6965,
+        "k_top5": 17309,
+        "total_p0": 17758
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": true,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": false,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Apache",
+          "n": 96818,
+          "p0": 6049,
+          "ndcg_10": 0.8247,
+          "ndcg_10_grouped": 0.8797,
+          "precision_top5pct": 0.3563,
+          "recall_top5pct": 0.2852,
+          "spearman_rho": 0.5774
+        },
+        {
+          "instance": "Mojang",
+          "n": 96674,
+          "p0": 65,
+          "ndcg_10": 0.7844,
+          "ndcg_10_grouped": 0.6969,
+          "precision_top5pct": 0.0006,
+          "recall_top5pct": 0.0462,
+          "spearman_rho": 0.5433
+        },
+        {
+          "instance": "RedHat",
+          "n": 47175,
+          "p0": 4078,
+          "ndcg_10": 0.9247,
+          "ndcg_10_grouped": 0.8849,
+          "precision_top5pct": 0.4684,
+          "recall_top5pct": 0.271,
+          "spearman_rho": 0.537
+        },
+        {
+          "instance": "MongoDB",
+          "n": 26878,
+          "p0": 3621,
+          "ndcg_10": 0.9759,
+          "ndcg_10_grouped": 0.8417,
+          "precision_top5pct": 0.8981,
+          "recall_top5pct": 0.3333,
+          "spearman_rho": 0.5922
+        },
+        {
+          "instance": "Qt",
+          "n": 19461,
+          "p0": 1031,
+          "ndcg_10": 0.8799,
+          "ndcg_10_grouped": 0.7437,
+          "precision_top5pct": 0.5411,
+          "recall_top5pct": 0.5112,
+          "spearman_rho": 0.3461
+        },
+        {
+          "instance": "Sonatype",
+          "n": 16151,
+          "p0": 84,
+          "ndcg_10": 0.8913,
+          "ndcg_10_grouped": 0.8764,
+          "precision_top5pct": 0.0705,
+          "recall_top5pct": 0.6786,
+          "spearman_rho": 0.3783
+        },
+        {
+          "instance": "Jira",
+          "n": 14455,
+          "p0": 558,
+          "ndcg_10": 0.9251,
+          "ndcg_10_grouped": 0.7982,
+          "precision_top5pct": 0.3195,
+          "recall_top5pct": 0.414,
+          "spearman_rho": 0.5274
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 10099,
+          "p0": 636,
+          "ndcg_10": 0.9197,
+          "ndcg_10_grouped": 0.8084,
+          "precision_top5pct": 0.3505,
+          "recall_top5pct": 0.2783,
+          "spearman_rho": 0.5174
+        },
+        {
+          "instance": "MariaDB",
+          "n": 5649,
+          "p0": 827,
+          "ndcg_10": 0.9761,
+          "ndcg_10_grouped": 0.8902,
+          "precision_top5pct": 0.7173,
+          "recall_top5pct": 0.2455,
+          "spearman_rho": 0.4734
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3708,
+          "p0": 180,
+          "ndcg_10": 0.845,
+          "ndcg_10_grouped": 0.7398,
+          "precision_top5pct": 0.0323,
+          "recall_top5pct": 0.0333,
+          "spearman_rho": 0.3338
+        },
+        {
+          "instance": "Spring",
+          "n": 3560,
+          "p0": 73,
+          "ndcg_10": 0.9274,
+          "ndcg_10_grouped": 0.7849,
+          "precision_top5pct": 0.118,
+          "recall_top5pct": 0.2877,
+          "spearman_rho": 0.5565
+        },
+        {
+          "instance": "Sakai",
+          "n": 2550,
+          "p0": 191,
+          "ndcg_10": 0.9424,
+          "ndcg_10_grouped": 0.891,
+          "precision_top5pct": 0.375,
+          "recall_top5pct": 0.2513,
+          "spearman_rho": 0.651
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1480,
+          "p0": 138,
+          "ndcg_10": 0.938,
+          "ndcg_10_grouped": 0.8978,
+          "precision_top5pct": 0.3919,
+          "recall_top5pct": 0.2101,
+          "spearman_rho": 0.4319
+        },
+        {
+          "instance": "JFrog",
+          "n": 1244,
+          "p0": 211,
+          "ndcg_10": 0.9738,
+          "ndcg_10_grouped": 0.8985,
+          "precision_top5pct": 0.5238,
+          "recall_top5pct": 0.1564,
+          "spearman_rho": 0.5565
+        },
+        {
+          "instance": "Mindville",
+          "n": 267,
+          "p0": 16,
+          "ndcg_10": 0.8555,
+          "ndcg_10_grouped": 0.9175,
+          "precision_top5pct": 0.2857,
+          "recall_top5pct": 0.25,
+          "spearman_rho": 0.6539
+        },
+        {
+          "instance": "SecondLife",
+          "n": 3,
+          "p0": 0,
+          "ndcg_10": 0.9541,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": -0.5
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T3_change",
+      "iteration": 1,
+      "split": "test",
+      "timestamp": "2026-11-03T22:37:03.375533+00:00",
+      "n_samples": 346174,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T3_change/criticality_test.csv",
+      "metrics": {
+        "ndcg_10": 0.8689,
+        "ndcg_10_grouped": 0.8689,
+        "ndcg_10_global": 0.8524,
+        "ndcg_50_grouped": 0.9097,
+        "precision_top5pct": 0.2863,
+        "recall_top5pct": 0.2863,
+        "spearman_rho": 0.6191,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.2487,
+        "roc_auc": 0.8386,
+        "tp_top5": 4956,
+        "k_top5": 17309,
+        "total_p0": 17311
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": true,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": false,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Mojang",
+          "n": 151046,
+          "p0": 413,
+          "ndcg_10": 0.6701,
+          "ndcg_10_grouped": 0.6551,
+          "precision_top5pct": 0.0359,
+          "recall_top5pct": 0.6562,
+          "spearman_rho": 0.5287
+        },
+        {
+          "instance": "Apache",
+          "n": 70263,
+          "p0": 5208,
+          "ndcg_10": 0.9531,
+          "ndcg_10_grouped": 0.915,
+          "precision_top5pct": 0.3085,
+          "recall_top5pct": 0.2081,
+          "spearman_rho": 0.576
+        },
+        {
+          "instance": "RedHat",
+          "n": 48816,
+          "p0": 7078,
+          "ndcg_10": 0.967,
+          "ndcg_10_grouped": 0.9084,
+          "precision_top5pct": 0.4154,
+          "recall_top5pct": 0.1433,
+          "spearman_rho": 0.5295
+        },
+        {
+          "instance": "MongoDB",
+          "n": 24120,
+          "p0": 2283,
+          "ndcg_10": 0.8436,
+          "ndcg_10_grouped": 0.7668,
+          "precision_top5pct": 0.3897,
+          "recall_top5pct": 0.2059,
+          "spearman_rho": 0.4483
+        },
+        {
+          "instance": "Sonatype",
+          "n": 20125,
+          "p0": 115,
+          "ndcg_10": 0.8986,
+          "ndcg_10_grouped": 0.9081,
+          "precision_top5pct": 0.0437,
+          "recall_top5pct": 0.3826,
+          "spearman_rho": 0.2702
+        },
+        {
+          "instance": "Qt",
+          "n": 16094,
+          "p0": 836,
+          "ndcg_10": 0.9893,
+          "ndcg_10_grouped": 0.745,
+          "precision_top5pct": 0.5466,
+          "recall_top5pct": 0.5263,
+          "spearman_rho": 0.2524
+        },
+        {
+          "instance": "Jira",
+          "n": 4608,
+          "p0": 171,
+          "ndcg_10": 0.891,
+          "ndcg_10_grouped": 0.6393,
+          "precision_top5pct": 0.0303,
+          "recall_top5pct": 0.0409,
+          "spearman_rho": 0.3254
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3208,
+          "p0": 331,
+          "ndcg_10": 0.8702,
+          "ndcg_10_grouped": 0.8032,
+          "precision_top5pct": 0.2795,
+          "recall_top5pct": 0.136,
+          "spearman_rho": 0.2058
+        },
+        {
+          "instance": "Sakai",
+          "n": 1842,
+          "p0": 209,
+          "ndcg_10": 0.9229,
+          "ndcg_10_grouped": 0.9616,
+          "precision_top5pct": 0.5591,
+          "recall_top5pct": 0.2488,
+          "spearman_rho": 0.6842
+        },
+        {
+          "instance": "MariaDB",
+          "n": 1739,
+          "p0": 222,
+          "ndcg_10": 0.787,
+          "ndcg_10_grouped": 0.923,
+          "precision_top5pct": 0.3448,
+          "recall_top5pct": 0.1351,
+          "spearman_rho": 0.4805
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1338,
+          "p0": 243,
+          "ndcg_10": 0.7959,
+          "ndcg_10_grouped": 0.9165,
+          "precision_top5pct": 0.3433,
+          "recall_top5pct": 0.0947,
+          "spearman_rho": 0.4775
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 1173,
+          "p0": 79,
+          "ndcg_10": 0.9725,
+          "ndcg_10_grouped": 0.8521,
+          "precision_top5pct": 0.2712,
+          "recall_top5pct": 0.2025,
+          "spearman_rho": 0.5441
+        },
+        {
+          "instance": "Spring",
+          "n": 1091,
+          "p0": 24,
+          "ndcg_10": 0.9478,
+          "ndcg_10_grouped": 0.7659,
+          "precision_top5pct": 0.2182,
+          "recall_top5pct": 0.5,
+          "spearman_rho": 0.6113
+        },
+        {
+          "instance": "JFrog",
+          "n": 618,
+          "p0": 95,
+          "ndcg_10": 0.8551,
+          "ndcg_10_grouped": 0.8989,
+          "precision_top5pct": 0.2903,
+          "recall_top5pct": 0.0947,
+          "spearman_rho": 0.4965
+        },
+        {
+          "instance": "Mindville",
+          "n": 91,
+          "p0": 4,
+          "ndcg_10": 0.9248,
+          "ndcg_10_grouped": 0.9102,
+          "precision_top5pct": 0.4,
+          "recall_top5pct": 0.5,
+          "spearman_rho": 0.5667
+        },
+        {
+          "instance": "SecondLife",
+          "n": 2,
+          "p0": 0,
+          "ndcg_10": 1.0,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": NaN
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T5_change",
+      "iteration": 1,
+      "split": "val",
+      "timestamp": "2026-11-03T22:37:10.828448+00:00",
+      "n_samples": 346172,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T5_change/criticality_val.csv",
+      "metrics": {
+        "ndcg_10": 0.9468,
+        "ndcg_10_grouped": 0.8593,
+        "ndcg_10_global": 0.9468,
+        "ndcg_50_grouped": 0.9034,
+        "precision_top5pct": 0.405,
+        "recall_top5pct": 0.3948,
+        "spearman_rho": 0.601,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.3734,
+        "roc_auc": 0.8345,
+        "tp_top5": 7011,
+        "k_top5": 17309,
+        "total_p0": 17758
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": true,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": false,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Apache",
+          "n": 96818,
+          "p0": 6049,
+          "ndcg_10": 0.8145,
+          "ndcg_10_grouped": 0.8809,
+          "precision_top5pct": 0.36,
+          "recall_top5pct": 0.2881,
+          "spearman_rho": 0.5837
+        },
+        {
+          "instance": "Mojang",
+          "n": 96674,
+          "p0": 65,
+          "ndcg_10": 0.7443,
+          "ndcg_10_grouped": 0.6998,
+          "precision_top5pct": 0.001,
+          "recall_top5pct": 0.0769,
+          "spearman_rho": 0.5469
+        },
+        {
+          "instance": "RedHat",
+          "n": 47175,
+          "p0": 4078,
+          "ndcg_10": 0.9159,
+          "ndcg_10_grouped": 0.8856,
+          "precision_top5pct": 0.4731,
+          "recall_top5pct": 0.2737,
+          "spearman_rho": 0.5457
+        },
+        {
+          "instance": "MongoDB",
+          "n": 26878,
+          "p0": 3621,
+          "ndcg_10": 0.9743,
+          "ndcg_10_grouped": 0.8431,
+          "precision_top5pct": 0.9033,
+          "recall_top5pct": 0.3353,
+          "spearman_rho": 0.5965
+        },
+        {
+          "instance": "Qt",
+          "n": 19461,
+          "p0": 1031,
+          "ndcg_10": 0.8833,
+          "ndcg_10_grouped": 0.7442,
+          "precision_top5pct": 0.5431,
+          "recall_top5pct": 0.5131,
+          "spearman_rho": 0.3599
+        },
+        {
+          "instance": "Sonatype",
+          "n": 16151,
+          "p0": 84,
+          "ndcg_10": 0.8913,
+          "ndcg_10_grouped": 0.8783,
+          "precision_top5pct": 0.0668,
+          "recall_top5pct": 0.6429,
+          "spearman_rho": 0.3827
+        },
+        {
+          "instance": "Jira",
+          "n": 14455,
+          "p0": 558,
+          "ndcg_10": 0.9218,
+          "ndcg_10_grouped": 0.8011,
+          "precision_top5pct": 0.3195,
+          "recall_top5pct": 0.414,
+          "spearman_rho": 0.5306
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 10099,
+          "p0": 636,
+          "ndcg_10": 0.9192,
+          "ndcg_10_grouped": 0.8085,
+          "precision_top5pct": 0.3446,
+          "recall_top5pct": 0.2736,
+          "spearman_rho": 0.5241
+        },
+        {
+          "instance": "MariaDB",
+          "n": 5649,
+          "p0": 827,
+          "ndcg_10": 0.9761,
+          "ndcg_10_grouped": 0.8896,
+          "precision_top5pct": 0.7067,
+          "recall_top5pct": 0.2418,
+          "spearman_rho": 0.4769
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3708,
+          "p0": 180,
+          "ndcg_10": 0.8492,
+          "ndcg_10_grouped": 0.7535,
+          "precision_top5pct": 0.0323,
+          "recall_top5pct": 0.0333,
+          "spearman_rho": 0.3546
+        },
+        {
+          "instance": "Spring",
+          "n": 3560,
+          "p0": 73,
+          "ndcg_10": 0.9299,
+          "ndcg_10_grouped": 0.7896,
+          "precision_top5pct": 0.118,
+          "recall_top5pct": 0.2877,
+          "spearman_rho": 0.5729
+        },
+        {
+          "instance": "Sakai",
+          "n": 2550,
+          "p0": 191,
+          "ndcg_10": 0.9561,
+          "ndcg_10_grouped": 0.8869,
+          "precision_top5pct": 0.3672,
+          "recall_top5pct": 0.2461,
+          "spearman_rho": 0.6566
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1480,
+          "p0": 138,
+          "ndcg_10": 0.952,
+          "ndcg_10_grouped": 0.903,
+          "precision_top5pct": 0.4324,
+          "recall_top5pct": 0.2319,
+          "spearman_rho": 0.4369
+        },
+        {
+          "instance": "JFrog",
+          "n": 1244,
+          "p0": 211,
+          "ndcg_10": 0.9431,
+          "ndcg_10_grouped": 0.8992,
+          "precision_top5pct": 0.5079,
+          "recall_top5pct": 0.1517,
+          "spearman_rho": 0.5676
+        },
+        {
+          "instance": "Mindville",
+          "n": 267,
+          "p0": 16,
+          "ndcg_10": 0.8604,
+          "ndcg_10_grouped": 0.9189,
+          "precision_top5pct": 0.2857,
+          "recall_top5pct": 0.25,
+          "spearman_rho": 0.6667
+        },
+        {
+          "instance": "SecondLife",
+          "n": 3,
+          "p0": 0,
+          "ndcg_10": 0.9541,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": -0.5
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T5_change",
+      "iteration": 1,
+      "split": "test",
+      "timestamp": "2026-11-03T22:37:16.655953+00:00",
+      "n_samples": 346174,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T5_change/criticality_test.csv",
+      "metrics": {
+        "ndcg_10": 0.8705,
+        "ndcg_10_grouped": 0.8705,
+        "ndcg_10_global": 0.8527,
+        "ndcg_50_grouped": 0.9109,
+        "precision_top5pct": 0.29,
+        "recall_top5pct": 0.29,
+        "spearman_rho": 0.6262,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.2508,
+        "roc_auc": 0.8366,
+        "tp_top5": 5020,
+        "k_top5": 17309,
+        "total_p0": 17311
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": true,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": false,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Mojang",
+          "n": 151046,
+          "p0": 413,
+          "ndcg_10": 0.664,
+          "ndcg_10_grouped": 0.6584,
+          "precision_top5pct": 0.034,
+          "recall_top5pct": 0.6223,
+          "spearman_rho": 0.5345
+        },
+        {
+          "instance": "Apache",
+          "n": 70263,
+          "p0": 5208,
+          "ndcg_10": 0.9551,
+          "ndcg_10_grouped": 0.9164,
+          "precision_top5pct": 0.3113,
+          "recall_top5pct": 0.2101,
+          "spearman_rho": 0.5826
+        },
+        {
+          "instance": "RedHat",
+          "n": 48816,
+          "p0": 7078,
+          "ndcg_10": 0.9751,
+          "ndcg_10_grouped": 0.9098,
+          "precision_top5pct": 0.4162,
+          "recall_top5pct": 0.1435,
+          "spearman_rho": 0.5385
+        },
+        {
+          "instance": "MongoDB",
+          "n": 24120,
+          "p0": 2283,
+          "ndcg_10": 0.852,
+          "ndcg_10_grouped": 0.7673,
+          "precision_top5pct": 0.3939,
+          "recall_top5pct": 0.2081,
+          "spearman_rho": 0.466
+        },
+        {
+          "instance": "Sonatype",
+          "n": 20125,
+          "p0": 115,
+          "ndcg_10": 0.8977,
+          "ndcg_10_grouped": 0.9039,
+          "precision_top5pct": 0.0397,
+          "recall_top5pct": 0.3478,
+          "spearman_rho": 0.2594
+        },
+        {
+          "instance": "Qt",
+          "n": 16094,
+          "p0": 836,
+          "ndcg_10": 0.9891,
+          "ndcg_10_grouped": 0.7557,
+          "precision_top5pct": 0.5478,
+          "recall_top5pct": 0.5275,
+          "spearman_rho": 0.2708
+        },
+        {
+          "instance": "Jira",
+          "n": 4608,
+          "p0": 171,
+          "ndcg_10": 0.891,
+          "ndcg_10_grouped": 0.6393,
+          "precision_top5pct": 0.026,
+          "recall_top5pct": 0.0351,
+          "spearman_rho": 0.3189
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3208,
+          "p0": 331,
+          "ndcg_10": 0.8702,
+          "ndcg_10_grouped": 0.7835,
+          "precision_top5pct": 0.2547,
+          "recall_top5pct": 0.1239,
+          "spearman_rho": 0.2207
+        },
+        {
+          "instance": "Sakai",
+          "n": 1842,
+          "p0": 209,
+          "ndcg_10": 0.9181,
+          "ndcg_10_grouped": 0.9576,
+          "precision_top5pct": 0.5161,
+          "recall_top5pct": 0.2297,
+          "spearman_rho": 0.6896
+        },
+        {
+          "instance": "MariaDB",
+          "n": 1739,
+          "p0": 222,
+          "ndcg_10": 0.806,
+          "ndcg_10_grouped": 0.9233,
+          "precision_top5pct": 0.3793,
+          "recall_top5pct": 0.1486,
+          "spearman_rho": 0.4885
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1338,
+          "p0": 243,
+          "ndcg_10": 0.8483,
+          "ndcg_10_grouped": 0.9185,
+          "precision_top5pct": 0.3731,
+          "recall_top5pct": 0.1029,
+          "spearman_rho": 0.4787
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 1173,
+          "p0": 79,
+          "ndcg_10": 0.9739,
+          "ndcg_10_grouped": 0.8558,
+          "precision_top5pct": 0.2881,
+          "recall_top5pct": 0.2152,
+          "spearman_rho": 0.5529
+        },
+        {
+          "instance": "Spring",
+          "n": 1091,
+          "p0": 24,
+          "ndcg_10": 0.9479,
+          "ndcg_10_grouped": 0.7727,
+          "precision_top5pct": 0.2182,
+          "recall_top5pct": 0.5,
+          "spearman_rho": 0.6345
+        },
+        {
+          "instance": "JFrog",
+          "n": 618,
+          "p0": 95,
+          "ndcg_10": 0.8601,
+          "ndcg_10_grouped": 0.9083,
+          "precision_top5pct": 0.2903,
+          "recall_top5pct": 0.0947,
+          "spearman_rho": 0.4895
+        },
+        {
+          "instance": "Mindville",
+          "n": 91,
+          "p0": 4,
+          "ndcg_10": 0.9246,
+          "ndcg_10_grouped": 0.8902,
+          "precision_top5pct": 0.4,
+          "recall_top5pct": 0.5,
+          "spearman_rho": 0.5606
+        },
+        {
+          "instance": "SecondLife",
+          "n": 2,
+          "p0": 0,
+          "ndcg_10": 1.0,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": NaN
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T7_change",
+      "iteration": 1,
+      "split": "val",
+      "timestamp": "2026-11-03T22:37:24.134188+00:00",
+      "n_samples": 346172,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T7_change/criticality_val.csv",
+      "metrics": {
+        "ndcg_10": 0.9469,
+        "ndcg_10_grouped": 0.8608,
+        "ndcg_10_global": 0.9469,
+        "ndcg_50_grouped": 0.9046,
+        "precision_top5pct": 0.4058,
+        "recall_top5pct": 0.3955,
+        "spearman_rho": 0.6072,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.3755,
+        "roc_auc": 0.8344,
+        "tp_top5": 7024,
+        "k_top5": 17309,
+        "total_p0": 17758
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": true,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": false,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Apache",
+          "n": 96818,
+          "p0": 6049,
+          "ndcg_10": 0.8145,
+          "ndcg_10_grouped": 0.882,
+          "precision_top5pct": 0.3623,
+          "recall_top5pct": 0.29,
+          "spearman_rho": 0.5885
+        },
+        {
+          "instance": "Mojang",
+          "n": 96674,
+          "p0": 65,
+          "ndcg_10": 0.7521,
+          "ndcg_10_grouped": 0.7006,
+          "precision_top5pct": 0.0008,
+          "recall_top5pct": 0.0615,
+          "spearman_rho": 0.5502
+        },
+        {
+          "instance": "RedHat",
+          "n": 47175,
+          "p0": 4078,
+          "ndcg_10": 0.9694,
+          "ndcg_10_grouped": 0.8884,
+          "precision_top5pct": 0.4748,
+          "recall_top5pct": 0.2746,
+          "spearman_rho": 0.5541
+        },
+        {
+          "instance": "MongoDB",
+          "n": 26878,
+          "p0": 3621,
+          "ndcg_10": 0.9695,
+          "ndcg_10_grouped": 0.8452,
+          "precision_top5pct": 0.9077,
+          "recall_top5pct": 0.3369,
+          "spearman_rho": 0.6066
+        },
+        {
+          "instance": "Qt",
+          "n": 19461,
+          "p0": 1031,
+          "ndcg_10": 0.8784,
+          "ndcg_10_grouped": 0.746,
+          "precision_top5pct": 0.5421,
+          "recall_top5pct": 0.5121,
+          "spearman_rho": 0.3684
+        },
+        {
+          "instance": "Sonatype",
+          "n": 16151,
+          "p0": 84,
+          "ndcg_10": 0.901,
+          "ndcg_10_grouped": 0.8821,
+          "precision_top5pct": 0.0656,
+          "recall_top5pct": 0.631,
+          "spearman_rho": 0.3835
+        },
+        {
+          "instance": "Jira",
+          "n": 14455,
+          "p0": 558,
+          "ndcg_10": 0.9229,
+          "ndcg_10_grouped": 0.8019,
+          "precision_top5pct": 0.314,
+          "recall_top5pct": 0.4068,
+          "spearman_rho": 0.5326
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 10099,
+          "p0": 636,
+          "ndcg_10": 0.9222,
+          "ndcg_10_grouped": 0.8114,
+          "precision_top5pct": 0.3287,
+          "recall_top5pct": 0.261,
+          "spearman_rho": 0.531
+        },
+        {
+          "instance": "MariaDB",
+          "n": 5649,
+          "p0": 827,
+          "ndcg_10": 0.9761,
+          "ndcg_10_grouped": 0.8909,
+          "precision_top5pct": 0.7032,
+          "recall_top5pct": 0.2406,
+          "spearman_rho": 0.4768
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3708,
+          "p0": 180,
+          "ndcg_10": 0.8447,
+          "ndcg_10_grouped": 0.7429,
+          "precision_top5pct": 0.043,
+          "recall_top5pct": 0.0444,
+          "spearman_rho": 0.3431
+        },
+        {
+          "instance": "Spring",
+          "n": 3560,
+          "p0": 73,
+          "ndcg_10": 0.9269,
+          "ndcg_10_grouped": 0.7879,
+          "precision_top5pct": 0.118,
+          "recall_top5pct": 0.2877,
+          "spearman_rho": 0.5782
+        },
+        {
+          "instance": "Sakai",
+          "n": 2550,
+          "p0": 191,
+          "ndcg_10": 0.9425,
+          "ndcg_10_grouped": 0.8922,
+          "precision_top5pct": 0.3438,
+          "recall_top5pct": 0.2304,
+          "spearman_rho": 0.6625
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1480,
+          "p0": 138,
+          "ndcg_10": 0.9539,
+          "ndcg_10_grouped": 0.902,
+          "precision_top5pct": 0.4324,
+          "recall_top5pct": 0.2319,
+          "spearman_rho": 0.4397
+        },
+        {
+          "instance": "JFrog",
+          "n": 1244,
+          "p0": 211,
+          "ndcg_10": 0.944,
+          "ndcg_10_grouped": 0.9018,
+          "precision_top5pct": 0.5873,
+          "recall_top5pct": 0.1754,
+          "spearman_rho": 0.5694
+        },
+        {
+          "instance": "Mindville",
+          "n": 267,
+          "p0": 16,
+          "ndcg_10": 0.8604,
+          "ndcg_10_grouped": 0.9189,
+          "precision_top5pct": 0.2857,
+          "recall_top5pct": 0.25,
+          "spearman_rho": 0.674
+        },
+        {
+          "instance": "SecondLife",
+          "n": 3,
+          "p0": 0,
+          "ndcg_10": 0.9456,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": -1.0
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T7_change",
+      "iteration": 1,
+      "split": "test",
+      "timestamp": "2026-11-03T22:37:29.642442+00:00",
+      "n_samples": 346174,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T7_change/criticality_test.csv",
+      "metrics": {
+        "ndcg_10": 0.8708,
+        "ndcg_10_grouped": 0.8708,
+        "ndcg_10_global": 0.8516,
+        "ndcg_50_grouped": 0.9116,
+        "precision_top5pct": 0.2923,
+        "recall_top5pct": 0.2922,
+        "spearman_rho": 0.6308,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.2529,
+        "roc_auc": 0.8367,
+        "tp_top5": 5059,
+        "k_top5": 17309,
+        "total_p0": 17311
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": true,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": false,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Mojang",
+          "n": 151046,
+          "p0": 413,
+          "ndcg_10": 0.6776,
+          "ndcg_10_grouped": 0.6645,
+          "precision_top5pct": 0.0346,
+          "recall_top5pct": 0.632,
+          "spearman_rho": 0.5371
+        },
+        {
+          "instance": "Apache",
+          "n": 70263,
+          "p0": 5208,
+          "ndcg_10": 0.9551,
+          "ndcg_10_grouped": 0.9169,
+          "precision_top5pct": 0.3147,
+          "recall_top5pct": 0.2124,
+          "spearman_rho": 0.5868
+        },
+        {
+          "instance": "RedHat",
+          "n": 48816,
+          "p0": 7078,
+          "ndcg_10": 0.9683,
+          "ndcg_10_grouped": 0.9104,
+          "precision_top5pct": 0.4179,
+          "recall_top5pct": 0.1441,
+          "spearman_rho": 0.5437
+        },
+        {
+          "instance": "MongoDB",
+          "n": 24120,
+          "p0": 2283,
+          "ndcg_10": 0.8767,
+          "ndcg_10_grouped": 0.7703,
+          "precision_top5pct": 0.4038,
+          "recall_top5pct": 0.2133,
+          "spearman_rho": 0.4803
+        },
+        {
+          "instance": "Sonatype",
+          "n": 20125,
+          "p0": 115,
+          "ndcg_10": 0.8991,
+          "ndcg_10_grouped": 0.9045,
+          "precision_top5pct": 0.0407,
+          "recall_top5pct": 0.3565,
+          "spearman_rho": 0.2617
+        },
+        {
+          "instance": "Qt",
+          "n": 16094,
+          "p0": 836,
+          "ndcg_10": 0.9891,
+          "ndcg_10_grouped": 0.7565,
+          "precision_top5pct": 0.5329,
+          "recall_top5pct": 0.5132,
+          "spearman_rho": 0.2797
+        },
+        {
+          "instance": "Jira",
+          "n": 4608,
+          "p0": 171,
+          "ndcg_10": 0.891,
+          "ndcg_10_grouped": 0.6323,
+          "precision_top5pct": 0.026,
+          "recall_top5pct": 0.0351,
+          "spearman_rho": 0.3142
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3208,
+          "p0": 331,
+          "ndcg_10": 0.8714,
+          "ndcg_10_grouped": 0.7678,
+          "precision_top5pct": 0.2547,
+          "recall_top5pct": 0.1239,
+          "spearman_rho": 0.2129
+        },
+        {
+          "instance": "Sakai",
+          "n": 1842,
+          "p0": 209,
+          "ndcg_10": 0.888,
+          "ndcg_10_grouped": 0.9516,
+          "precision_top5pct": 0.5591,
+          "recall_top5pct": 0.2488,
+          "spearman_rho": 0.696
+        },
+        {
+          "instance": "MariaDB",
+          "n": 1739,
+          "p0": 222,
+          "ndcg_10": 0.805,
+          "ndcg_10_grouped": 0.9196,
+          "precision_top5pct": 0.3908,
+          "recall_top5pct": 0.1532,
+          "spearman_rho": 0.4825
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1338,
+          "p0": 243,
+          "ndcg_10": 0.8714,
+          "ndcg_10_grouped": 0.9242,
+          "precision_top5pct": 0.4179,
+          "recall_top5pct": 0.1152,
+          "spearman_rho": 0.4931
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 1173,
+          "p0": 79,
+          "ndcg_10": 0.9653,
+          "ndcg_10_grouped": 0.8542,
+          "precision_top5pct": 0.2881,
+          "recall_top5pct": 0.2152,
+          "spearman_rho": 0.5626
+        },
+        {
+          "instance": "Spring",
+          "n": 1091,
+          "p0": 24,
+          "ndcg_10": 0.9655,
+          "ndcg_10_grouped": 0.7704,
+          "precision_top5pct": 0.2182,
+          "recall_top5pct": 0.5,
+          "spearman_rho": 0.6405
+        },
+        {
+          "instance": "JFrog",
+          "n": 618,
+          "p0": 95,
+          "ndcg_10": 0.8592,
+          "ndcg_10_grouped": 0.9125,
+          "precision_top5pct": 0.2903,
+          "recall_top5pct": 0.0947,
+          "spearman_rho": 0.4803
+        },
+        {
+          "instance": "Mindville",
+          "n": 91,
+          "p0": 4,
+          "ndcg_10": 0.9248,
+          "ndcg_10_grouped": 0.8906,
+          "precision_top5pct": 0.4,
+          "recall_top5pct": 0.5,
+          "spearman_rho": 0.5605
+        },
+        {
+          "instance": "SecondLife",
+          "n": 2,
+          "p0": 0,
+          "ndcg_10": 1.0,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": NaN
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T_active_change",
+      "iteration": 1,
+      "split": "val",
+      "timestamp": "2026-11-03T22:37:37.082958+00:00",
+      "n_samples": 346172,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T_active_change/criticality_val.csv",
+      "metrics": {
+        "ndcg_10": 0.9653,
+        "ndcg_10_grouped": 0.933,
+        "ndcg_10_global": 0.9653,
+        "ndcg_50_grouped": 0.9524,
+        "precision_top5pct": 0.4804,
+        "recall_top5pct": 0.4683,
+        "spearman_rho": 0.7484,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.4566,
+        "roc_auc": 0.8583,
+        "tp_top5": 8316,
+        "k_top5": 17309,
+        "total_p0": 17758
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": true,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": true,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Apache",
+          "n": 96818,
+          "p0": 6049,
+          "ndcg_10": 0.993,
+          "ndcg_10_grouped": 0.9337,
+          "precision_top5pct": 0.4675,
+          "recall_top5pct": 0.3741,
+          "spearman_rho": 0.7186
+        },
+        {
+          "instance": "Mojang",
+          "n": 96674,
+          "p0": 65,
+          "ndcg_10": 0.7932,
+          "ndcg_10_grouped": 0.958,
+          "precision_top5pct": 0.001,
+          "recall_top5pct": 0.0769,
+          "spearman_rho": 0.6681
+        },
+        {
+          "instance": "RedHat",
+          "n": 47175,
+          "p0": 4078,
+          "ndcg_10": 0.963,
+          "ndcg_10_grouped": 0.946,
+          "precision_top5pct": 0.5854,
+          "recall_top5pct": 0.3386,
+          "spearman_rho": 0.7497
+        },
+        {
+          "instance": "MongoDB",
+          "n": 26878,
+          "p0": 3621,
+          "ndcg_10": 0.9747,
+          "ndcg_10_grouped": 0.9355,
+          "precision_top5pct": 0.9167,
+          "recall_top5pct": 0.3402,
+          "spearman_rho": 0.7303
+        },
+        {
+          "instance": "Qt",
+          "n": 19461,
+          "p0": 1031,
+          "ndcg_10": 0.873,
+          "ndcg_10_grouped": 0.8904,
+          "precision_top5pct": 0.4979,
+          "recall_top5pct": 0.4704,
+          "spearman_rho": 0.6386
+        },
+        {
+          "instance": "Sonatype",
+          "n": 16151,
+          "p0": 84,
+          "ndcg_10": 0.9733,
+          "ndcg_10_grouped": 0.9681,
+          "precision_top5pct": 0.0705,
+          "recall_top5pct": 0.6786,
+          "spearman_rho": 0.4635
+        },
+        {
+          "instance": "Jira",
+          "n": 14455,
+          "p0": 558,
+          "ndcg_10": 0.9547,
+          "ndcg_10_grouped": 0.9233,
+          "precision_top5pct": 0.3914,
+          "recall_top5pct": 0.5072,
+          "spearman_rho": 0.6825
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 10099,
+          "p0": 636,
+          "ndcg_10": 0.9489,
+          "ndcg_10_grouped": 0.8884,
+          "precision_top5pct": 0.4317,
+          "recall_top5pct": 0.3428,
+          "spearman_rho": 0.6851
+        },
+        {
+          "instance": "MariaDB",
+          "n": 5649,
+          "p0": 827,
+          "ndcg_10": 0.9674,
+          "ndcg_10_grouped": 0.9301,
+          "precision_top5pct": 0.8233,
+          "recall_top5pct": 0.2817,
+          "spearman_rho": 0.6403
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3708,
+          "p0": 180,
+          "ndcg_10": 0.8523,
+          "ndcg_10_grouped": 0.9103,
+          "precision_top5pct": 0.1129,
+          "recall_top5pct": 0.1167,
+          "spearman_rho": 0.5801
+        },
+        {
+          "instance": "Spring",
+          "n": 3560,
+          "p0": 73,
+          "ndcg_10": 0.9442,
+          "ndcg_10_grouped": 0.9184,
+          "precision_top5pct": 0.1685,
+          "recall_top5pct": 0.411,
+          "spearman_rho": 0.7782
+        },
+        {
+          "instance": "Sakai",
+          "n": 2550,
+          "p0": 191,
+          "ndcg_10": 0.9146,
+          "ndcg_10_grouped": 0.9534,
+          "precision_top5pct": 0.6719,
+          "recall_top5pct": 0.4503,
+          "spearman_rho": 0.7771
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1480,
+          "p0": 138,
+          "ndcg_10": 0.9704,
+          "ndcg_10_grouped": 0.9625,
+          "precision_top5pct": 0.5946,
+          "recall_top5pct": 0.3188,
+          "spearman_rho": 0.694
+        },
+        {
+          "instance": "JFrog",
+          "n": 1244,
+          "p0": 211,
+          "ndcg_10": 0.9749,
+          "ndcg_10_grouped": 0.9387,
+          "precision_top5pct": 0.9206,
+          "recall_top5pct": 0.2749,
+          "spearman_rho": 0.7037
+        },
+        {
+          "instance": "Mindville",
+          "n": 267,
+          "p0": 16,
+          "ndcg_10": 0.9004,
+          "ndcg_10_grouped": 0.9368,
+          "precision_top5pct": 0.3571,
+          "recall_top5pct": 0.3125,
+          "spearman_rho": 0.7534
+        },
+        {
+          "instance": "SecondLife",
+          "n": 3,
+          "p0": 0,
+          "ndcg_10": 0.9618,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": -0.5
+        }
+      ]
+    },
+    {
+      "track": "DualTGN_Crit_T_active_change",
+      "iteration": 1,
+      "split": "test",
+      "timestamp": "2026-11-03T22:37:42.523911+00:00",
+      "n_samples": 346174,
+      "pred_file": "data/tgn_full_v2/predictions_dual_head/T_active_change/criticality_test.csv",
+      "metrics": {
+        "ndcg_10": 0.9217,
+        "ndcg_10_grouped": 0.9217,
+        "ndcg_10_global": 0.9189,
+        "ndcg_50_grouped": 0.9467,
+        "precision_top5pct": 0.4867,
+        "recall_top5pct": 0.4867,
+        "spearman_rho": 0.7534,
+        "spearman_pvalue": 0.0,
+        "pr_auc": 0.4133,
+        "roc_auc": 0.875,
+        "tp_top5": 8425,
+        "k_top5": 17309,
+        "total_p0": 17311
+      },
+      "target_status": {
+        "ndcg_10_passed (>= 0.85)": true,
+        "precision_top5pct_passed (>= 0.75)": false,
+        "spearman_rho_passed (>= 0.7)": true,
+        "zero_temporal_leakage": true,
+        "all_constraints_met": false
+      },
+      "per_instance": [
+        {
+          "instance": "Mojang",
+          "n": 151046,
+          "p0": 413,
+          "ndcg_10": 0.944,
+          "ndcg_10_grouped": 0.94,
+          "precision_top5pct": 0.0442,
+          "recall_top5pct": 0.8087,
+          "spearman_rho": 0.6542
+        },
+        {
+          "instance": "Apache",
+          "n": 70263,
+          "p0": 5208,
+          "ndcg_10": 0.9975,
+          "ndcg_10_grouped": 0.9422,
+          "precision_top5pct": 0.527,
+          "recall_top5pct": 0.3556,
+          "spearman_rho": 0.6831
+        },
+        {
+          "instance": "RedHat",
+          "n": 48816,
+          "p0": 7078,
+          "ndcg_10": 0.9674,
+          "ndcg_10_grouped": 0.9425,
+          "precision_top5pct": 0.6452,
+          "recall_top5pct": 0.2225,
+          "spearman_rho": 0.6998
+        },
+        {
+          "instance": "MongoDB",
+          "n": 24120,
+          "p0": 2283,
+          "ndcg_10": 0.9583,
+          "ndcg_10_grouped": 0.8744,
+          "precision_top5pct": 0.4138,
+          "recall_top5pct": 0.2186,
+          "spearman_rho": 0.6292
+        },
+        {
+          "instance": "Sonatype",
+          "n": 20125,
+          "p0": 115,
+          "ndcg_10": 0.9694,
+          "ndcg_10_grouped": 0.9399,
+          "precision_top5pct": 0.1023,
+          "recall_top5pct": 0.8957,
+          "spearman_rho": 0.2966
+        },
+        {
+          "instance": "Qt",
+          "n": 16094,
+          "p0": 836,
+          "ndcg_10": 0.9916,
+          "ndcg_10_grouped": 0.8619,
+          "precision_top5pct": 0.4807,
+          "recall_top5pct": 0.4629,
+          "spearman_rho": 0.5341
+        },
+        {
+          "instance": "Jira",
+          "n": 4608,
+          "p0": 171,
+          "ndcg_10": 0.915,
+          "ndcg_10_grouped": 0.7563,
+          "precision_top5pct": 0.1732,
+          "recall_top5pct": 0.2339,
+          "spearman_rho": 0.4721
+        },
+        {
+          "instance": "IntelDAOS",
+          "n": 3208,
+          "p0": 331,
+          "ndcg_10": 0.9778,
+          "ndcg_10_grouped": 0.8982,
+          "precision_top5pct": 0.4037,
+          "recall_top5pct": 0.1964,
+          "spearman_rho": 0.4028
+        },
+        {
+          "instance": "Sakai",
+          "n": 1842,
+          "p0": 209,
+          "ndcg_10": 0.9961,
+          "ndcg_10_grouped": 0.9806,
+          "precision_top5pct": 0.7849,
+          "recall_top5pct": 0.3493,
+          "spearman_rho": 0.786
+        },
+        {
+          "instance": "MariaDB",
+          "n": 1739,
+          "p0": 222,
+          "ndcg_10": 0.9625,
+          "ndcg_10_grouped": 0.9433,
+          "precision_top5pct": 0.5517,
+          "recall_top5pct": 0.2162,
+          "spearman_rho": 0.5532
+        },
+        {
+          "instance": "JiraEcosystem",
+          "n": 1338,
+          "p0": 243,
+          "ndcg_10": 0.9055,
+          "ndcg_10_grouped": 0.9474,
+          "precision_top5pct": 0.6567,
+          "recall_top5pct": 0.1811,
+          "spearman_rho": 0.6483
+        },
+        {
+          "instance": "Hyperledger",
+          "n": 1173,
+          "p0": 79,
+          "ndcg_10": 0.9914,
+          "ndcg_10_grouped": 0.9174,
+          "precision_top5pct": 0.3898,
+          "recall_top5pct": 0.2911,
+          "spearman_rho": 0.6886
+        },
+        {
+          "instance": "Spring",
+          "n": 1091,
+          "p0": 24,
+          "ndcg_10": 0.9707,
+          "ndcg_10_grouped": 0.9094,
+          "precision_top5pct": 0.2182,
+          "recall_top5pct": 0.5,
+          "spearman_rho": 0.815
+        },
+        {
+          "instance": "JFrog",
+          "n": 618,
+          "p0": 95,
+          "ndcg_10": 0.9153,
+          "ndcg_10_grouped": 0.9174,
+          "precision_top5pct": 0.5484,
+          "recall_top5pct": 0.1789,
+          "spearman_rho": 0.5455
+        },
+        {
+          "instance": "Mindville",
+          "n": 91,
+          "p0": 4,
+          "ndcg_10": 0.9218,
+          "ndcg_10_grouped": 0.8933,
+          "precision_top5pct": 0.4,
+          "recall_top5pct": 0.5,
+          "spearman_rho": 0.6361
+        },
+        {
+          "instance": "SecondLife",
+          "n": 2,
+          "p0": 0,
+          "ndcg_10": 1.0,
+          "ndcg_10_grouped": 0.0,
+          "precision_top5pct": 0.0,
+          "recall_top5pct": NaN,
+          "spearman_rho": NaN
+        }
+      ]
+    }
+  ]
+}

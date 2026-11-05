@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/mnt/Data/0.Workspace/0.SourceCode/tgn/.venv/bin/erd", line 6, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/mnt/Data/0.Workspace/0.SourceCode/tgn/src/early_risk_detection/cli.py", line 112, in main
+    args.func(args)
+    ~~~~~~~~~^^^^^^
+  File "/mnt/Data/0.Workspace/0.SourceCode/tgn/src/early_risk_detection/cli.py", line 62, in _bundle_info
+    b = ModelBundle.load(args.path, verify=not args.no_verify)
+  File "/mnt/Data/0.Workspace/0.SourceCode/tgn/src/early_risk_detection/bundle.py", line 89, in load
+    raise BundleError(f"bundle file corrupted or modified: {name}")
+early_risk_detection.bundle.BundleError: bundle file corrupted or modified: xgb_fold0.ubj

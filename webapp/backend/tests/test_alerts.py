@@ -1,0 +1,207 @@
+from datetime import UTC, datetime, timedelta
+
+from erw.domain.types import Level
+from erw.models import Issue, Notification, RiskState
+from erw.pipeline import evaluate
+from erw.pipeline.alerts import AlertSpec, alerts_for, dispatch, flush_pending, notify
+from erw.pipeline.evaluate import RiskChange
+
+NOW = datetime(2026, 11, 4, 3, 0, tzinfo=UTC)
+
+
+class FakeSender:
+    def __init__(self, fail=False, url="https://hooks.slack.com/services/xxx"):
+        self.texts, self.fail, self.url = [], fail, url
+
+    @property
+    def calls(self):
+        return len(self.texts)
+
+    def post(self, text):
+        if self.fail:
+            raise RuntimeError("boom")
+        self.texts.append(text)
+
+
+def chg(prev=None, lvl=Level.HIGH, is_new=False, nb=False, cc=False, key="DEMO-1"):
+    return RiskChange(key, "DEMO", prev, lvl, is_new, nb, cc)
+
+
+def spec(key="DEMO-1", kind="risk_new", dedup=None):
+    return AlertSpec(kind, key, "DEMO", Level.HIGH, dedup or f"{kind}:{key}:HIGH")
+
+
+def test_alerts_for_level_up():
+    assert [a.kind for a in alerts_for(chg(prev=Level.MED))] == ["risk_up"]
+
+
+def test_alerts_for_new_high_and_medium():
+    assert [a.kind for a in alerts_for(chg(is_new=True))] == ["risk_new"]
+    assert alerts_for(chg(is_new=True, lvl=Level.MED)) == []
+
+
+def test_alerts_for_no_change_and_decrease():
+    assert alerts_for(chg(prev=Level.HIGH)) == []
+    assert alerts_for(chg(prev=Level.HIGH, lvl=Level.MED)) == []
+
+
+def test_alerts_for_blocked_and_critical():
+    # Only newly created issues emit critical alerts (R17)
+    existing = alerts_for(chg(prev=Level.HIGH, nb=True, cc=True, is_new=False))
+    assert [a.kind for a in existing] == ["blocked"]
+
+    new_med = alerts_for(chg(lvl=Level.MED, nb=True, cc=True, is_new=True))
+    assert [a.kind for a in new_med] == ["blocked", "critical"]
+    assert new_med[1].dedup_key == "critical:DEMO-1:MED"
+
+    new_high = alerts_for(chg(lvl=Level.HIGH, nb=True, cc=True, is_new=True))
+    assert [a.kind for a in new_high] == ["risk_new", "blocked", "critical"]
+    assert new_high[2].dedup_key == "critical:DEMO-1:HIGH"
+
+
+def test_duplicate_alert_suppressed(session):
+    s = FakeSender()
+    assert notify(session, spec(), "x", s, NOW, 20) == "sent"
+    assert notify(session, spec(), "x", s, NOW, 20) == "duplicate" and s.calls == 1
+
+
+def test_rate_limit(session):
+    s = FakeSender()
+    assert notify(session, spec("A-1"), "x", s, NOW, 2) == "sent"
+    assert notify(session, spec("A-2"), "x", s, NOW, 2) == "sent"
+    assert notify(session, spec("A-3"), "x", s, NOW, 2) == "rate_limited"
+    assert s.calls == 2
+    row = session.query(Notification).filter_by(issue_key="A-3").one()
+    assert row.status == "rate_limited"
+    # an hour later the window is free again
+    assert notify(session, spec("A-4"), "x", s, NOW + timedelta(minutes=61), 2) == "sent"
+
+
+def test_failed_send_recorded_and_retried(session):
+    assert notify(session, spec(), "x", FakeSender(fail=True), NOW, 20) == "failed"
+    assert session.query(Notification).one().status == "failed"
+    ok = FakeSender()
+    assert notify(session, spec(), "x", ok, NOW, 20) == "sent" and ok.calls == 1
+    assert session.query(Notification).one().status == "sent"
+
+
+def test_disabled_without_url(session):
+    assert notify(session, spec(), "x", None, NOW, 20) == "disabled"
+    assert session.query(Notification).one().status == "disabled"
+
+
+def _seed(session, key="DEMO-1", level="HIGH", factors=None):
+    session.add(Issue(key=key, project_key="DEMO", summary="S"))
+    session.add(RiskState(issue_key=key, level=level, factors=factors or [], deadline_label="d"))
+    session.flush()
+
+
+def test_dispatch_sends_and_updates_last_alerted(session, settings):
+    _seed(session)
+    s = FakeSender()
+    dispatch(session, [chg(is_new=True)], NOW, settings, sender=s)
+    assert s.calls == 1 and s.texts[0].startswith("[Nguy cơ trễ][DEMO]")
+    assert session.get(RiskState, "DEMO-1").last_alerted_level == "HIGH"
+    dispatch(session, [chg(is_new=True)], NOW, settings, sender=s)
+    assert s.calls == 1
+
+
+def test_dispatch_blocked_dedup_uses_blocker_keys(session, settings):
+    f = [{"id": "blocked", "label": "Bị block", "value": "DEMO-9,DEMO-2", "source": "rule"}]
+    _seed(session, factors=f)
+    s = FakeSender()
+    dispatch(session, [chg(prev=Level.HIGH, nb=True)], NOW, settings, sender=s)
+    assert session.query(Notification).one().dedup_key == "blocked:DEMO-1:DEMO-9,DEMO-2"
+
+
+def test_dispatch_not_updated_when_failed(session, settings):
+    _seed(session)
+    dispatch(session, [chg(is_new=True)], NOW, settings, sender=FakeSender(fail=True))
+    assert session.get(RiskState, "DEMO-1").last_alerted_level is None
+
+
+def test_dispatch_without_webhook_url_disabled(session, settings):
+    _seed(session)
+    dispatch(session, [chg(is_new=True)], NOW, settings.model_copy(update={"slack_webhook_url": ""}))
+    assert session.query(Notification).one().status == "disabled"
+    assert session.get(RiskState, "DEMO-1").last_alerted_level is None
+
+
+def test_create_app_registers_dispatch(client):
+    from erw.pipeline import alerts
+
+    assert evaluate._dispatch is alerts.dispatch
+
+
+def test_rate_limited_row_sent_once_window_clears(session):
+    s = FakeSender()
+    notify(session, spec("A-1"), "x", s, NOW, 1)
+    assert notify(session, spec("A-2"), "x", s, NOW, 1) == "rate_limited"
+    assert notify(session, spec("A-2"), "x", s, NOW + timedelta(minutes=61), 1) == "sent"
+    assert session.query(Notification).filter_by(issue_key="A-2").one().status == "sent"
+    assert notify(session, spec("A-2"), "x", s, NOW + timedelta(minutes=62), 1) == "duplicate"
+
+
+def test_disabled_row_sent_after_url_configured(session):
+    assert notify(session, spec(), "x", None, NOW, 20) == "disabled"
+    s = FakeSender()
+    assert notify(session, spec(), "x", s, NOW, 20) == "sent" and s.calls == 1
+    assert session.query(Notification).count() == 1
+
+
+def test_flush_pending_retries_failed_and_rate_limited(session):
+    # Seed a failed, a rate_limited, and a disabled row
+    n1 = Notification(kind="risk_new", issue_key="A-1", project_key="DEMO", dedup_key="k1", text="msg1", status="failed")
+    n2 = Notification(kind="risk_up", issue_key="A-2", project_key="DEMO", dedup_key="k2", text="msg2", status="rate_limited")
+    n3 = Notification(kind="blocked", issue_key="A-3", project_key="DEMO", dedup_key="k3", text="msg3", status="disabled")
+    session.add_all([n1, n2, n3])
+    session.flush()
+
+    sender = FakeSender()
+    # cap at 2: oldest first (n1 and n2) are delivered, n3 becomes rate_limited
+    delivered = flush_pending(session, sender, NOW, max_per_hour=2)
+    assert delivered == 2
+    assert sender.texts == ["msg1", "msg2"]
+    assert session.get(Notification, n1.id).status == "sent"
+    assert session.get(Notification, n2.id).status == "sent"
+    assert session.get(Notification, n3.id).status == "rate_limited"
+
+    # flush with sender=None returns 0 and does nothing
+    assert flush_pending(session, None, NOW + timedelta(hours=2), max_per_hour=20) == 0
+
+
+def test_unsent_alerts_retry_e2e(session, settings, monkeypatch):
+    from erw.ingest.sync import SyncResult
+    from erw.pipeline import alerts
+    from erw.pipeline.evaluate import on_synced
+
+    evaluate._dispatch = alerts.dispatch
+    sender = FakeSender(fail=True)
+    monkeypatch.setattr(alerts, "SlackSender", lambda url: sender)
+    settings = settings.model_copy(update={"slack_webhook_url": "https://hooks.slack.com/dummy"})
+
+    # New overdue issue: due date in past -> evaluates to HIGH
+    issue = Issue(
+        key="DEMO-1", project_key="DEMO", summary="Critical overdue bug",
+        status_category="indeterminate", created_at=NOW - timedelta(days=5),
+        duedate=NOW - timedelta(days=1),
+    )
+    session.add(issue)
+    session.flush()
+
+    # Webhook-style on_synced while Slack sender is failing
+    on_synced(session, [SyncResult("created", "DEMO-1", frozenset())], NOW, settings)
+    row = session.query(Notification).one()
+    assert row.status == "failed"
+    assert sender.calls == 0
+
+    # Sender recovers: subsequent dispatch delivers pending alert exactly once
+    sender.fail = False
+    dispatch(session, [], NOW + timedelta(minutes=5), settings, sender=sender)
+    assert row.status == "sent"
+    assert sender.calls == 1
+    assert "[Nguy cơ trễ]" in sender.texts[0]
+
+    # Later dispatch does not resend
+    dispatch(session, [], NOW + timedelta(minutes=10), settings, sender=sender)
+    assert sender.calls == 1

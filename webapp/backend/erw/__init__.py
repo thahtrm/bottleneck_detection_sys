@@ -1,0 +1,1 @@
+"""Early Risk Web backend."""

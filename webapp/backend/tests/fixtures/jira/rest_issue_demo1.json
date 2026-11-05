@@ -1,0 +1,320 @@
+{
+  "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations,customfield_10010.requestTypePractice",
+  "id": "10013",
+  "self": "https://example.atlassian.net/rest/api/3/issue/10013",
+  "key": "DEMO-1",
+  "changelog": {
+    "startAt": 0,
+    "maxResults": 6,
+    "total": 6,
+    "histories": [
+      {
+        "id": "10039",
+        "author": {
+          "self": "https://example.atlassian.net/rest/api/3/user?accountId=acc-1",
+          "accountId": "acc-1",
+          "displayName": "Nguyễn Văn An",
+          "active": true,
+          "timeZone": "Asia/Saigon",
+          "accountType": "atlassian"
+        },
+        "created": "2026-11-04T00:08:17.153+0700",
+        "items": [
+          {
+            "field": "Link",
+            "fieldtype": "jira",
+            "from": "DEMO-2",
+            "fromString": "This work item blocks DEMO-2",
+            "to": null,
+            "toString": null
+          }
+        ]
+      },
+      {
+        "id": "10036",
+        "author": {
+          "self": "https://example.atlassian.net/rest/api/3/user?accountId=acc-1",
+          "accountId": "acc-1",
+          "displayName": "Nguyễn Văn An",
+          "active": true,
+          "timeZone": "Asia/Saigon",
+          "accountType": "atlassian"
+        },
+        "created": "2026-11-04T00:07:59.074+0700",
+        "items": [
+          {
+            "field": "Link",
+            "fieldtype": "jira",
+            "from": null,
+            "fromString": null,
+            "to": "DEMO-2",
+            "toString": "This work item blocks DEMO-2"
+          }
+        ]
+      },
+      {
+        "id": "10035",
+        "author": {
+          "self": "https://example.atlassian.net/rest/api/3/user?accountId=acc-1",
+          "accountId": "acc-1",
+          "displayName": "Nguyễn Văn An",
+          "active": true,
+          "timeZone": "Asia/Saigon",
+          "accountType": "atlassian"
+        },
+        "created": "2026-11-04T00:07:54.572+0700",
+        "items": [
+          {
+            "field": "status",
+            "fieldtype": "jira",
+            "fieldId": "status",
+            "from": "10008",
+            "fromString": "To Do",
+            "to": "3",
+            "toString": "In Progress"
+          }
+        ]
+      },
+      {
+        "id": "10034",
+        "author": {
+          "self": "https://example.atlassian.net/rest/api/3/user?accountId=acc-1",
+          "accountId": "acc-1",
+          "displayName": "Nguyễn Văn An",
+          "active": true,
+          "timeZone": "Asia/Saigon",
+          "accountType": "atlassian"
+        },
+        "created": "2026-11-04T00:07:49.593+0700",
+        "items": [
+          {
+            "field": "assignee",
+            "fieldtype": "jira",
+            "fieldId": "assignee",
+            "from": null,
+            "fromString": null,
+            "to": "acc-1",
+            "toString": "Nguyễn Văn An",
+            "tmpFromAccountId": null,
+            "tmpToAccountId": "acc-1"
+          }
+        ]
+      },
+      {
+        "id": "10032",
+        "author": {
+          "self": "https://example.atlassian.net/rest/api/3/user?accountId=acc-1",
+          "accountId": "acc-1",
+          "displayName": "Nguyễn Văn An",
+          "active": true,
+          "timeZone": "Asia/Saigon",
+          "accountType": "atlassian"
+        },
+        "created": "2026-11-04T00:07:40.355+0700",
+        "items": [
+          {
+            "field": "duedate",
+            "fieldtype": "jira",
+            "fieldId": "duedate",
+            "from": null,
+            "fromString": null,
+            "to": "2026-11-02",
+            "toString": "2026-11-02 00:00:00.0"
+          }
+        ]
+      },
+      {
+        "id": "10029",
+        "author": {
+          "self": "https://example.atlassian.net/rest/api/3/user?accountId=acc-1",
+          "accountId": "acc-1",
+          "displayName": "Nguyễn Văn An",
+          "active": true,
+          "timeZone": "Asia/Saigon",
+          "accountType": "atlassian"
+        },
+        "created": "2026-11-04T00:07:26.884+0700",
+        "items": [
+          {
+            "field": "Sprint",
+            "fieldtype": "custom",
+            "fieldId": "customfield_10020",
+            "from": "",
+            "fromString": "",
+            "to": "2",
+            "toString": "Sprint S3"
+          }
+        ]
+      }
+    ]
+  },
+  "fields": {
+    "statuscategorychangedate": "2026-11-04T00:07:54.572+0700",
+    "issuetype": {
+      "self": "https://example.atlassian.net/rest/api/3/issuetype/10010",
+      "id": "10010",
+      "description": "A small, distinct piece of work.",
+      "name": "Task",
+      "subtask": false,
+      "hierarchyLevel": 0
+    },
+    "timespent": null,
+    "customfield_10030": null,
+    "project": {
+      "self": "https://example.atlassian.net/rest/api/3/project/10002",
+      "id": "10002",
+      "key": "DEMO",
+      "name": "Early Risk Demo",
+      "projectTypeKey": "software",
+      "simplified": false
+    },
+    "customfield_10031": null,
+    "customfield_10032": null,
+    "customfield_10033": null,
+    "fixVersions": [],
+    "aggregatetimespent": null,
+    "customfield_10034": null,
+    "statusCategory": {
+      "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+      "id": 4,
+      "key": "indeterminate",
+      "colorName": "yellow",
+      "name": "In Progress"
+    },
+    "resolution": null,
+    "customfield_10036": null,
+    "customfield_10027": null,
+    "customfield_10028": null,
+    "customfield_10029": null,
+    "resolutiondate": null,
+    "workratio": -1,
+    "watches": {
+      "self": "https://example.atlassian.net/rest/api/3/issue/DEMO-1/watchers",
+      "watchCount": 1,
+      "isWatching": true
+    },
+    "lastViewed": null,
+    "created": "2026-11-04T00:07:08.368+0700",
+    "customfield_10020": [
+      {
+        "id": 2,
+        "name": "Sprint S3",
+        "state": "active",
+        "boardId": 3,
+        "startDate": "2026-11-03T17:07:22.199Z",
+        "endDate": "2026-11-10T17:07:22.199Z"
+      }
+    ],
+    "customfield_10021": null,
+    "customfield_10022": null,
+    "customfield_10023": null,
+    "priority": {
+      "self": "https://example.atlassian.net/rest/api/3/priority/3",
+      "name": "Medium",
+      "id": "3"
+    },
+    "customfield_10024": null,
+    "customfield_10025": null,
+    "labels": [],
+    "customfield_10026": null,
+    "customfield_10016": null,
+    "customfield_10017": null,
+    "customfield_10019": "0|i0002w:",
+    "timeestimate": null,
+    "aggregatetimeoriginalestimate": null,
+    "versions": [],
+    "issuelinks": [],
+    "assignee": {
+      "self": "https://example.atlassian.net/rest/api/3/user?accountId=acc-1",
+      "accountId": "acc-1",
+      "displayName": "Nguyễn Văn An",
+      "active": true,
+      "timeZone": "Asia/Saigon",
+      "accountType": "atlassian"
+    },
+    "updated": "2026-11-04T00:08:17.153+0700",
+    "status": {
+      "self": "https://example.atlassian.net/rest/api/3/status/3",
+      "description": "This issue is being actively worked on at the moment by the assignee.",
+      "name": "In Progress",
+      "id": "3",
+      "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+      }
+    },
+    "components": [],
+    "timeoriginalestimate": null,
+    "description": null,
+    "customfield_10010": null,
+    "customfield_10014": null,
+    "timetracking": {},
+    "customfield_10015": null,
+    "customfield_10005": null,
+    "customfield_10006": null,
+    "customfield_10007": null,
+    "security": null,
+    "customfield_10008": null,
+    "attachment": [],
+    "aggregatetimeestimate": null,
+    "customfield_10009": null,
+    "summary": "Tích hợp cổng thanh toán VNPay",
+    "creator": {
+      "self": "https://example.atlassian.net/rest/api/3/user?accountId=acc-1",
+      "accountId": "acc-1",
+      "displayName": "Nguyễn Văn An",
+      "active": true,
+      "timeZone": "Asia/Saigon",
+      "accountType": "atlassian"
+    },
+    "subtasks": [],
+    "customfield_10040": [],
+    "customfield_10042": null,
+    "reporter": {
+      "self": "https://example.atlassian.net/rest/api/3/user?accountId=acc-1",
+      "accountId": "acc-1",
+      "displayName": "Nguyễn Văn An",
+      "active": true,
+      "timeZone": "Asia/Saigon",
+      "accountType": "atlassian"
+    },
+    "customfield_10043": null,
+    "aggregateprogress": {
+      "progress": 0,
+      "total": 0
+    },
+    "customfield_10001": null,
+    "customfield_10002": [],
+    "customfield_10003": null,
+    "customfield_10004": null,
+    "customfield_10038": null,
+    "customfield_10039": null,
+    "environment": null,
+    "duedate": "2026-11-02",
+    "progress": {
+      "progress": 0,
+      "total": 0
+    },
+    "votes": {
+      "self": "https://example.atlassian.net/rest/api/3/issue/DEMO-1/votes",
+      "votes": 0,
+      "hasVoted": false
+    },
+    "comment": {
+      "comments": [],
+      "self": "https://example.atlassian.net/rest/api/3/issue/10013/comment",
+      "maxResults": 0,
+      "total": 0,
+      "startAt": 0
+    },
+    "worklog": {
+      "startAt": 0,
+      "maxResults": 20,
+      "total": 0,
+      "worklogs": []
+    }
+  }
+}

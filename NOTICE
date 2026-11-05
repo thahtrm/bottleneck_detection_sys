@@ -1,0 +1,8 @@
+early-risk-detection
+Copyright 2026 jiooum
+
+This product includes software derived from "Temporal Graph Networks for Deep Learning on
+Dynamic Graphs" (https://github.com/twitter-research/tgn), Copyright 2020 Twitter, Inc.,
+licensed under the Apache License, Version 2.0. The derived code lives in
+training/criticality/baselines/tgn_upstream/; the TGN memory used by the library
+(early_risk_detection.criticality.memory) is a re-implementation of the same ideas.

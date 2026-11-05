@@ -1,0 +1,18 @@
+{
+  "timestamp": 1793725679269,
+  "webhookEvent": "issuelink_created",
+  "issueLink": {
+    "id": 10000,
+    "sourceIssueId": 10013,
+    "destinationIssueId": 10014,
+    "issueLinkType": {
+      "id": 10000,
+      "name": "Blocks",
+      "outwardName": "blocks",
+      "inwardName": "is blocked by",
+      "isSubTaskLinkType": false,
+      "isSystemLinkType": false
+    },
+    "systemLink": false
+  }
+}
