@@ -504,6 +504,34 @@ def test_confirm_action_invalid_timestamp(client, auth_users, settings, sample_p
     assert "timestamp format" in resp.json()["detail"]
 
 
+@respx.mock
+def test_confirm_action_missing_on_jira_is_404(client, auth_users, settings, sample_project, session):
+    now = utcnow()
+    action = Action(
+        issue_key="DEMO-101",
+        items=[{"action_type": "add_comment", "value": "note"}],
+        status="pending",
+        created_at=now,
+    )
+    session.add_all([Issue(key="DEMO-101", project_key="DEMO", summary="Local only", created_at=now), action])
+    session.commit()
+    base = settings.jira_base_url.rstrip("/")
+    respx.get(f"{base}/rest/api/3/issue/DEMO-101", params={"fields": "updated"}).mock(
+        return_value=httpx.Response(
+            404,
+            json={"errorMessages": ["Issue does not exist or you do not have permission to see it."], "errors": {}},
+        )
+    )
+
+    login(client, auth_users["pm"], settings)
+    resp = client.post(f"/api/actions/{action.id}/confirm", json={"expected_updated": "2026-11-04T12:00:00Z"})
+
+    assert resp.status_code == 404
+    assert "DEMO-101" in resp.json()["detail"]
+    session.refresh(action)
+    assert action.status == "pending"
+
+
 def test_confirm_action_forbidden_for_viewer(client, auth_users, settings, sample_project, session):
     now = utcnow()
     issue = Issue(key="DEMO-1", project_key="DEMO", summary="Task", created_at=now)

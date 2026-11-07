@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from erw.auth import get_session, require_authenticated_user, require_pm
 from erw.db import utcnow
 from erw.domain.actions import execute_action
-from erw.integrations.jira import JiraClient
+from erw.integrations.jira import JiraClient, JiraError
 from erw.models import Action, Issue, User
 from erw.settings import Settings, get_settings
 
@@ -107,14 +107,28 @@ def confirm_action(
             detail="Invalid expected_updated timestamp format",
         ) from None
 
-    result = execute_action(
-        session=session,
-        jira_client=jira_client,
-        action_id=action.id,
-        expected_updated=exp_dt,
-        confirmed_by_user=user,
-        settings=settings,
-    )
+    try:
+        result = execute_action(
+            session=session,
+            jira_client=jira_client,
+            action_id=action.id,
+            expected_updated=exp_dt,
+            confirmed_by_user=user,
+            settings=settings,
+        )
+    except JiraError as e:
+        if e.status == 404:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"Công việc {action.issue_key} không có trên Jira, "
+                    "hoặc tài khoản kết nối không có quyền xem."
+                ),
+            ) from None
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Không ghi được lên Jira: {e}",
+        ) from None
     if result["status"] == "conflict":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result)
     if result["status"] != "applied":
