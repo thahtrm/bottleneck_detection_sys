@@ -172,7 +172,7 @@ def test_users(session):
     return {"admin": u_admin, "member": u_regular}
 
 
-def test_api_login_success_and_me(client, test_users):
+def test_api_login_success_and_me(client, test_users, settings):
     resp = client.post(
         "/api/auth/login",
         json={"email": "admin@example.com", "password": "admin_pass"},
@@ -183,6 +183,7 @@ def test_api_login_success_and_me(client, test_users):
     assert data["email"] == "admin@example.com"
     assert data["name"] == "Admin User"
     assert data["is_admin"] is True
+    assert data["jira_base_url"] == settings.jira_base_url.rstrip("/")
 
     # Cookie is set
     assert "erw_session" in client.cookies

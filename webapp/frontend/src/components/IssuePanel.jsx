@@ -25,6 +25,7 @@ import {
   Avatar,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { OpenIssueOnJira, OpenProjectOnJira } from './JiraLinks';
 import {
   IconX,
   IconSparkles,
@@ -307,6 +308,7 @@ export default function IssuePanel({
     return null;
   }, [riskState, scores]);
 
+  const projectKey = issue?.project_key || (issueKey ? issueKey.split('-')[0] : '');
   const isCritical = Boolean(riskState?.is_critical);
   const isBlocked = Boolean(riskState?.blocked);
   const riskLevel = riskState?.level || 'LOW';
@@ -315,11 +317,10 @@ export default function IssuePanel({
   const isPm = useMemo(() => {
     if (!user) return false;
     if (user.is_admin) return true;
-    const projectKey = issue?.project_key || (issueKey ? issueKey.split('-')[0] : null);
     if (!projectKey || !projects || !Array.isArray(projects)) return false;
     const project = projects.find((p) => p.key === projectKey);
     return project?.role === 'pm';
-  }, [user, issue?.project_key, issueKey, projects]);
+  }, [user, projectKey, projects]);
 
   // Kiểm tra trạng thái dismiss
   const isDismissed = Boolean(
@@ -469,6 +470,11 @@ export default function IssuePanel({
               <Text fw={600} size="sm" lineClamp={2} title={issue?.summary}>
                 {issue?.summary || 'Không có tiêu đề'}
               </Text>
+
+              <Group gap="xs">
+                <OpenIssueOnJira issueKey={issueKey} />
+                <OpenProjectOnJira projectKey={projectKey} />
+              </Group>
 
               <Text size="xs" c="dimmed">
                 Người phụ trách:{' '}
@@ -806,18 +812,23 @@ export default function IssuePanel({
                                 {relationLabel}
                               </Badge>
                               {onSelectIssue ? (
-                                <Button
-                                  variant="subtle"
-                                  size="xs"
-                                  p={0}
-                                  h="auto"
-                                  color="blue"
-                                  style={{ fontFamily: 'monospace' }}
-                                  onClick={() => onSelectIssue(otherKey)}
-                                  title={`Xem chi tiết ${otherKey}`}
-                                >
-                                  {otherKey}
-                                </Button>
+                                <Group gap={4} wrap="nowrap">
+                                  <Button
+                                    variant="subtle"
+                                    size="xs"
+                                    p={0}
+                                    h="auto"
+                                    color="blue"
+                                    style={{ fontFamily: 'monospace' }}
+                                    onClick={() => onSelectIssue(otherKey)}
+                                    title={`Xem chi tiết ${otherKey}`}
+                                  >
+                                    {otherKey}
+                                  </Button>
+                                  <OpenIssueOnJira issueKey={otherKey} variant="subtle" px={4}>
+                                    Jira
+                                  </OpenIssueOnJira>
+                                </Group>
                               ) : (
                                 <Text size="xs" fw={600} style={{ fontFamily: 'monospace' }}>
                                   {otherKey}

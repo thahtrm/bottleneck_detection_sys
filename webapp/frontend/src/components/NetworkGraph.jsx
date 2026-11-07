@@ -43,6 +43,7 @@ import {
   IconZoomOut,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
+import { OpenIssueOnJira, OpenProjectOnJira } from './JiraLinks';
 import { DataSet, Network } from 'vis-network/standalone';
 import { getDashboardGraph } from '../api/client';
 import {
@@ -556,6 +557,10 @@ function IssueInsight({ model, insight, go }) {
           <RiskBadge issue={issue} />
           {issue.is_overdue && <Badge size="sm" color="red" variant="light">Quá hạn {issue.overdue_days} ngày</Badge>}
           {issue.reopen_count > 0 && <Badge size="sm" color="grape" variant="light">Mở lại {issue.reopen_count} lần</Badge>}
+        </Group>
+        <Group gap="xs">
+          <OpenIssueOnJira issueKey={issue.key} />
+          <OpenProjectOnJira projectKey={issue.project_key || issue.key.split('-')[0]} />
         </Group>
       </Stack>
       <Stack gap={2}>

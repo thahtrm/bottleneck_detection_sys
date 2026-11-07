@@ -51,7 +51,9 @@ function IssueRow({ card, ctx, selected, onSelect, onMoveStatus }) {
           </Text>
         </Group>
       </Table.Td>
-      <Table.Td w={40}>{onMoveStatus && <CardMenu card={card} onMoveStatus={onMoveStatus} />}</Table.Td>
+      <Table.Td w={40}>
+        <CardMenu card={card} onMoveStatus={onMoveStatus} />
+      </Table.Td>
     </Table.Tr>
   );
 }

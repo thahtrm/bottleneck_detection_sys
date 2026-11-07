@@ -23,7 +23,7 @@ export default function IssueCard({ card, ctx, selected, onSelect, onMoveStatus 
           </Text>
           <CardMarkers card={card} />
         </Group>
-        {onMoveStatus && <CardMenu card={card} onMoveStatus={onMoveStatus} />}
+        <CardMenu card={card} onMoveStatus={onMoveStatus} />
       </Group>
       <Text size="sm" fw={500} lineClamp={2} title={card.summary}>
         {card.summary}

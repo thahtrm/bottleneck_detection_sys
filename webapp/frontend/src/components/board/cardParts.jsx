@@ -1,6 +1,7 @@
 import React from 'react';
 import { ActionIcon, Avatar, Badge, Box, Menu, Tooltip } from '@mantine/core';
-import { IconArrowsExchange, IconDots, IconLock } from '@tabler/icons-react';
+import { IconArrowsExchange, IconDots, IconExternalLink, IconLock } from '@tabler/icons-react';
+import { useJiraLinks } from '../JiraLinks';
 
 export function selectableProps(key, onSelect) {
   return {
@@ -48,6 +49,11 @@ export function AssigneeAvatar({ facts }) {
 const stop = (event) => event.stopPropagation();
 
 export function CardMenu({ card, onMoveStatus }) {
+  const { issueUrl, projectUrl } = useJiraLinks();
+  const issueHref = issueUrl(card.key);
+  const projectKey = card.project_key || card.key.split('-')[0];
+  const projectHref = projectUrl(projectKey);
+  if (!onMoveStatus && !issueHref && !projectHref) return null;
   return (
     <Box onClick={stop} onKeyDown={stop}>
       <Menu position="bottom-end" shadow="md">
@@ -57,9 +63,33 @@ export function CardMenu({ card, onMoveStatus }) {
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
-          <Menu.Item leftSection={<IconArrowsExchange size={14} />} onClick={() => onMoveStatus(card)}>
-            Chuyển trạng thái
-          </Menu.Item>
+          {onMoveStatus && (
+            <Menu.Item leftSection={<IconArrowsExchange size={14} />} onClick={() => onMoveStatus(card)}>
+              Chuyển trạng thái
+            </Menu.Item>
+          )}
+          {issueHref && (
+            <Menu.Item
+              component="a"
+              href={issueHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              leftSection={<IconExternalLink size={14} />}
+            >
+              Mở issue trên Jira
+            </Menu.Item>
+          )}
+          {projectHref && (
+            <Menu.Item
+              component="a"
+              href={projectHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              leftSection={<IconExternalLink size={14} />}
+            >
+              Mở dự án trên Jira
+            </Menu.Item>
+          )}
         </Menu.Dropdown>
       </Menu>
     </Box>

@@ -22,6 +22,17 @@ class UserResponse(BaseModel):
     email: str
     name: str
     is_admin: bool
+    jira_base_url: str = ""
+
+
+def _user_response(user: User, settings: Settings) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        is_admin=user.is_admin,
+        jira_base_url=settings.jira_base_url.rstrip("/"),
+    )
 
 
 @router.post("/login", response_model=UserResponse)
@@ -53,12 +64,7 @@ def login(
         samesite="lax",
         path="/",
     )
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        name=user.name,
-        is_admin=user.is_admin,
-    )
+    return _user_response(user, app_settings)
 
 
 @router.post("/logout")
@@ -76,10 +82,10 @@ def logout(
 
 
 @router.get("/me", response_model=UserResponse)
-def me(current_user: User = Depends(require_authenticated_user)) -> UserResponse:
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        name=current_user.name,
-        is_admin=current_user.is_admin,
-    )
+def me(
+    request: Request,
+    current_user: User = Depends(require_authenticated_user),
+    settings: Settings = Depends(get_settings),
+) -> UserResponse:
+    app_settings = getattr(request.app.state, "settings", None) or settings
+    return _user_response(current_user, app_settings)

@@ -24,6 +24,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { getAdminSettings } from '../api/client';
+import { OpenProjectIcon } from './JiraLinks';
 
 const VIEW_OPTIONS = [
   { value: 'board', label: 'Bảng' },
@@ -131,6 +132,7 @@ export default function Header({
           checkIconPosition="right"
           aria-label="Chọn dự án theo dõi"
         />
+        {selectedProject ? <OpenProjectIcon projectKey={selectedProject} /> : null}
 
         <SegmentedControl
           size="sm"

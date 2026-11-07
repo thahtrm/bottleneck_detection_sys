@@ -38,6 +38,7 @@ import {
   IconCpu,
 } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { OpenProjectOnJira } from '../components/JiraLinks';
 import { notifications } from '@mantine/notifications';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -535,9 +536,14 @@ export default function Settings({ onBackToDashboard }) {
                   return (
                     <Table.Tr key={project.key}>
                       <Table.Td>
-                        <Badge variant="light" color="blue" size="md">
-                          {project.key}
-                        </Badge>
+                        <Group gap={6} wrap="nowrap">
+                          <Badge variant="light" color="blue" size="md">
+                            {project.key}
+                          </Badge>
+                          <OpenProjectOnJira projectKey={project.key} variant="subtle" px={6}>
+                            Jira
+                          </OpenProjectOnJira>
+                        </Group>
                       </Table.Td>
 
                       <Table.Td>
