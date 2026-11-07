@@ -6,7 +6,8 @@ import pytest
 
 from erw.auth import create_session_token, hash_password
 from erw.db import utcnow
-from erw.models import Action, Issue, Project, ProjectMember, RiskState, User
+from erw.demo.seed import seed_demo_data
+from erw.models import Action, Issue, IssueSprint, Project, ProjectMember, RiskState, Sprint, User
 
 
 @pytest.fixture
@@ -843,3 +844,199 @@ def test_graph_overload_by_open_count_needs_three_assignees(client, auth_users, 
     assert data["overload_threshold"] == 1
     assert people["person:busy"]["is_overloaded"] is True
     assert people["person:calm"]["is_overloaded"] is False
+
+
+# ===========================================================================
+# 4. GET /api/dashboard/board
+# ===========================================================================
+
+
+@pytest.fixture
+def board_issues(session, sample_project):
+    """Issues covering every triage outcome plus the ones the board scope must drop."""
+    now = utcnow()
+    raised = now - timedelta(days=2)
+    session.add(Project(key="OTHER", name="Other", tracked=True))
+
+    def issue(key, status="In Progress", category="indeterminate", **kw):
+        session.add(Issue(key=key, project_key=kw.pop("project_key", "DEMO"), summary=f"Task {key}",
+                          status=status, status_category=category, updated_at=now, **kw))
+
+    def risk(key, level, **kw):
+        session.add(RiskState(issue_key=key, level=level, level_raised_at=kw.pop("raised", raised), **kw))
+
+    def action(key, status, at):
+        session.add(Action(issue_key=key, items=[], status=status, created_at=at))
+
+    issue("DEMO-1")
+    risk("DEMO-1", "HIGH", deadline_at=now + timedelta(days=5), deadline_type="sprint", deadline_label="Sprint 1",
+         factors=[{"id": "blocked", "label": "Bị chặn", "value": "4 ngày", "source": "links"}])
+    issue("DEMO-2", status="To Do", category="new")
+    risk("DEMO-2", "HIGH", deadline_at=now + timedelta(days=1))
+    action("DEMO-2", "applied", raised - timedelta(days=1))
+    action("DEMO-2", "applied", raised + timedelta(hours=1))
+    issue("DEMO-3", status="Open", category="new", duedate=(now + timedelta(days=4)).date())
+    risk("DEMO-3", "MED")
+    action("DEMO-3", "failed", now)
+    action("DEMO-3", "pending", now)
+    issue("DEMO-4")
+    risk("DEMO-4", "MED", dismissed_at_level="MED")
+    issue("DEMO-5", status="Blocked")
+    risk("DEMO-5", "LOW", blocked=True)
+    action("DEMO-5", "applied", now - timedelta(days=9))
+    issue("DEMO-6", status="To Do", category="new")
+    issue("DEMO-7", status="Done", category="done", resolved_at=now - timedelta(days=2))
+    risk("DEMO-7", "HIGH")
+    issue("DEMO-8", status="Done", category="done", resolved_at=now - timedelta(days=10))
+    issue("DEMO-9", deleted_at=now)
+    issue("OTHER-1", project_key="OTHER")
+    session.commit()
+
+
+EXPECTED_DEMO_TRIAGE = {
+    "DEMO-1": "needs_action",
+    "DEMO-2": "in_hand",
+    "DEMO-3": "needs_action",
+    "DEMO-4": "in_hand",
+    "DEMO-5": "needs_action",
+    "DEMO-6": "ok",
+    "DEMO-7": "done",
+}
+
+
+def test_board_unauthenticated(client):
+    assert client.get("/api/dashboard/board").status_code == 401
+
+
+def test_board_triage_scope_and_order(client, auth_users, settings, board_issues):
+    login(client, auth_users["pm"], settings)
+    data = client.get("/api/dashboard/board?project=DEMO").json()
+
+    assert {c["key"]: c["triage"] for c in data["cards"]} == EXPECTED_DEMO_TRIAGE
+    assert (data["project"], data["total"], data["truncated"]) == ("DEMO", 7, False)
+    assert [c["key"] for c in data["cards"]] == ["DEMO-2", "DEMO-1", "DEMO-7", "DEMO-3", "DEMO-4", "DEMO-5", "DEMO-6"]
+
+
+def test_board_card_shape(client, auth_users, settings, board_issues):
+    login(client, auth_users["pm"], settings)
+    cards = {c["key"]: c for c in client.get("/api/dashboard/board?project=DEMO").json()["cards"]}
+
+    one = cards["DEMO-1"]
+    assert "raw" not in one
+    assert one["deadline"]["type"] == "sprint" and one["deadline"]["label"] == "Sprint 1"
+    assert one["reason"] == "Bị chặn: 4 ngày"
+    assert (one["level"], one["status_column"], one["assignee"]) == ("HIGH", "status:in-progress", None)
+    assert cards["DEMO-3"]["deadline"]["type"] == "duedate"
+    assert cards["DEMO-6"]["deadline"] is None and cards["DEMO-6"]["level"] is None
+
+
+def test_board_q_and_cap(client, auth_users, settings, board_issues):
+    login(client, auth_users["pm"], settings)
+
+    searched = client.get("/api/dashboard/board?project=DEMO&q=demo-3").json()
+    capped = client.get("/api/dashboard/board?project=DEMO&cap=2").json()
+
+    assert [c["key"] for c in searched["cards"]] == ["DEMO-3"]
+    assert (capped["total"], capped["truncated"], len(capped["cards"])) == (7, True, 2)
+    assert client.get("/api/dashboard/board?project=DEMO&cap=2001").status_code == 422
+
+
+def test_board_viewer_scoping(client, auth_users, settings, board_issues):
+    login(client, auth_users["stranger"], settings)
+    assert client.get("/api/dashboard/board?project=DEMO").status_code == 403
+    stranger = client.get("/api/dashboard/board").json()
+    assert (stranger["cards"], stranger["total"], stranger["status_columns"]) == ([], 0, [])
+
+    login(client, auth_users["viewer"], settings)
+    viewer = client.get("/api/dashboard/board").json()
+    assert {c["key"] for c in viewer["cards"]} == set(EXPECTED_DEMO_TRIAGE)
+    assert (viewer["project"], viewer["sprint"], viewer["sprints"], viewer["progress"]) == (None, None, [], None)
+
+    login(client, auth_users["admin"], settings)
+    admin = client.get("/api/dashboard/board").json()
+    assert {c["key"] for c in admin["cards"]} == {*EXPECTED_DEMO_TRIAGE, "OTHER-1"}
+
+
+def test_board_status_columns_follow_status_map_and_cover_every_card(
+    client, auth_users, settings, board_issues, session, sample_project
+):
+    sample_project.status_map = {"columns": [
+        {"name": "Cần làm", "statuses": ["Open", "To Do"], "category": "new"},
+        {"name": "Xong", "statuses": ["Done"], "category": "done"},
+        {"name": "broken"},
+    ]}
+    session.commit()
+
+    login(client, auth_users["pm"], settings)
+    data = client.get("/api/dashboard/board?project=DEMO").json()
+
+    assert [(c["id"], c["unmapped"]) for c in data["status_columns"]] == [
+        ("status:cần-làm", False),
+        ("status:blocked", True),
+        ("status:in-progress", True),
+        ("status:xong", False),
+    ]
+    column_ids = {c["id"] for c in data["status_columns"]}
+    assert all(card["status_column"] in column_ids for card in data["cards"])
+    assert {c["key"] for c in data["cards"] if c["status_column"] == "status:cần-làm"} == {"DEMO-2", "DEMO-3", "DEMO-6"}
+
+
+def test_board_sprint_selection_filter_and_progress(client, auth_users, settings, board_issues, session):
+    now = utcnow()
+    session.add_all([
+        Sprint(id=1, name="Sprint 1", state="closed", start_at=now - timedelta(days=30), end_at=now - timedelta(days=16)),
+        Sprint(id=2, name="Sprint 2", state="active", start_at=now - timedelta(days=5), end_at=now + timedelta(days=5)),
+        Sprint(id=3, name="Sprint 3", state="future", start_at=now + timedelta(days=6), end_at=now + timedelta(days=20)),
+    ])
+    session.flush()
+    session.get(Issue, "DEMO-1").story_points = 3.0
+    session.get(Issue, "DEMO-8").story_points = 5.0
+    session.add_all([
+        IssueSprint(issue_key="DEMO-1", sprint_id=2),
+        IssueSprint(issue_key="DEMO-8", sprint_id=2),
+        IssueSprint(issue_key="DEMO-6", sprint_id=2),
+        IssueSprint(issue_key="DEMO-2", sprint_id=1),
+        IssueSprint(issue_key="DEMO-3", sprint_id=3),
+        IssueSprint(issue_key="OTHER-1", sprint_id=1),
+    ])
+    session.commit()
+
+    login(client, auth_users["pm"], settings)
+    default = client.get("/api/dashboard/board?project=DEMO").json()
+    in_sprint = client.get("/api/dashboard/board?project=DEMO&sprint=2").json()
+    closed = client.get("/api/dashboard/board?project=DEMO&sprint=1").json()
+
+    assert [s["id"] for s in default["sprints"]] == [2, 3, 1]
+    assert default["sprint"]["id"] == 2 and default["sprint"]["days_left"] == 5
+    assert len(default["cards"]) == 7
+    assert default["progress"] == {
+        "unit": "points", "done": 5.0, "total": 8.0, "done_pct": 0.62, "expected_pct": 0.5,
+    }
+    assert {c["key"] for c in in_sprint["cards"]} == {"DEMO-1", "DEMO-6"}
+    assert closed["sprint"]["id"] == 1 and [c["key"] for c in closed["cards"]] == ["DEMO-2"]
+    assert closed["progress"]["unit"] == "issues" and closed["progress"]["total"] == 1.0
+    assert client.get("/api/dashboard/board?project=DEMO&sprint=99").status_code == 404
+
+
+def test_board_on_demo_seed(client, settings, session):
+    seed_demo_data(session, rich_network=True)
+    session.add(Action(issue_key="DEMO-101", items=[], status="applied", created_at=utcnow()))
+    session.commit()
+    pm = session.query(User).filter_by(email="pm@earlyrisk.local").one()
+
+    login(client, pm, settings)
+    data = client.get("/api/dashboard/board?project=DEMO").json()
+    cards = {c["key"]: c for c in data["cards"]}
+
+    column_ids = {c["id"] for c in data["status_columns"]}
+    assert all(c["status_column"] in column_ids for c in data["cards"])
+    assert cards["DEMO-102"]["triage"] == "needs_action"
+    assert cards["DEMO-101"]["triage"] == "in_hand"
+    assert cards["DEMO-106"]["triage"] == cards["DEMO-116"]["triage"] == "done"
+    assert cards["DEMO-102"]["assignee"] == {"id": "demo-chi", "name": "Đỗ Thu Chi"}
+    assert data["sprint"]["name"] == "Sprint 2 - Hardening"
+    assert {s["id"] for s in data["sprints"]} == {101, 102}
+    assert {c["triage"] for c in data["cards"]} == {"needs_action", "in_hand", "ok", "done"}, (
+        "rich demo shows a card in every triage column"
+    )
+    assert any(c["raised_at"] for c in data["cards"]), "rich demo feeds the 24h rising chip"

@@ -3,13 +3,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from erw.api.actions import get_jira_client
 from erw.auth import get_session, require_authenticated_user, require_pm, require_viewer
+from erw.integrations.jira import JiraClient, JiraError
 from erw.integrations.llm import enqueue_suggestion, get_cached_suggestion
 from erw.models import Action, Change, Issue, Link, RiskState, Score, Suggestion, User
 from erw.settings import Settings, get_settings
@@ -242,3 +245,27 @@ def dismiss_issue_risk(
         "issue_key": key,
         "dismissed_at_level": rs.level,
     }
+
+
+@issues_router.get("/{key}/transitions")
+def list_issue_transitions(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    jira_client: JiraClient = Depends(get_jira_client),
+) -> list[dict[str, Any]]:
+    issue = session.get(Issue, key)
+    if issue is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+    require_pm(issue.project_key, user=user, session=session)
+    try:
+        transitions = jira_client.get_transitions(key)
+    except (JiraError, httpx.HTTPError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Không lấy được danh sách chuyển trạng thái từ Jira: {e}",
+        ) from None
+    return [
+        {"id": t.id, "name": t.name, "to_status": t.to_status, "to_category": t.to_category}
+        for t in transitions
+    ]

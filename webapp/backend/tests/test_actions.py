@@ -7,7 +7,7 @@ import respx
 
 from erw.db import utcnow
 from erw.domain.actions import execute_action
-from erw.integrations.jira import JiraClient, JiraError
+from erw.integrations.jira import JiraClient, JiraError, Transition, match_transition
 from erw.models import Action, Issue, User
 
 BASE = "https://example.atlassian.net"
@@ -105,36 +105,38 @@ def test_jira_add_comment(jira_client):
 
 
 @respx.mock
-def test_jira_find_transition_id_matches_to_name(jira_client):
+def test_jira_get_transitions_parses_target_status(jira_client):
     respx.get(f"{BASE}/rest/api/3/issue/DEMO-1/transitions").mock(
         return_value=httpx.Response(
             200,
             json={
                 "transitions": [
-                    {"id": "11", "name": "Start", "to": {"name": "In Progress"}},
+                    {"id": 11, "name": "Start", "to": {"name": "In Progress", "statusCategory": {"key": "indeterminate"}}},
                     {"id": "21", "name": "Close Issue", "to": {"name": "Done"}},
                 ]
             },
         )
     )
-    assert jira_client.find_transition_id("DEMO-1", "in progress") == "11"
-    assert jira_client.find_transition_id("DEMO-1", "DONE") == "21"
-    assert jira_client.find_transition_id("DEMO-1", "Unknown") is None
+    assert jira_client.get_transitions("DEMO-1") == [
+        Transition(id="11", name="Start", to_status="In Progress", to_category="indeterminate"),
+        Transition(id="21", name="Close Issue", to_status="Done", to_category=None),
+    ]
 
 
-@respx.mock
-def test_jira_find_transition_id_fallback_to_trans_name(jira_client):
-    respx.get(f"{BASE}/rest/api/3/issue/DEMO-1/transitions").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "transitions": [
-                    {"id": "31", "name": "Resolve", "to": {"name": "Closed"}},
-                ]
-            },
-        )
-    )
-    assert jira_client.find_transition_id("DEMO-1", "resolve") == "31"
+_TRANSITIONS = [
+    Transition(id="11", name="Start", to_status="In Progress", to_category="indeterminate"),
+    Transition(id="21", name="Close Issue", to_status="Done", to_category="done"),
+    Transition(id="31", name="Resolve", to_status="Closed", to_category="done"),
+]
+
+
+@pytest.mark.parametrize(
+    ("target", "expected_id"),
+    [("in progress", "11"), ("DONE", "21"), ("resolve", "31"), ("Unknown", None)],
+)
+def test_match_transition_prefers_target_status_then_transition_name(target, expected_id):
+    found = match_transition(_TRANSITIONS, target)
+    assert (found.id if found else None) == expected_id
 
 
 @respx.mock
@@ -437,3 +439,81 @@ def test_execute_action_failure_marks_failed_status(session, jira_client, pm_use
     session.refresh(action)
     assert action.status == "failed"
     assert "error" in action.result
+
+
+def _pending(session, items) -> Action:
+    action = Action(issue_key="DEMO-1", items=items, status="pending", created_at=utcnow())
+    session.add(action)
+    session.commit()
+    return action
+
+
+def _confirm(session, jira_client, pm_user, settings, action):
+    return execute_action(
+        session=session,
+        jira_client=jira_client,
+        action_id=action.id,
+        expected_updated=datetime(2026, 11, 4, 10, 0, 0, tzinfo=UTC),
+        confirmed_by_user=pm_user,
+        settings=settings,
+    )
+
+
+@respx.mock
+def test_execute_action_status_without_transition_fails_before_any_jira_write(session, jira_client, pm_user, settings):
+    action = _pending(session, [
+        {"action_type": "adjust_deadline", "value": "2026-11-25"},
+        {"action_type": "change_status", "value": "Done"},
+        {"action_type": "add_comment", "value": "note"},
+    ])
+    respx.get(f"{BASE}/rest/api/3/issue/DEMO-1", params={"fields": "updated"}).mock(
+        return_value=httpx.Response(200, json={"fields": {"updated": "2026-11-04T10:00:00.000Z"}})
+    )
+    respx.get(f"{BASE}/rest/api/3/issue/DEMO-1/transitions").mock(
+        return_value=httpx.Response(200, json={"transitions": [
+            {"id": "11", "name": "Start", "to": {"name": "In Progress"}},
+            {"id": "12", "name": "Pause", "to": {"name": "To Do"}},
+        ]})
+    )
+    put_route = respx.put(f"{BASE}/rest/api/3/issue/DEMO-1").mock(return_value=httpx.Response(204))
+    comment_route = respx.post(f"{BASE}/rest/api/3/issue/DEMO-1/comment").mock(return_value=httpx.Response(201))
+    trans_route = respx.post(f"{BASE}/rest/api/3/issue/DEMO-1/transitions").mock(return_value=httpx.Response(204))
+
+    res = _confirm(session, jira_client, pm_user, settings, action)
+
+    expected = {"error": "transition_not_allowed", "target": "Done", "available": ["In Progress", "To Do"]}
+    assert res == {"status": "failed", **expected}
+    assert not put_route.called and not comment_route.called and not trans_route.called
+    session.refresh(action)
+    assert action.status == "failed"
+    assert action.result == expected
+
+
+@respx.mock
+def test_execute_action_repeat_confirm_returns_stored_outcome_without_jira(session, jira_client, pm_user, settings):
+    applied = Action(
+        issue_key="DEMO-1", items=[{"action_type": "add_comment", "value": "x"}], status="applied",
+        result={"applied_items": 1, "applied_at": "2026-11-04T10:00:00+00:00"}, created_at=utcnow(),
+    )
+    conflicted = Action(
+        issue_key="DEMO-1", items=[], status="conflict", created_at=utcnow(),
+        result={"error": "conflict", "current_updated": "a", "expected_updated": "b"},
+    )
+    failed = Action(
+        issue_key="DEMO-1", items=[], status="failed", created_at=utcnow(),
+        result={"error": "transition_not_allowed", "target": "Done", "available": []},
+    )
+    session.add_all([applied, conflicted, failed])
+    session.commit()
+    any_jira = respx.route(host="example.atlassian.net").mock(return_value=httpx.Response(500))
+
+    assert _confirm(session, jira_client, pm_user, settings, applied) == {
+        "status": "applied", "action_id": applied.id, "applied_items": 1,
+    }
+    assert _confirm(session, jira_client, pm_user, settings, conflicted) == {
+        "status": "conflict", "current_updated": "a", "expected_updated": "b",
+    }
+    assert _confirm(session, jira_client, pm_user, settings, failed) == {
+        "status": "failed", "error": "transition_not_allowed", "target": "Done", "available": [],
+    }
+    assert not any_jira.called

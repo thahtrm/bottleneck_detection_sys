@@ -94,6 +94,31 @@ def _seed_rich_deadlines_and_reopens(session: Session, now) -> None:
     session.flush()
 
 
+def _seed_board_triage_states(session: Session, now) -> None:
+    """Give every board triage column and the 24h chip at least one demo card."""
+    session.get(RiskState, "DEMO-112").level = "LOW"
+    session.get(RiskState, "DEMO-112").delay_value = 0.18
+    session.get(RiskState, "DEMO-113").dismissed_at_level = "MED"
+    for key in ("DEMO-109", "DEMO-114"):
+        session.get(RiskState, key).level_raised_at = now - timedelta(hours=3)
+    session.get(RiskState, "DEMO-103").level_raised_at = now - timedelta(days=1)
+
+    applied = session.execute(
+        select(Action).where(Action.issue_key == "DEMO-103", Action.status == "applied")
+    ).scalar_one_or_none()
+    if applied is None:
+        session.add(
+            Action(
+                issue_key="DEMO-103",
+                items=[{"action_type": "add_comment", "value": "Đã họp với team để chia nhỏ phần tối ưu bộ nhớ"}],
+                status="applied",
+                result={"applied_items": 1},
+                created_at=now - timedelta(hours=2),
+            )
+        )
+    session.flush()
+
+
 def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = False) -> dict[str, Any]:
     """Seed standard users, demo project configuration, and scenario issues into SQLite."""
     now = utcnow()
@@ -806,6 +831,9 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
             for k, v in rs_item.items():
                 setattr(rs, k, v)
     session.flush()
+
+    if rich_network:
+        _seed_board_triage_states(session, now)
 
     # Pre-cached Suggestion for DEMO-104
     suggestion_output = {

@@ -588,3 +588,125 @@ def test_confirm_action_success_200_applied(client, auth_users, settings, sample
     assert action.status == "applied"
     assert action.confirmed_by == auth_users["pm"].id
     assert action.result["applied_items"] == 2
+
+
+@respx.mock
+def test_confirm_action_without_matching_transition_422_and_replay_is_stable(
+    client, auth_users, settings, sample_project, session
+):
+    now = utcnow()
+    action = Action(
+        issue_key="DEMO-1",
+        items=[{"action_type": "change_status", "value": "Done"}],
+        status="pending",
+        created_at=now,
+    )
+    session.add_all([Issue(key="DEMO-1", project_key="DEMO", summary="Task", created_at=now), action])
+    session.commit()
+    base = settings.jira_base_url.rstrip("/")
+    respx.get(f"{base}/rest/api/3/issue/DEMO-1", params={"fields": "updated"}).mock(
+        return_value=httpx.Response(200, json={"fields": {"updated": "2026-11-04T12:00:00.000Z"}})
+    )
+    transitions = respx.get(f"{base}/rest/api/3/issue/DEMO-1/transitions").mock(
+        return_value=httpx.Response(200, json={"transitions": [{"id": "11", "name": "Start", "to": {"name": "In Progress"}}]})
+    )
+    trans_post = respx.post(f"{base}/rest/api/3/issue/DEMO-1/transitions").mock(return_value=httpx.Response(204))
+
+    login(client, auth_users["pm"], settings)
+    body = {"expected_updated": "2026-11-04T12:00:00Z"}
+    first = client.post(f"/api/actions/{action.id}/confirm", json=body)
+    second = client.post(f"/api/actions/{action.id}/confirm", json=body)
+
+    assert first.status_code == second.status_code == 422
+    assert first.json()["detail"]["error"] == "transition_not_allowed"
+    assert first.json()["detail"]["available"] == ["In Progress"]
+    assert second.json() == first.json()
+    assert transitions.call_count == 1
+    assert not trans_post.called
+
+
+@respx.mock
+def test_confirm_action_twice_applies_once(client, auth_users, settings, sample_project, session, issue_new):
+    now = utcnow()
+    action = Action(
+        issue_key="DEMO-1",
+        items=[{"action_type": "add_comment", "value": "note"}],
+        status="pending",
+        created_at=now,
+    )
+    session.add_all([Issue(key="DEMO-1", project_key="DEMO", summary="Task", created_at=now), action])
+    session.commit()
+    base = settings.jira_base_url.rstrip("/")
+    respx.get(f"{base}/rest/api/3/issue/DEMO-1", params={"fields": "updated"}).mock(
+        return_value=httpx.Response(200, json={"fields": {"updated": "2026-11-04T12:00:00.000Z"}})
+    )
+    comment = respx.post(f"{base}/rest/api/3/issue/DEMO-1/comment").mock(return_value=httpx.Response(201, json={}))
+    respx.get(f"{base}/rest/api/3/issue/DEMO-1").mock(return_value=httpx.Response(200, json=issue_new))
+
+    login(client, auth_users["pm"], settings)
+    body = {"expected_updated": "2026-11-04T12:00:00Z"}
+    first = client.post(f"/api/actions/{action.id}/confirm", json=body)
+    second = client.post(f"/api/actions/{action.id}/confirm", json=body)
+
+    assert first.status_code == second.status_code == 200
+    assert second.json() == {"status": "applied", "action_id": action.id, "applied_items": 1}
+    assert comment.call_count == 1
+
+
+# ===========================================================================
+# 6. GET /api/issues/{key}/transitions
+# ===========================================================================
+
+
+@respx.mock
+def test_transitions_lists_jira_transitions_for_pm(client, auth_users, settings, sample_project, session):
+    session.add(Issue(key="DEMO-1", project_key="DEMO", summary="Task", created_at=utcnow()))
+    session.commit()
+    base = settings.jira_base_url.rstrip("/")
+    respx.get(f"{base}/rest/api/3/issue/DEMO-1/transitions").mock(
+        return_value=httpx.Response(200, json={"transitions": [
+            {"id": "31", "name": "Start", "to": {"name": "In Progress", "statusCategory": {"key": "indeterminate"}}},
+        ]})
+    )
+
+    login(client, auth_users["pm"], settings)
+    resp = client.get("/api/issues/DEMO-1/transitions")
+
+    assert resp.status_code == 200
+    assert resp.json() == [{"id": "31", "name": "Start", "to_status": "In Progress", "to_category": "indeterminate"}]
+
+
+def test_transitions_forbidden_for_viewer(client, auth_users, settings, sample_project, session):
+    session.add(Issue(key="DEMO-1", project_key="DEMO", summary="Task", created_at=utcnow()))
+    session.commit()
+    login(client, auth_users["viewer"], settings)
+    assert client.get("/api/issues/DEMO-1/transitions").status_code == 403
+
+
+def test_transitions_unknown_issue_404(client, auth_users, settings, sample_project):
+    login(client, auth_users["pm"], settings)
+    assert client.get("/api/issues/DEMO-404/transitions").status_code == 404
+
+
+@respx.mock
+def test_transitions_jira_error_is_502(client, auth_users, settings, sample_project, session):
+    session.add(Issue(key="DEMO-1", project_key="DEMO", summary="Task", created_at=utcnow()))
+    session.commit()
+    base = settings.jira_base_url.rstrip("/")
+    respx.get(f"{base}/rest/api/3/issue/DEMO-1/transitions").mock(return_value=httpx.Response(500, text="boom"))
+
+    login(client, auth_users["pm"], settings)
+    resp = client.get("/api/issues/DEMO-1/transitions")
+
+    assert resp.status_code == 502
+    assert isinstance(resp.json()["detail"], str)
+
+
+def test_transitions_jira_not_configured_is_502(client, auth_users, settings, sample_project, session):
+    session.add(Issue(key="DEMO-1", project_key="DEMO", summary="Task", created_at=utcnow()))
+    session.commit()
+    settings.jira_base_url = ""
+
+    login(client, auth_users["pm"], settings)
+    resp = client.get("/api/issues/DEMO-1/transitions")
+    assert resp.status_code == 502, resp.text

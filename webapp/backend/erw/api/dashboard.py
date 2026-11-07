@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict, deque
+from dataclasses import asdict
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import and_, case, func, or_, select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import ColumnElement, and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from erw.api.issues import _serialize_issue, _serialize_risk_state
 from erw.auth import get_session, require_authenticated_user, require_viewer
 from erw.db import utcnow
+from erw.domain.board import ColumnLayout, build_layout, card_deadline, card_reason, sprint_progress
+from erw.domain.triage import RECENT_DONE_WINDOW, classify_triage
 from erw.models import (
     Action,
     Change,
@@ -19,6 +22,7 @@ from erw.models import (
     IssueSprint,
     IssueVersion,
     Link,
+    Project,
     ProjectMember,
     RiskState,
     Sprint,
@@ -29,6 +33,28 @@ from erw.models import (
 dashboard_router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 router = dashboard_router
 
+_RISK_RANK = case(
+    (RiskState.level == "HIGH", 3),
+    (RiskState.level == "MED", 2),
+    (RiskState.level == "LOW", 1),
+    else_=0,
+)
+
+
+def _issue_scope(
+    project: str | None, user: User, session: Session
+) -> tuple[str | None, list[ColumnElement[bool]]]:
+    """(project key, issue filters) the user may see: one project they belong to, else all their projects."""
+    project_key = project.strip() if project and project.strip() else None
+    filters: list[ColumnElement[bool]] = [Issue.deleted_at.is_(None)]
+    if project_key is not None:
+        require_viewer(project_key, user=user, session=session)
+        filters.append(Issue.project_key == project_key)
+    elif not user.is_admin:
+        member_of = select(ProjectMember.project_key).where(ProjectMember.user_id == user.id)
+        filters.append(Issue.project_key.in_(member_of))
+    return project_key, filters
+
 
 @dashboard_router.get("/stats")
 def get_dashboard_stats(
@@ -36,33 +62,7 @@ def get_dashboard_stats(
     user: User = Depends(require_authenticated_user),
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
-    project_key = project.strip() if project and project.strip() else None
-
-    if project_key is not None:
-        require_viewer(project_key, user=user, session=session)
-        base_issue_filters = [Issue.deleted_at.is_(None), Issue.project_key == project_key]
-    else:
-        if not user.is_admin:
-            user_projects = list(
-                session.scalars(
-                    select(ProjectMember.project_key).where(ProjectMember.user_id == user.id)
-                ).all()
-            )
-            if not user_projects:
-                return {
-                    "project": None,
-                    "total_open_issues": 0,
-                    "high_risk_count": 0,
-                    "med_risk_count": 0,
-                    "increased_risk_24h_count": 0,
-                    "blocked_count": 0,
-                    "critical_count": 0,
-                    "resolved_recent_count": 0,
-                    "applied_actions_count": 0,
-                }
-            base_issue_filters = [Issue.deleted_at.is_(None), Issue.project_key.in_(user_projects)]
-        else:
-            base_issue_filters = [Issue.deleted_at.is_(None)]
+    project_key, base_issue_filters = _issue_scope(project, user, session)
 
     now = utcnow()
     h24 = now - timedelta(hours=24)
@@ -137,28 +137,7 @@ def list_dashboard_issues(
     user: User = Depends(require_authenticated_user),
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
-    project_key = project.strip() if project and project.strip() else None
-
-    if project_key is not None:
-        require_viewer(project_key, user=user, session=session)
-        conditions = [Issue.deleted_at.is_(None), Issue.project_key == project_key]
-    else:
-        if not user.is_admin:
-            user_projects = list(
-                session.scalars(
-                    select(ProjectMember.project_key).where(ProjectMember.user_id == user.id)
-                ).all()
-            )
-            if not user_projects:
-                return {
-                    "total": 0,
-                    "limit": limit,
-                    "offset": offset,
-                    "items": [],
-                }
-            conditions = [Issue.deleted_at.is_(None), Issue.project_key.in_(user_projects)]
-        else:
-            conditions = [Issue.deleted_at.is_(None)]
+    _, conditions = _issue_scope(project, user, session)
 
     sc = (status_category or "").strip().lower()
     if sc == "done":
@@ -202,13 +181,7 @@ def list_dashboard_issues(
         )
         order_clause = [primary_sort, Issue.key.asc()]
     else:  # default "risk"
-        risk_rank = case(
-            (RiskState.level == "HIGH", 3),
-            (RiskState.level == "MED", 2),
-            (RiskState.level == "LOW", 1),
-            else_=0,
-        )
-        primary_sort = risk_rank.asc() if is_asc else risk_rank.desc()
+        primary_sort = _RISK_RANK.asc() if is_asc else _RISK_RANK.desc()
         order_clause = [primary_sort, Issue.updated_at.desc().nulls_last(), Issue.key.asc()]
 
     total = session.scalar(
@@ -437,23 +410,7 @@ def get_dashboard_graph(
     user: User = Depends(require_authenticated_user),
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
-    project_key = project.strip() if project and project.strip() else None
-
-    if project_key is not None:
-        require_viewer(project_key, user=user, session=session)
-        base_issue_filters = [Issue.deleted_at.is_(None), Issue.project_key == project_key]
-    else:
-        if not user.is_admin:
-            user_projects = list(
-                session.scalars(
-                    select(ProjectMember.project_key).where(ProjectMember.user_id == user.id)
-                ).all()
-            )
-            if not user_projects:
-                return _empty_graph(None)
-            base_issue_filters = [Issue.deleted_at.is_(None), Issue.project_key.in_(user_projects)]
-        else:
-            base_issue_filters = [Issue.deleted_at.is_(None)]
+    project_key, base_issue_filters = _issue_scope(project, user, session)
 
     rows = session.execute(
         select(Issue, RiskState)
@@ -680,4 +637,147 @@ def get_dashboard_graph(
         "deadlines": deadlines,
         "critical_path": critical_path,
         "overload_threshold": overload_threshold,
+    }
+
+
+def _iso(dt: datetime | None) -> str | None:
+    return dt.isoformat() if dt else None
+
+
+def _project_sprints(session: Session, project_key: str) -> list[Sprint]:
+    """Sprints linked to the project's issues, active first, then latest start first."""
+    linked = (
+        select(IssueSprint.sprint_id)
+        .join(Issue, Issue.key == IssueSprint.issue_key)
+        .where(Issue.project_key == project_key, Issue.deleted_at.is_(None))
+    )
+    return list(session.scalars(
+        select(Sprint)
+        .where(Sprint.id.in_(linked))
+        .order_by(case((Sprint.state == "active", 0), else_=1), Sprint.start_at.desc().nulls_last(), Sprint.id.desc())
+    ).all())
+
+
+def _sprint_summary(sprint: Sprint, project_key: str, session: Session, now: datetime) -> tuple[dict, dict]:
+    scope = session.execute(
+        select(Issue.status_category, Issue.story_points)
+        .join(IssueSprint, IssueSprint.issue_key == Issue.key)
+        .where(IssueSprint.sprint_id == sprint.id, Issue.project_key == project_key, Issue.deleted_at.is_(None))
+    ).all()
+    progress = sprint_progress(scope, start_at=sprint.start_at, end_at=sprint.end_at, now=now)
+    info = {
+        "id": sprint.id,
+        "name": sprint.name or f"Sprint {sprint.id}",
+        "state": sprint.state,
+        "start_at": _iso(sprint.start_at),
+        "end_at": _iso(sprint.end_at),
+        "days_left": (sprint.end_at.date() - now.date()).days if sprint.end_at else None,
+    }
+    return info, asdict(progress)
+
+
+def _board_card(
+    issue: Issue, rs: RiskState | None, last_applied_at: datetime | None, layout: ColumnLayout, now: datetime
+) -> dict[str, Any]:
+    deadline = card_deadline(
+        deadline_type=rs.deadline_type if rs else None,
+        deadline_label=rs.deadline_label if rs else None,
+        deadline_at=rs.deadline_at if rs else None,
+        duedate=issue.duedate,
+    )
+    level = rs.level if rs else None
+    blocked = bool(rs and rs.blocked)
+    return {
+        "key": issue.key,
+        "project_key": issue.project_key,
+        "summary": issue.summary,
+        "issuetype": issue.issuetype,
+        "priority": issue.priority,
+        "status": issue.status,
+        "status_category": issue.status_category,
+        "status_column": layout.column_for(issue.status),
+        "assignee": {"id": issue.assignee_id, "name": issue.assignee_name or issue.assignee_id}
+        if issue.assignee_id
+        else None,
+        "story_points": issue.story_points,
+        "updated_at": _iso(issue.updated_at),
+        "resolved_at": _iso(issue.resolved_at),
+        "level": level,
+        "delay_value": rs.delay_value if rs else None,
+        "blocked": blocked,
+        "is_critical": bool(rs and rs.is_critical),
+        "raised_at": _iso(rs.level_raised_at) if rs else None,
+        "deadline": {"type": deadline.type, "label": deadline.label, "at": deadline.at.isoformat()}
+        if deadline
+        else None,
+        "reason": card_reason(rs.factors) if rs else None,
+        "triage": classify_triage(
+            status_category=issue.status_category,
+            resolved_at=issue.resolved_at,
+            level=level,
+            dismissed_at_level=rs.dismissed_at_level if rs else None,
+            blocked=blocked,
+            level_raised_at=rs.level_raised_at if rs else None,
+            last_applied_action_at=last_applied_at,
+            now=now,
+        ),
+    }
+
+
+@dashboard_router.get("/board")
+def get_dashboard_board(
+    project: str | None = None,
+    q: str | None = None,
+    sprint: int | None = None,
+    cap: int = Query(1000, ge=1, le=2000),
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    project_key, filters = _issue_scope(project, user, session)
+    now = utcnow()
+    filters.append(or_(Issue.status_category != "done", Issue.resolved_at >= now - RECENT_DONE_WINDOW))
+    if q is not None and q.strip():
+        pattern = f"%{q.strip()}%"
+        filters.append(or_(Issue.key.ilike(pattern), Issue.summary.ilike(pattern)))
+
+    sprints = _project_sprints(session, project_key) if project_key else []
+    if sprint is not None:
+        selected = next((s for s in sprints if s.id == sprint), None)
+        if selected is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sprint not found in project")
+        filters.append(Issue.key.in_(select(IssueSprint.issue_key).where(IssueSprint.sprint_id == sprint)))
+    else:
+        selected = next((s for s in sprints if s.state == "active"), None)
+    sprint_info, progress = _sprint_summary(selected, project_key, session, now) if selected else (None, None)
+
+    last_applied = (
+        select(Action.issue_key, func.max(Action.created_at).label("at"))
+        .where(Action.status == "applied")
+        .group_by(Action.issue_key)
+        .subquery()
+    )
+    total = session.scalar(select(func.count(Issue.key)).where(*filters)) or 0
+    rows = session.execute(
+        select(Issue, RiskState, last_applied.c.at)
+        .outerjoin(RiskState, Issue.key == RiskState.issue_key)
+        .outerjoin(last_applied, last_applied.c.issue_key == Issue.key)
+        .where(*filters)
+        .order_by(_RISK_RANK.desc(), RiskState.deadline_at.asc().nulls_last(), Issue.key.asc())
+        .limit(cap)
+    ).all()
+
+    project_row = session.get(Project, project_key) if project_key else None
+    layout = build_layout(
+        project_row.status_map if project_row else None,
+        ((issue.status, issue.status_category) for issue, _, _ in rows),
+    )
+    return {
+        "project": project_key,
+        "total": int(total),
+        "truncated": total > len(rows),
+        "sprint": sprint_info,
+        "sprints": [{"id": s.id, "name": s.name or f"Sprint {s.id}", "state": s.state} for s in sprints],
+        "progress": progress,
+        "status_columns": [asdict(c) for c in layout.columns],
+        "cards": [_board_card(issue, rs, applied_at, layout, now) for issue, rs, applied_at in rows],
     }

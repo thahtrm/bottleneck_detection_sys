@@ -115,7 +115,8 @@ def confirm_action(
         confirmed_by_user=user,
         settings=settings,
     )
-    if result.get("status") == "conflict":
+    if result["status"] == "conflict":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result)
-
+    if result["status"] != "applied":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=result)
     return result

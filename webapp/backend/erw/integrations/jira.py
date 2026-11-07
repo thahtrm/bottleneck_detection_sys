@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -23,6 +24,22 @@ def _parse_jira_datetime(s: str) -> datetime:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)
+
+
+@dataclass(frozen=True)
+class Transition:
+    id: str
+    name: str
+    to_status: str
+    to_category: str | None
+
+
+def match_transition(transitions: list[Transition], target_status: str) -> Transition | None:
+    """Prefer a transition landing on `target_status`; fall back to one whose own name matches."""
+    target = target_status.strip().casefold()
+    return next((t for t in transitions if t.to_status.strip().casefold() == target), None) or next(
+        (t for t in transitions if t.name.strip().casefold() == target), None
+    )
 
 
 class JiraError(Exception):
@@ -184,19 +201,19 @@ class JiraClient:
         }
         self._json("POST", f"/rest/api/3/issue/{key}/comment", json=payload)
 
-    def find_transition_id(self, key: str, target_status_name: str) -> str | None:
+    def get_transitions(self, key: str) -> list[Transition]:
         data = self._json("GET", f"/rest/api/3/issue/{key}/transitions")
-        transitions = data.get("transitions", []) if isinstance(data, dict) else []
-        target = target_status_name.strip().lower()
-        for t in transitions:
-            to_name = t.get("to", {}).get("name", "").strip().lower()
-            if to_name == target:
-                return str(t["id"])
-        for t in transitions:
-            trans_name = t.get("name", "").strip().lower()
-            if trans_name == target:
-                return str(t["id"])
-        return None
+        raw = data.get("transitions", []) if isinstance(data, dict) else []
+        return [
+            Transition(
+                id=str(t["id"]),
+                name=str(t.get("name") or ""),
+                to_status=str((t.get("to") or {}).get("name") or ""),
+                to_category=((t.get("to") or {}).get("statusCategory") or {}).get("key"),
+            )
+            for t in raw
+            if isinstance(t, dict) and "id" in t
+        ]
 
     def transition_issue(self, key: str, transition_id: str) -> None:
         self._json("POST", f"/rest/api/3/issue/{key}/transitions", json={"transition": {"id": transition_id}})

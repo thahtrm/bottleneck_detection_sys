@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.orm import Session
 
 from erw.ingest.sync import sync_issue
+from erw.integrations.jira import match_transition
 from erw.integrations.slack import SlackSender
 from erw.models import Action, User
 
@@ -31,6 +32,8 @@ def execute_action(
     action = session.get(Action, action_id)
     if action is None:
         raise ValueError(f"Action {action_id} not found")
+    if action.status != "pending":
+        return stored_outcome(action)
 
     issue_key = action.issue_key
 
@@ -54,11 +57,7 @@ def execute_action(
             "expected_updated": expected_updated.isoformat(),
         }
         session.commit()
-        return {
-            "status": "conflict",
-            "current_updated": current_updated.isoformat(),
-            "expected_updated": expected_updated.isoformat(),
-        }
+        return stored_outcome(action)
 
     raw_items = action.items
     if isinstance(raw_items, str):
@@ -71,16 +70,17 @@ def execute_action(
 
     pm_attribution = f"\n\n*(xác nhận bởi PM {confirmed_by_user.name} qua Early Risk)*"
 
-    try:
-        for item in raw_items:
-            if not isinstance(item, dict):
-                if hasattr(item, "model_dump"):
-                    item = item.model_dump()
-                elif hasattr(item, "dict"):
-                    item = item.dict()
-                else:
-                    continue
+    items = [d for d in (_as_dict(i) for i in raw_items) if d is not None]
 
+    try:
+        transition_ids, missing = _resolve_transitions(jira_client, issue_key, items)
+        if missing is not None:
+            action.status = "failed"
+            action.result = missing
+            session.commit()
+            return stored_outcome(action)
+
+        for item in items:
             item_type = item.get("action_type")
             val = item.get("value")
             target = item.get("target")
@@ -109,13 +109,9 @@ def execute_action(
                     jira_client.update_issue(issue_key, {"assignee": {"accountId": str(assignee_val)}})
 
             elif item_type == "change_status":
-                status_val = val or target
+                status_val = _status_target(item)
                 if status_val:
-                    transition_id = jira_client.find_transition_id(issue_key, str(status_val))
-                    if transition_id:
-                        jira_client.transition_issue(issue_key, transition_id)
-                    else:
-                        log.warning("Transition not found for issue %s to status %s", issue_key, status_val)
+                    jira_client.transition_issue(issue_key, transition_ids[status_val])
 
             elif item_type == "add_comment":
                 body = val or reason or target or ""
@@ -167,3 +163,54 @@ def execute_action(
 
     session.commit()
     return {"status": "applied", "action_id": action.id, "applied_items": len(raw_items)}
+
+
+def stored_outcome(action: Action) -> dict[str, Any]:
+    """What confirming `action` produced; a repeat confirm returns this without touching Jira."""
+    result = action.result if isinstance(action.result, dict) else {}
+    if action.status == "applied":
+        return {"status": "applied", "action_id": action.id, "applied_items": result.get("applied_items", 0)}
+    if action.status == "conflict":
+        return {
+            "status": "conflict",
+            "current_updated": result.get("current_updated"),
+            "expected_updated": result.get("expected_updated"),
+        }
+    return {**result, "status": action.status}
+
+
+def _as_dict(item: Any) -> dict[str, Any] | None:
+    if isinstance(item, dict):
+        return item
+    if hasattr(item, "model_dump"):
+        return item.model_dump()
+    if hasattr(item, "dict"):
+        return item.dict()
+    return None
+
+
+def _status_target(item: dict[str, Any]) -> str | None:
+    target = item.get("value") or item.get("target")
+    return str(target) if target else None
+
+
+def _resolve_transitions(
+    jira_client: JiraClient, issue_key: str, items: list[dict[str, Any]]
+) -> tuple[dict[str, str], dict[str, Any] | None]:
+    """Transition id per change_status target, or the failure to store when Jira offers no matching transition.
+
+    Runs before any Jira write so an impossible status move never leaves the other items half applied.
+    """
+    targets = [t for i in items if i.get("action_type") == "change_status" and (t := _status_target(i))]
+    if not targets:
+        return {}, None
+    transitions = jira_client.get_transitions(issue_key)
+    ids: dict[str, str] = {}
+    for target in targets:
+        found = match_transition(transitions, target)
+        if found is None:
+            log.warning("Transition not found for issue %s to status %s", issue_key, target)
+            available = list(dict.fromkeys(t.to_status for t in transitions if t.to_status))
+            return {}, {"error": "transition_not_allowed", "target": target, "available": available}
+        ids[target] = found.id
+    return ids, None
