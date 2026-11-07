@@ -692,3 +692,154 @@ def test_dashboard_graph_basic_and_bottlenecks(client, auth_users, settings, sam
     assert ("DEMO-1", "DEMO-2") in edge_pairs
     assert ("DEMO-1", "DEMO-3") in edge_pairs
 
+
+
+def _issue(key, *, assignee=None, level="LOW", status_category="indeterminate", duedate=None):
+    issue = Issue(
+        key=key,
+        project_key="DEMO",
+        summary=key,
+        status_category=status_category,
+        assignee_id=assignee[0] if assignee else None,
+        assignee_name=assignee[1] if assignee else None,
+        duedate=duedate,
+        updated_at=utcnow(),
+    )
+    return issue, RiskState(issue_key=key, level=level)
+
+
+@pytest.fixture
+def pm_graph(client, auth_users, settings, sample_project, session):
+    from erw.models import Change, IssueSprint, IssueVersion, Link, Sprint, Version
+
+    now = utcnow()
+    today = now.date()
+    alice, bob, carol = ("u1", "Alice"), ("u2", "Bob"), ("u3", "Carol")
+    rows = [
+        _issue("DEMO-1", assignee=alice, level="HIGH", duedate=today - timedelta(days=2)),
+        _issue("DEMO-2", assignee=alice, level="HIGH"),
+        _issue("DEMO-3", level="MED"),
+        _issue("DEMO-4", assignee=bob),
+        _issue("DEMO-5", assignee=bob, level="HIGH", status_category="done"),
+        _issue("DEMO-6", assignee=carol),
+    ]
+    for issue, rs in rows:
+        session.add_all([issue, rs])
+    session.flush()
+    session.add_all([
+        Link(source_key="DEMO-2", target_key="DEMO-1", type_std="Block", direction="0"),
+        Link(source_key="DEMO-3", target_key="DEMO-2", type_std="Depend", direction="1"),
+        Link(source_key="DEMO-4", target_key="DEMO-3", type_std="Relate", direction="1"),
+        Link(source_key="DEMO-6", target_key="DEMO-4", type_std="blocks", direction="outward"),
+        Change(issue_key="DEMO-2", change_id="1", idx=0, at=now, field="status", to_str="Reopened"),
+        Change(issue_key="DEMO-2", change_id="2", idx=0, at=now, field="status", to_str="REOPEN"),
+        Change(issue_key="DEMO-2", change_id="3", idx=0, at=now, field="status", to_str="In Progress"),
+        Change(issue_key="DEMO-2", change_id="4", idx=0, at=now, field="resolution", to_str="Reopened"),
+        Sprint(id=7, name="Sprint 7", state="active", end_at=now + timedelta(days=2)),
+        Sprint(id=8, name="Sprint 8", state="closed", end_at=now - timedelta(days=10)),
+        Version(id=9, project_key="DEMO", name="v1.0", release_date=today + timedelta(days=10), released=False),
+        Version(id=10, project_key="DEMO", name="v0.9", release_date=today, released=True),
+    ])
+    session.flush()
+    session.add_all([
+        IssueSprint(issue_key="DEMO-1", sprint_id=7),
+        IssueSprint(issue_key="DEMO-2", sprint_id=7),
+        IssueSprint(issue_key="DEMO-2", sprint_id=8),
+        IssueVersion(issue_key="DEMO-3", version_id=9),
+        IssueVersion(issue_key="DEMO-3", version_id=10),
+    ])
+    session.commit()
+
+    login(client, auth_users["pm"], settings)
+    resp = client.get("/api/dashboard/graph?project=DEMO")
+    assert resp.status_code == 200
+    return resp.json()
+
+
+def test_graph_people_load_and_unassigned(pm_graph):
+    people = {p["id"]: p for p in pm_graph["people"]}
+    assert pm_graph["people"][0]["id"] == "person:__unassigned__"
+    assert people["person:__unassigned__"] == {
+        "id": "person:__unassigned__", "kind": "unassigned", "name": "Chưa phân công",
+        "open_count": 1, "high_risk_count": 0, "overdue_count": 0, "is_overloaded": False,
+    }
+    alice = people["person:u1"]
+    assert (alice["kind"], alice["name"], alice["open_count"], alice["high_risk_count"], alice["overdue_count"]) == (
+        "person", "Alice", 2, 2, 1,
+    )
+    assert alice["is_overloaded"] is True
+    bob = people["person:u2"]
+    assert (bob["open_count"], bob["high_risk_count"], bob["is_overloaded"]) == (1, 0, False)
+    assert people["person:u3"]["is_overloaded"] is False
+    assert pm_graph["overload_threshold"] == 2
+    assert pm_graph["summary"]["overloaded_count"] == 1
+    assert pm_graph["summary"]["unassigned_count"] == 1
+
+    nodes = {n["key"]: n for n in pm_graph["nodes"]}
+    assert all(n["kind"] == "issue" for n in nodes.values())
+    assert nodes["DEMO-1"]["person_id"] == "person:u1"
+    assert nodes["DEMO-3"]["person_id"] == "person:__unassigned__"
+
+
+def test_graph_edge_kind_and_risk_propagation(pm_graph):
+    edges = {(e["from"], e["to"]): e for e in pm_graph["edges"]}
+    assert set(edges) == {("DEMO-1", "DEMO-2"), ("DEMO-2", "DEMO-3"), ("DEMO-4", "DEMO-3"), ("DEMO-6", "DEMO-4")}
+    assert {k: (e["kind"], e["is_blocking"], e["propagates_risk"]) for k, e in edges.items()} == {
+        ("DEMO-1", "DEMO-2"): ("blocks", True, True),
+        ("DEMO-2", "DEMO-3"): ("blocks", True, True),
+        ("DEMO-4", "DEMO-3"): ("relates", False, False),
+        ("DEMO-6", "DEMO-4"): ("blocks", True, False),
+    }
+
+
+def test_graph_reopen_count_and_critical_path(pm_graph):
+    nodes = {n["key"]: n for n in pm_graph["nodes"]}
+    assert nodes["DEMO-2"]["reopen_count"] == 2
+    assert nodes["DEMO-1"]["reopen_count"] == 0
+    assert pm_graph["critical_path"] == ["DEMO-1", "DEMO-2", "DEMO-3"]
+    assert {k for k, n in nodes.items() if n["is_critical_path"]} == {"DEMO-1", "DEMO-2", "DEMO-3"}
+    on_path = {(e["from"], e["to"]) for e in pm_graph["edges"] if e["is_critical_path"]}
+    assert on_path == {("DEMO-1", "DEMO-2"), ("DEMO-2", "DEMO-3")}
+
+
+def test_graph_deadlines(pm_graph):
+    today = utcnow().date()
+    assert pm_graph["deadlines"] == [
+        {
+            "id": "sprint:7", "kind": "sprint", "name": "Sprint 7",
+            "end_date": (today + timedelta(days=2)).isoformat(), "days_left": 2,
+            "open_count": 2, "high_risk_count": 2, "at_risk": True,
+        },
+        {
+            "id": "version:9", "kind": "version", "name": "v1.0",
+            "end_date": (today + timedelta(days=10)).isoformat(), "days_left": 10,
+            "open_count": 1, "high_risk_count": 0, "at_risk": False,
+        },
+    ]
+    nodes = {n["key"]: n for n in pm_graph["nodes"]}
+    assert nodes["DEMO-2"]["deadline_ids"] == ["sprint:7"]
+    assert nodes["DEMO-3"]["deadline_ids"] == ["version:9"]
+    assert nodes["DEMO-4"]["deadline_ids"] == []
+
+
+def test_graph_overload_by_open_count_needs_three_assignees(client, auth_users, settings, sample_project, session):
+    login(client, auth_users["pm"], settings)
+
+    for issue, rs in [_issue(f"DEMO-{i}", assignee=("busy", "Busy")) for i in range(1, 6)] + [
+        _issue("DEMO-9", assignee=("calm", "Calm"))
+    ]:
+        session.add_all([issue, rs])
+    session.commit()
+    people = {p["id"]: p for p in client.get("/api/dashboard/graph?project=DEMO").json()["people"]}
+    assert people["person:busy"]["open_count"] == 5
+    assert people["person:busy"]["is_overloaded"] is False
+
+    for i in range(10, 20):
+        issue, rs = _issue(f"DEMO-{i}", assignee=(f"p{i}", f"P{i}"))
+        session.add_all([issue, rs])
+    session.commit()
+    data = client.get("/api/dashboard/graph?project=DEMO").json()
+    people = {p["id"]: p for p in data["people"]}
+    assert data["overload_threshold"] == 1
+    assert people["person:busy"]["is_overloaded"] is True
+    assert people["person:calm"]["is_overloaded"] is False
