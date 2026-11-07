@@ -1,643 +1,244 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Card,
-  Group,
-  Stack,
-  Text,
-  Badge,
-  Button,
   ActionIcon,
-  Tooltip,
-  ThemeIcon,
-  TextInput,
-  SegmentedControl,
-  Paper,
-  Box,
-  Center,
-  Loader,
   Alert,
-  Divider,
-  Progress,
+  Anchor,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Center,
+  Checkbox,
   Collapse,
+  Divider,
+  Group,
+  Loader,
+  Paper,
+  Progress,
+  SegmentedControl,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+  ThemeIcon,
+  Tooltip,
 } from '@mantine/core';
 import {
-  IconSearch,
-  IconZoomIn,
-  IconZoomOut,
-  IconFocusCentered,
-  IconRefresh,
   IconAlertTriangle,
-  IconClock,
-  IconLock,
-  IconFlame,
-  IconRoute,
+  IconArrowsSplit,
   IconCheck,
-  IconFilter,
-  IconInfoCircle,
   IconChevronDown,
   IconChevronUp,
-  IconArrowsSplit,
-  IconPlayerPlay,
-  IconPlayerPause,
+  IconClock,
+  IconFlame,
+  IconFocusCentered,
+  IconInbox,
+  IconLock,
+  IconRefresh,
+  IconRoute,
+  IconSearch,
   IconTopologyStarRing3,
+  IconUserExclamation,
+  IconZoomIn,
+  IconZoomOut,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { Network, DataSet } from 'vis-network/standalone';
+import { DataSet, Network } from 'vis-network/standalone';
 import { getDashboardGraph } from '../api/client';
+import {
+  FILTERS,
+  RISK,
+  UNASSIGNED,
+  buildModel,
+  buildScene,
+  daysLeftText,
+  drawOverlay,
+  findTarget,
+  issueInsight,
+  laneAt,
+  matchesSearch,
+  overviewInsight,
+  personInsight,
+  riskOf,
+} from './graphModel';
 
-/**
- * Bảng màu chuẩn cho các trạng thái rủi ro trên đồ thị
- */
-const COLOR_PALETTE = {
-  bottleneck: {
-    background: '#e03131',
-    border: '#c92a2a',
-    highlight: { background: '#f03e3e', border: '#a61e4d' },
-    font: '#ffffff',
-    glow: 'rgba(224, 49, 49, 0.45)',
-  },
-  overdue: {
-    background: '#fa5252',
-    border: '#e03131',
-    highlight: { background: '#ff6b6b', border: '#c92a2a' },
-    font: '#ffffff',
-    glow: 'rgba(250, 82, 82, 0.4)',
-  },
-  critical: {
-    background: '#7950f2',
-    border: '#5f3dc4',
-    highlight: { background: '#845ef7', border: '#4c1d95' },
-    font: '#ffffff',
-    glow: 'rgba(121, 80, 242, 0.4)',
-  },
-  blocked: {
-    background: '#fd7e14',
-    border: '#d9480f',
-    highlight: { background: '#ff922b', border: '#b23608' },
-    font: '#ffffff',
-    glow: 'rgba(253, 126, 20, 0.35)',
-  },
-  highRisk: {
-    background: '#f76707',
-    border: '#d9480f',
-    highlight: { background: '#ff8736', border: '#d9480f' },
-    font: '#ffffff',
-    glow: 'rgba(247, 103, 7, 0.35)',
-  },
-  medRisk: {
-    background: '#fab005',
-    border: '#f59f00',
-    highlight: { background: '#ffd43b', border: '#e67700' },
-    font: '#212529',
-    glow: 'rgba(250, 176, 5, 0.3)',
-  },
-  normal: {
-    background: '#228be6',
-    border: '#1971c2',
-    highlight: { background: '#339af0', border: '#1864ab' },
-    font: '#ffffff',
-    glow: 'rgba(34, 139, 230, 0.25)',
-  },
-  done: {
-    background: '#40c057',
-    border: '#2f9e44',
-    highlight: { background: '#51cf66', border: '#2b8a3e' },
-    font: '#ffffff',
-    glow: 'rgba(64, 192, 87, 0.25)',
-  },
-  dimmed: {
-    background: '#e9ecef',
-    border: '#ced4da',
-    highlight: { background: '#dee2e6', border: '#adb5bd' },
-    font: '#868e96',
-    glow: 'none',
-  },
+const BASE_OPTIONS = {
+  autoResize: true,
+  height: '100%',
+  width: '100%',
+  interaction: { hover: true, tooltipDelay: 100, zoomView: true, dragView: true, keyboard: false },
+  nodes: { font: { face: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif' } },
+  edges: { arrows: { to: { scaleFactor: 0.7 } } },
 };
 
-/**
- * Xác định phân loại màu chính cho từng node
- */
-function getNodeTheme(node) {
-  if (node.status_category === 'done') return COLOR_PALETTE.done;
-  if (node.is_bottleneck) return COLOR_PALETTE.bottleneck;
-  if (node.is_overdue) return COLOR_PALETTE.overdue;
-  if (node.blocked) return COLOR_PALETTE.blocked;
-  if (node.is_critical) return COLOR_PALETTE.critical;
-  if (node.level === 'HIGH') return COLOR_PALETTE.highRisk;
-  if (node.level === 'MED') return COLOR_PALETTE.medRisk;
-  return COLOR_PALETTE.normal;
+const KPIS = [
+  { filter: 'HIGH_RISK', color: 'red', icon: IconFlame, count: (s) => s.high_risk_count, label: 'Rủi ro cao' },
+  { filter: 'OVERDUE', color: 'red', icon: IconClock, count: (s) => s.overdue_count, label: 'Quá hạn' },
+  { filter: 'BOTTLENECK', color: 'red', icon: IconAlertTriangle, count: (s) => s.bottlenecks_count, label: 'Điểm nghẽn' },
+  { filter: 'OVERLOADED', color: 'red', icon: IconUserExclamation, count: (s) => s.overloaded_count, label: 'Người quá tải' },
+  { filter: 'UNASSIGNED', color: 'yellow', icon: IconInbox, count: (s) => s.unassigned_count, label: 'Chưa phân công' },
+  { filter: 'BLOCKED', color: 'orange', icon: IconLock, count: (s) => s.blocked_count, label: 'Đang bị chặn' },
+  { filter: 'CRITICAL', color: 'violet', icon: IconRoute, count: (s) => s.critical_count, label: 'Trọng yếu TGN' },
+];
+
+function frame(network, container, bounds, animation) {
+  if (!bounds) {
+    network.fit({ animation: false });
+    network.moveTo({ scale: network.getScale() * 0.88, animation });
+    return;
+  }
+  const width = bounds.maxX - bounds.minX;
+  const height = bounds.maxY - bounds.minY;
+  const scale = Math.min(container.clientWidth / width, 1) * 0.97;
+  const visibleHeight = container.clientHeight / scale;
+  const centerY = height <= visibleHeight ? (bounds.minY + bounds.maxY) / 2 : bounds.minY + visibleHeight / 2 - 10;
+  network.moveTo({ position: { x: (bounds.minX + bounds.maxX) / 2, y: centerY }, scale, animation });
 }
 
-export default function NetworkGraph({
-  selectedProject = '',
-  onSelectIssue,
-  selectedIssueKey = null,
-}) {
+const isOverview = (view) => view.mode === 'lanes' || view.mode === 'dag';
+const overviewOf = (view) => (isOverview(view) ? view.mode : view.back);
+
+export default function NetworkGraph({ selectedProject = '', onSelectIssue, selectedIssueKey = null }) {
   const containerRef = useRef(null);
   const networkRef = useRef(null);
-  const nodesDataSetRef = useRef(null);
-  const edgesDataSetRef = useRef(null);
+  const nodesRef = useRef(null);
+  const handlersRef = useRef({});
 
-  // Trạng thái giao diện
-  const [activeFilter, setActiveFilter] = useState('ALL'); // ALL, BOTTLENECK, OVERDUE, BLOCKED, CRITICAL, HIGH_RISK
-  const [layoutMode, setLayoutMode] = useState('physics'); // 'physics' | 'hierarchical_lr' | 'hierarchical_ud'
-  const [physicsEnabled, setPhysicsEnabled] = useState(true);
+  const [view, setView] = useState({ mode: 'lanes' });
+  const [activeFilter, setActiveFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [hoveredNodeData, setHoveredNodeData] = useState(null);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [showDone, setShowDone] = useState(false);
+  const [showRelates, setShowRelates] = useState(false);
+  const [dagLayout, setDagLayout] = useState('hierarchical_lr');
+  const [hovered, setHovered] = useState(null);
   const [isLegendOpen, setIsLegendOpen] = useState(false);
 
-  // Lấy dữ liệu đồ thị từ API
-  const {
-    data: graphData,
-    isLoading,
-    isError,
-    refetch,
-    isFetching,
-  } = useQuery({
+  const { data: graphData, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['dashboard-graph', selectedProject],
     queryFn: () => getDashboardGraph(selectedProject || null),
     staleTime: 15000,
   });
 
-  const summary = graphData?.summary || {
-    total_nodes: 0,
-    total_edges: 0,
-    bottlenecks_count: 0,
-    overdue_count: 0,
-    high_risk_count: 0,
-    blocked_count: 0,
-    critical_count: 0,
-    done_count: 0,
+  const model = useMemo(() => (graphData?.nodes?.length ? buildModel(graphData) : null), [graphData]);
+  const summary = graphData?.summary || {};
+
+  const go = (target) => {
+    if (target.mode === 'focusIssue') {
+      setView((v) => ({ mode: 'focusIssue', key: target.key, depth: v.mode === 'focusIssue' ? v.depth : 2, back: overviewOf(v) }));
+      onSelectIssue?.(target.key);
+    } else {
+      setView((v) => ({ ...target, back: overviewOf(v) }));
+    }
   };
 
-  // Node Map để truy vấn nhanh
-  const nodeMap = useMemo(() => {
-    const map = new Map();
-    (graphData?.nodes || []).forEach((n) => map.set(n.id, n));
-    return map;
-  }, [graphData]);
+  const validView = useMemo(() => {
+    if (!model) return view;
+    if (view.mode === 'focusIssue' && !model.issues.has(view.key)) return { mode: view.back };
+    if (view.mode === 'focusPerson' && !model.people.has(view.id)) return { mode: view.back };
+    return view;
+  }, [model, view]);
 
-  // Tìm kiếm danh sách lân cận (Upstream & Downstream)
-  const adjacency = useMemo(() => {
-    const upstream = new Map(); // target -> [sources that block it]
-    const downstream = new Map(); // source -> [targets that are blocked by it]
-    (graphData?.nodes || []).forEach((n) => {
-      upstream.set(n.id, new Set());
-      downstream.set(n.id, new Set());
-    });
-    (graphData?.edges || []).forEach((e) => {
-      if (downstream.has(e.from)) downstream.get(e.from).add(e.to);
-      if (upstream.has(e.to)) upstream.get(e.to).add(e.from);
-    });
-    return { upstream, downstream };
-  }, [graphData]);
-
-  /**
-   * Tạo cấu hình options cho Vis Network
-   */
-  const getNetworkOptions = useCallback(
-    (mode, physicsOn) => {
-      const isHierarchical = mode.startsWith('hierarchical');
-      const direction = mode === 'hierarchical_ud' ? 'UD' : 'LR';
-
-      return {
-        autoResize: true,
-        height: '100%',
-        width: '100%',
-        layout: {
-          randomSeed: 42,
-          hierarchical: isHierarchical
-            ? {
-                enabled: true,
-                direction,
-                sortMethod: 'directed',
-                levelSeparation: 190,
-                nodeSpacing: 130,
-                treeSpacing: 180,
-                blockShifting: true,
-                edgeMinimization: true,
-                parentCentralization: true,
-              }
-            : { enabled: false },
-        },
-        interaction: {
-          hover: true,
-          hoverConnectedEdges: true,
-          selectConnectedEdges: true,
-          multiselect: false,
-          tooltipDelay: 100,
-          navigationButtons: false,
-          keyboard: false,
-          zoomView: true,
-          dragView: true,
-        },
-        physics: isHierarchical
-          ? false
-          : {
-              enabled: physicsOn,
-              solver: 'forceAtlas2Based',
-              forceAtlas2Based: {
-                gravitationalConstant: -48,
-                centralGravity: 0.007,
-                springLength: 130,
-                springConstant: 0.08,
-                damping: 0.5,
-                avoidOverlap: 0.8,
-              },
-              stabilization: {
-                enabled: true,
-                iterations: 150,
-                updateInterval: 25,
-                fit: true,
-              },
-            },
-        nodes: {
-          shape: 'box',
-          margin: { top: 9, right: 14, bottom: 9, left: 14 },
-          font: {
-            size: 13,
-            face: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-            bold: { color: '#ffffff', size: 13 },
-            multi: 'html',
-          },
-          borderWidth: 2,
-          shadow: {
-            enabled: true,
-            color: 'rgba(0,0,0,0.12)',
-            size: 8,
-            x: 2,
-            y: 3,
-          },
-        },
-        edges: {
-          width: 2,
-          arrows: {
-            to: {
-              enabled: true,
-              scaleFactor: 0.85,
-              type: 'arrow',
-            },
-          },
-          smooth: {
-            enabled: true,
-            type: isHierarchical ? 'cubicBezier' : 'continuous',
-            roundness: 0.25,
-          },
-          font: {
-            size: 10,
-            align: 'top',
-            background: 'rgba(255, 255, 255, 0.85)',
-            strokeWidth: 0,
-          },
-        },
-      };
-    },
-    []
+  const scene = useMemo(
+    () => model && buildScene(model, validView, { showDone, showRelates, dagLayout }),
+    [model, validView, showDone, showRelates, dagLayout]
   );
 
-  /**
-   * Biến đổi dữ liệu node từ API sang format Vis DataSet
-   */
-  const buildVisData = useCallback(
-    (focusKey = null, filterMode = 'ALL') => {
-      if (!graphData) return { visNodes: [], visEdges: [] };
+  const dimmed = useMemo(() => {
+    if (!model || !isOverview(validView)) return new Set();
+    const match = FILTERS[activeFilter];
+    return new Set(
+      [...model.issues.values()]
+        .filter((i) => !(match(i, model) && matchesSearch(model, i, searchQuery)))
+        .map((i) => i.key)
+    );
+  }, [model, validView, activeFilter, searchQuery]);
+  const dimmedRef = useRef(dimmed);
+  dimmedRef.current = dimmed;
 
-      // Tập hợp các node cần làm nổi bật theo filterMode
-      let highlightedKeySet = null;
-      if (filterMode === 'BOTTLENECK') {
-        highlightedKeySet = new Set(
-          graphData.nodes.filter((n) => n.is_bottleneck).map((n) => n.id)
-        );
-      } else if (filterMode === 'OVERDUE') {
-        highlightedKeySet = new Set(
-          graphData.nodes.filter((n) => n.is_overdue).map((n) => n.id)
-        );
-      } else if (filterMode === 'BLOCKED') {
-        highlightedKeySet = new Set(
-          graphData.nodes.filter((n) => n.blocked).map((n) => n.id)
-        );
-      } else if (filterMode === 'CRITICAL') {
-        highlightedKeySet = new Set(
-          graphData.nodes.filter((n) => n.is_critical || n.is_critical_path).map((n) => n.id)
-        );
-      } else if (filterMode === 'HIGH_RISK') {
-        highlightedKeySet = new Set(
-          graphData.nodes.filter((n) => n.level === 'HIGH').map((n) => n.id)
-        );
+  handlersRef.current = {
+    click: (params) => {
+      const id = params.nodes[0];
+      if (id && model.issues.has(id)) go({ mode: 'focusIssue', key: id });
+      else if (id && model.people.has(id)) go({ mode: 'focusPerson', id });
+      else if (!id) {
+        const person = laneAt(scene.overlay, params.pointer.canvas);
+        if (person) go({ mode: 'focusPerson', id: person.id });
       }
-
-      // Nếu đang click chọn 1 node cụ thể, tạo tập liên thông (upstream + downstream)
-      let focusedSubgraphSet = null;
-      if (focusKey && nodeMap.has(focusKey)) {
-        focusedSubgraphSet = new Set([focusKey]);
-        const up = adjacency.upstream.get(focusKey) || new Set();
-        const down = adjacency.downstream.get(focusKey) || new Set();
-        up.forEach((k) => focusedSubgraphSet.add(k));
-        down.forEach((k) => focusedSubgraphSet.add(k));
-      }
-
-      // Xây dựng visNodes
-      const visNodes = graphData.nodes.map((node) => {
-        const theme = getNodeTheme(node);
-        const isFocused = focusKey === node.id;
-        const inSubgraph = focusedSubgraphSet ? focusedSubgraphSet.has(node.id) : true;
-        const matchesFilter = highlightedKeySet ? highlightedKeySet.has(node.id) : true;
-
-        const isDimmed =
-          (focusedSubgraphSet && !inSubgraph) || (highlightedKeySet && !matchesFilter);
-
-        // Biểu tượng trạng thái đi kèm
-        let badgeIcon = '';
-        if (node.is_bottleneck) badgeIcon = '🚨 ';
-        else if (node.is_overdue) badgeIcon = '⏰ ';
-        else if (node.blocked) badgeIcon = '⛓️ ';
-        else if (node.is_critical) badgeIcon = '🟣 ';
-        else if (node.status_category === 'done') badgeIcon = '✓ ';
-
-        // Tóm tắt ngắn gọn
-        const shortSummary =
-          node.summary && node.summary.length > 24
-            ? `${node.summary.slice(0, 22)}...`
-            : node.summary || '';
-
-        const label = `<b>${badgeIcon}${node.key}</b>\n${shortSummary}`;
-
-        const nodeColor = isDimmed
-          ? {
-              background: '#f1f3f5',
-              border: '#dee2e6',
-              highlight: { background: '#e9ecef', border: '#ced4da' },
-            }
-          : {
-              background: theme.background,
-              border: isFocused ? '#1864ab' : theme.border,
-              highlight: theme.highlight,
-            };
-
-        const fontColor = isDimmed ? '#adb5bd' : theme.font;
-
-        return {
-          id: node.id,
-          label,
-          shape: node.is_bottleneck ? 'box' : 'box',
-          color: nodeColor,
-          font: {
-            color: fontColor,
-            size: node.is_bottleneck ? 14 : 12,
-            bold: { color: fontColor },
-          },
-          borderWidth: isFocused ? 4 : node.is_bottleneck || node.is_overdue ? 3 : 2,
-          shadow: isDimmed
-            ? false
-            : {
-                enabled: true,
-                color: isFocused ? 'rgba(34, 139, 230, 0.6)' : theme.glow,
-                size: isFocused ? 18 : 10,
-                x: 0,
-                y: 2,
-              },
-          opacity: isDimmed ? 0.35 : 1.0,
-        };
-      });
-
-      // Xây dựng visEdges
-      const visEdges = graphData.edges.map((edge) => {
-        const inFocusedPath =
-          focusedSubgraphSet &&
-          focusedSubgraphSet.has(edge.from) &&
-          focusedSubgraphSet.has(edge.to);
-
-        const isDimmed =
-          (focusedSubgraphSet && !inFocusedPath) ||
-          (highlightedKeySet &&
-            (!highlightedKeySet.has(edge.from) && !highlightedKeySet.has(edge.to)));
-
-        let color = '#ced4da';
-        let width = 1.8;
-        let dashes = false;
-
-        if (edge.is_critical_path) {
-          color = '#7950f2';
-          width = 3.5;
-          dashes = [5, 4];
-        } else if (edge.is_bottleneck_edge) {
-          color = '#e03131';
-          width = 3;
-        } else if (edge.is_overdue_edge) {
-          color = '#fa5252';
-          width = 2.8;
-        } else if (edge.is_blocking) {
-          color = '#fd7e14';
-          width = 2.4;
-        }
-
-        if (inFocusedPath) {
-          color = '#228be6';
-          width = 3.8;
-        }
-
-        return {
-          id: edge.id,
-          from: edge.from,
-          to: edge.to,
-          label: isDimmed ? '' : edge.label,
-          color: {
-            color: isDimmed ? '#e9ecef' : color,
-            highlight: '#1864ab',
-            hover: color,
-            opacity: isDimmed ? 0.15 : 0.95,
-          },
-          width: isDimmed ? 1 : width,
-          dashes,
-          arrows: {
-            to: {
-              enabled: true,
-              scaleFactor: isDimmed ? 0.5 : 0.85,
-            },
-          },
-        };
-      });
-
-      return { visNodes, visEdges };
     },
-    [graphData, nodeMap, adjacency]
-  );
+    hover: (id) => {
+      const issue = model?.issues.get(id);
+      if (!issue) return;
+      const pos = networkRef.current.canvasToDOM(networkRef.current.getPosition(id));
+      setHovered({ issue, x: pos.x, y: pos.y });
+    },
+  };
 
-  /**
-   * Khởi tạo Vis Network instance
-   */
+  const prevSelected = useRef(selectedIssueKey);
   useEffect(() => {
-    if (!containerRef.current || !graphData || graphData.nodes.length === 0) {
-      return;
+    if (prevSelected.current === selectedIssueKey) return;
+    prevSelected.current = selectedIssueKey;
+    if (selectedIssueKey && model?.issues.has(selectedIssueKey) && !(view.mode === 'focusIssue' && view.key === selectedIssueKey)) {
+      go({ mode: 'focusIssue', key: selectedIssueKey });
     }
+  }, [selectedIssueKey, model]);
 
-    const { visNodes, visEdges } = buildVisData(selectedIssueKey, activeFilter);
-    const nodesDataSet = new DataSet(visNodes);
-    const edgesDataSet = new DataSet(visEdges);
-
-    nodesDataSetRef.current = nodesDataSet;
-    edgesDataSetRef.current = edgesDataSet;
-
-    const data = { nodes: nodesDataSet, edges: edgesDataSet };
-    const options = getNetworkOptions(layoutMode, physicsEnabled);
-
-    const network = new Network(containerRef.current, data, options);
+  useEffect(() => {
+    if (!containerRef.current || !scene) return undefined;
+    const withDim = (n) => (dimmedRef.current.has(n.id) ? { ...n, opacity: 0.2 } : n);
+    const nodes = new DataSet(scene.nodes.map(withDim));
+    nodesRef.current = nodes;
+    const network = new Network(
+      containerRef.current,
+      { nodes, edges: new DataSet(scene.edges) },
+      { ...BASE_OPTIONS, ...scene.options, edges: { ...BASE_OPTIONS.edges, ...scene.options.edges } }
+    );
     networkRef.current = network;
-
-    // Lắng nghe sự kiện Click vào node
-    network.on('click', (params) => {
-      if (params.nodes && params.nodes.length > 0) {
-        const clickedKey = params.nodes[0];
-        if (onSelectIssue) onSelectIssue(clickedKey);
-
-        // Zoom nhẹ nhàng đến node được chọn
-        network.focus(clickedKey, {
-          scale: 1.25,
-          animation: { duration: 600, easingFunction: 'easeInOutQuad' },
-        });
-      } else {
-        // Click ra khoảng trắng canvas -> Bỏ chọn
-        if (onSelectIssue) onSelectIssue(null);
-      }
-    });
-
-    // Lắng nghe sự kiện Hover node -> hiển thị Tooltip thông tin
-    network.on('hoverNode', (params) => {
-      const nodeKey = params.node;
-      const rawNode = nodeMap.get(nodeKey);
-      if (rawNode) {
-        const domPos = network.canvasToDOM(network.getPosition(nodeKey));
-        setHoveredNodeData(rawNode);
-        setTooltipPos({ x: domPos.x, y: domPos.y });
-      }
-    });
-
-    network.on('blurNode', () => {
-      setHoveredNodeData(null);
-    });
-
+    network.on('beforeDrawing', (ctx) => drawOverlay(ctx, scene.overlay));
+    network.on('click', (params) => handlersRef.current.click(params));
+    network.on('hoverNode', (params) => handlersRef.current.hover(params.node));
+    network.on('blurNode', () => setHovered(null));
+    network.on('dragStart', () => setHovered(null));
+    frame(network, containerRef.current, scene.overlay.bounds, false);
     return () => {
-      if (networkRef.current) {
-        networkRef.current.destroy();
-        networkRef.current = null;
-      }
+      network.destroy();
+      networkRef.current = null;
+      nodesRef.current = null;
+      setHovered(null);
     };
-  }, [graphData, layoutMode]);
+  }, [scene]);
 
-  /**
-   * Cập nhật màu sắc & highlight khi thay đổi selectedIssueKey hoặc activeFilter
-   */
   useEffect(() => {
-    if (!nodesDataSetRef.current || !edgesDataSetRef.current || !graphData) return;
+    if (!nodesRef.current || !scene) return;
+    nodesRef.current.update(
+      scene.nodes.filter((n) => model.issues.has(n.id)).map((n) => ({ id: n.id, opacity: dimmed.has(n.id) ? 0.2 : n.baseOpacity }))
+    );
+  }, [dimmed]);
 
-    const { visNodes, visEdges } = buildVisData(selectedIssueKey, activeFilter);
-    nodesDataSetRef.current.update(visNodes);
-    edgesDataSetRef.current.update(visEdges);
-
-    // Nếu có selectedIssueKey, focus camera vào node đó
-    if (selectedIssueKey && networkRef.current && nodeMap.has(selectedIssueKey)) {
-      networkRef.current.focus(selectedIssueKey, {
-        scale: 1.2,
-        animation: { duration: 500, easingFunction: 'easeInOutQuad' },
-      });
-    }
-  }, [selectedIssueKey, activeFilter, buildVisData, graphData, nodeMap]);
-
-  /**
-   * Xử lý bật/tắt hiệu ứng physics
-   */
-  const handleTogglePhysics = () => {
-    const nextState = !physicsEnabled;
-    setPhysicsEnabled(nextState);
-    if (networkRef.current) {
-      networkRef.current.setOptions({ physics: { enabled: nextState } });
-    }
-  };
-
-  /**
-   * Xử lý chuyển đổi layout: Lực liên kết vs Cây phân cấp
-   */
-  const handleChangeLayout = (newMode) => {
-    setLayoutMode(newMode);
-    if (networkRef.current) {
-      const isHierarchical = newMode.startsWith('hierarchical');
-      const nextPhysics = isHierarchical ? false : physicsEnabled;
-      networkRef.current.setOptions(getNetworkOptions(newMode, nextPhysics));
-      setTimeout(() => {
-        networkRef.current?.fit({
-          animation: { duration: 600, easingFunction: 'easeInOutQuad' },
-        });
-      }, 100);
-    }
-  };
-
-  /**
-   * Canh giữa toàn bộ đồ thị
-   */
-  const handleFit = () => {
-    if (networkRef.current) {
-      networkRef.current.fit({
-        animation: { duration: 600, easingFunction: 'easeInOutQuad' },
-      });
-    }
-  };
-
-  /**
-   * Phóng to
-   */
-  const handleZoomIn = () => {
-    if (networkRef.current) {
-      const scale = networkRef.current.getScale();
-      networkRef.current.moveTo({
-        scale: scale * 1.3,
+  const camera = {
+    fit: () =>
+      networkRef.current &&
+      frame(networkRef.current, containerRef.current, scene?.overlay.bounds, { duration: 500, easingFunction: 'easeInOutQuad' }),
+    zoom: (factor) =>
+      networkRef.current?.moveTo({
+        scale: networkRef.current.getScale() * factor,
         animation: { duration: 300, easingFunction: 'easeInOutQuad' },
-      });
-    }
+      }),
   };
 
-  /**
-   * Thu nhỏ
-   */
-  const handleZoomOut = () => {
-    if (networkRef.current) {
-      const scale = networkRef.current.getScale();
-      networkRef.current.moveTo({
-        scale: scale * 0.7,
-        animation: { duration: 300, easingFunction: 'easeInOutQuad' },
-      });
-    }
-  };
-
-  /**
-   * Tìm kiếm nhanh issue trên đồ thị
-   */
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    const query = searchQuery.trim().toUpperCase();
-    if (!query) return;
+    const target = model && findTarget(model, searchQuery);
+    if (target) go(target);
+  };
 
-    // Tìm kiếm chính xác key hoặc bắt đầu bằng
-    let target = nodeMap.get(query);
-    if (!target) {
-      target = Array.from(nodeMap.values()).find(
-        (n) => n.key.toUpperCase().includes(query) || (n.summary && n.summary.toUpperCase().includes(query))
-      );
-    }
-
-    if (target && networkRef.current) {
-      if (onSelectIssue) onSelectIssue(target.id);
-      networkRef.current.focus(target.id, {
-        scale: 1.4,
-        animation: { duration: 800, easingFunction: 'easeInOutQuad' },
-      });
-    }
+  const toggleFilter = (filter) => {
+    setActiveFilter((prev) => (prev === filter ? 'ALL' : filter));
+    if (!isOverview(validView)) setView({ mode: validView.back });
   };
 
   return (
     <Card withBorder radius="md" padding="md" shadow="sm" style={{ position: 'relative', minHeight: 650 }}>
       <Stack gap="sm">
-        {/* Thanh công cụ tiêu đề & Thông số tổng quan */}
         <Group justify="space-between" align="center" wrap="wrap">
           <Group gap="xs">
             <ThemeIcon size="lg" radius="md" color="indigo" variant="light">
@@ -645,409 +246,442 @@ export default function NetworkGraph({
             </ThemeIcon>
             <Box>
               <Group gap="xs">
-                <Text fw={700} size="md">
-                  Đồ thị Mạng lưới Phụ thuộc & Điểm nghẽn Dự án
-                </Text>
-                <Badge size="sm" variant="filled" color="indigo">
-                  {summary.total_nodes} Tasks
-                </Badge>
-                <Badge size="sm" variant="light" color="gray">
-                  {summary.total_edges} Dependencies
-                </Badge>
+                <Text fw={700} size="md">Đồ thị phụ thuộc</Text>
+                <Badge size="sm" variant="filled" color="indigo">{summary.total_nodes || 0} Tasks</Badge>
+                <Badge size="sm" variant="light" color="gray">{summary.total_edges || 0} liên kết</Badge>
               </Group>
-              <Text size="xs" c="dimmed">
-                Trực quan hóa luồng công việc thời gian thực, phát hiện sớm nguy cơ trễ hạn và các nút thắt cổ chai
-              </Text>
+              <Text size="xs" c="dimmed">Task nào sắp trễ, ai đang ôm, bị chặn bởi đâu và trễ sẽ lan sang đâu</Text>
             </Box>
           </Group>
-
-          {/* Nhóm nút thu phóng & điều khiển camera */}
           <Group gap={6}>
             <Tooltip label="Canh giữa toàn màn hình" withArrow position="bottom">
-              <ActionIcon variant="default" size="md" onClick={handleFit} aria-label="Fit view">
+              <ActionIcon variant="default" size="md" onClick={camera.fit} aria-label="Fit view">
                 <IconFocusCentered size={17} />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Phóng to" withArrow position="bottom">
-              <ActionIcon variant="default" size="md" onClick={handleZoomIn} aria-label="Zoom in">
+              <ActionIcon variant="default" size="md" onClick={() => camera.zoom(1.3)} aria-label="Zoom in">
                 <IconZoomIn size={17} />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Thu nhỏ" withArrow position="bottom">
-              <ActionIcon variant="default" size="md" onClick={handleZoomOut} aria-label="Zoom out">
+              <ActionIcon variant="default" size="md" onClick={() => camera.zoom(0.7)} aria-label="Zoom out">
                 <IconZoomOut size={17} />
               </ActionIcon>
             </Tooltip>
-            <Tooltip label={physicsEnabled ? 'Tạm dừng mô phỏng lực' : 'Kích hoạt mô phỏng lực'} withArrow position="bottom">
-              <ActionIcon
-                variant={physicsEnabled ? 'light' : 'default'}
-                color={physicsEnabled ? 'blue' : 'gray'}
-                size="md"
-                onClick={handleTogglePhysics}
-                aria-label="Toggle physics"
-              >
-                {physicsEnabled ? <IconPlayerPause size={17} /> : <IconPlayerPlay size={17} />}
-              </ActionIcon>
-            </Tooltip>
             <Tooltip label="Làm mới dữ liệu đồ thị" withArrow position="bottom">
-              <ActionIcon
-                variant="default"
-                size="md"
-                loading={isFetching}
-                onClick={() => refetch()}
-                aria-label="Refresh graph"
-              >
+              <ActionIcon variant="default" size="md" loading={isFetching} onClick={() => refetch()} aria-label="Refresh graph">
                 <IconRefresh size={17} />
               </ActionIcon>
             </Tooltip>
           </Group>
         </Group>
 
-        {/* Thanh thẻ số liệu cảnh báo (Mini KPI Bar) */}
         <Group gap="xs" wrap="wrap">
-          <Badge
-            size="md"
-            variant={activeFilter === 'BOTTLENECK' ? 'filled' : 'light'}
-            color="red"
-            leftSection={<IconAlertTriangle size={14} />}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setActiveFilter((prev) => (prev === 'BOTTLENECK' ? 'ALL' : 'BOTTLENECK'))}
-          >
-            {summary.bottlenecks_count} Điểm nghẽn nghiêm trọng
-          </Badge>
-
-          <Badge
-            size="md"
-            variant={activeFilter === 'OVERDUE' ? 'filled' : 'light'}
-            color="red"
-            leftSection={<IconClock size={14} />}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setActiveFilter((prev) => (prev === 'OVERDUE' ? 'ALL' : 'OVERDUE'))}
-          >
-            {summary.overdue_count} Task trễ hạn
-          </Badge>
-
-          <Badge
-            size="md"
-            variant={activeFilter === 'BLOCKED' ? 'filled' : 'light'}
-            color="orange"
-            leftSection={<IconLock size={14} />}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setActiveFilter((prev) => (prev === 'BLOCKED' ? 'ALL' : 'BLOCKED'))}
-          >
-            {summary.blocked_count} Đang bị chặn
-          </Badge>
-
-          <Badge
-            size="md"
-            variant={activeFilter === 'HIGH_RISK' ? 'filled' : 'light'}
-            color="orange"
-            leftSection={<IconFlame size={14} />}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setActiveFilter((prev) => (prev === 'HIGH_RISK' ? 'ALL' : 'HIGH_RISK'))}
-          >
-            {summary.high_risk_count} Nguy cơ cao
-          </Badge>
-
-          <Badge
-            size="md"
-            variant={activeFilter === 'CRITICAL' ? 'filled' : 'light'}
-            color="violet"
-            leftSection={<IconRoute size={14} />}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setActiveFilter((prev) => (prev === 'CRITICAL' ? 'ALL' : 'CRITICAL'))}
-          >
-            {summary.critical_count} Trọng yếu TGN
-          </Badge>
-
-          <Badge
-            size="md"
-            variant="light"
-            color="green"
-            leftSection={<IconCheck size={14} />}
-          >
-            {summary.done_count} Đã hoàn thành
-          </Badge>
-        </Group>
-
-        {/* Thanh điều khiển bộ lọc & bố cục */}
-        <Group justify="space-between" align="center" wrap="wrap" gap="xs">
-          {/* Bộ lọc điểm cần quan tâm */}
-          <Group gap={6} wrap="wrap">
-            <Text size="xs" fw={600} c="dimmed">
-              Bộ lọc:
-            </Text>
-            <SegmentedControl
-              size="xs"
-              value={activeFilter}
-              onChange={setActiveFilter}
-              data={[
-                { label: 'Tất cả', value: 'ALL' },
-                { label: '🚨 Điểm nghẽn', value: 'BOTTLENECK' },
-                { label: '⏰ Trễ hạn', value: 'OVERDUE' },
-                { label: '⛓️ Bị chặn', value: 'BLOCKED' },
-                { label: '🔥 Nguy cơ cao', value: 'HIGH_RISK' },
-                { label: '🎯 Đường găng TGN', value: 'CRITICAL' },
-              ]}
-            />
-          </Group>
-
-          {/* Chế độ hiển thị bố cục & Tìm kiếm */}
-          <Group gap="xs" wrap="wrap">
-            <SegmentedControl
-              size="xs"
-              value={layoutMode}
-              onChange={handleChangeLayout}
-              data={[
-                { label: 'Lực liên kết (Force)', value: 'physics' },
-                { label: 'Phân cấp (Trái sang Phải)', value: 'hierarchical_lr' },
-                { label: 'Phân cấp (Trên xuống Dưới)', value: 'hierarchical_ud' },
-              ]}
-            />
-
-            <form onSubmit={handleSearchSubmit} style={{ width: 170 }}>
-              <TextInput
-                size="xs"
-                placeholder="Tìm mã task (VD: 102)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                rightSection={
-                  <ActionIcon size="xs" variant="subtle" type="submit">
-                    <IconSearch size={13} />
-                  </ActionIcon>
-                }
-              />
-            </form>
-
-            <Button
-              size="xs"
-              variant="subtle"
-              color="gray"
-              rightSection={isLegendOpen ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
-              onClick={() => setIsLegendOpen((v) => !v)}
+          {KPIS.map(({ filter, color, icon: Icon, count, label }) => (
+            <Badge
+              key={filter}
+              size="md"
+              variant={activeFilter === filter ? 'filled' : 'light'}
+              color={color}
+              leftSection={<Icon size={14} />}
+              style={{ cursor: 'pointer' }}
+              onClick={() => toggleFilter(filter)}
             >
-              Chú giải
-            </Button>
-          </Group>
+              {count(summary) || 0} {label}
+            </Badge>
+          ))}
+          <Badge size="md" variant="light" color="gray" leftSection={<IconCheck size={14} />}>
+            {summary.done_count || 0} Đã hoàn thành
+          </Badge>
         </Group>
 
-        {/* Chú giải có thể đóng/mở */}
+        {isOverview(validView) ? (
+          <Group justify="space-between" align="center" wrap="wrap" gap="xs">
+            <Group gap="md" wrap="wrap">
+              <Switch
+                size="sm"
+                label="Gom theo người phụ trách"
+                checked={validView.mode === 'lanes'}
+                onChange={(e) => setView({ mode: e.currentTarget.checked ? 'lanes' : 'dag' })}
+              />
+              <Checkbox size="xs" label="Hiện Relate / Duplicate" checked={showRelates} onChange={(e) => setShowRelates(e.currentTarget.checked)} />
+              <Checkbox size="xs" label="Hiện task đã xong" checked={showDone} onChange={(e) => setShowDone(e.currentTarget.checked)} />
+              {validView.mode === 'dag' && (
+                <SegmentedControl
+                  size="xs"
+                  value={dagLayout}
+                  onChange={setDagLayout}
+                  data={[
+                    { label: 'Lực liên kết', value: 'physics' },
+                    { label: 'Trái → Phải', value: 'hierarchical_lr' },
+                    { label: 'Trên → Dưới', value: 'hierarchical_ud' },
+                  ]}
+                />
+              )}
+            </Group>
+            <Group gap="xs">
+              <form onSubmit={handleSearchSubmit} style={{ width: 200 }}>
+                <TextInput
+                  size="xs"
+                  placeholder="Tìm issue / người…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  rightSection={
+                    <ActionIcon size="xs" variant="subtle" type="submit" aria-label="Search">
+                      <IconSearch size={13} />
+                    </ActionIcon>
+                  }
+                />
+              </form>
+              <Button
+                size="xs"
+                variant="subtle"
+                color="gray"
+                rightSection={isLegendOpen ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+                onClick={() => setIsLegendOpen((v) => !v)}
+              >
+                Chú giải
+              </Button>
+            </Group>
+          </Group>
+        ) : (
+          <Breadcrumb model={model} view={validView} onBack={() => setView({ mode: validView.back })} onDepth={(depth) => setView({ ...validView, depth })} />
+        )}
+
         <Collapse in={isLegendOpen}>
           <Paper withBorder p="xs" radius="sm" bg="var(--mantine-color-gray-0)">
-            <Group justify="space-between" gap="md" wrap="wrap">
-              <Group gap="xs">
-                <Text size="xs" fw={700}>Mã màu Node:</Text>
-                <Badge size="xs" color="red" variant="filled">🔴 Điểm nghẽn / Quá hạn</Badge>
-                <Badge size="xs" color="violet" variant="filled">🟣 Trọng yếu TGN</Badge>
-                <Badge size="xs" color="orange" variant="filled">🟠 Bị chặn / Nguy cơ cao</Badge>
-                <Badge size="xs" color="yellow" variant="filled">🟡 Nguy cơ TB</Badge>
-                <Badge size="xs" color="blue" variant="filled">🔵 Bình thường</Badge>
-                <Badge size="xs" color="green" variant="filled">🟢 Đã xong</Badge>
-              </Group>
-
-              <Group gap="xs">
-                <Text size="xs" fw={700}>Đường liên kết (Edges):</Text>
-                <Text size="xs">➡️ <b>Mũi tên chỉ chiều:</b> Task Tiên quyết (Blocker) ➔ Task Bị chặn (Dependent)</Text>
-                <Text size="xs" c="red">━━ Đỏ: Chặn nghẽn</Text>
-                <Text size="xs" c="grape">┅┅ Tím đứt nét: Đường găng TGN</Text>
-              </Group>
+            <Group gap="md" wrap="wrap">
+              {['HIGH', 'MED', 'LOW', 'DONE'].map((r) => (
+                <Badge key={r} size="sm" variant="outline" style={{ background: RISK[r].fill, color: RISK[r].border, borderColor: RISK[r].border }}>
+                  {r === 'DONE' ? 'Đã xong' : `Rủi ro ${RISK[r].label}`}
+                </Badge>
+              ))}
+              <Text size="xs">━▶ Chặn</Text>
+              <Text size="xs" c="red">━▶ đang lan trễ</Text>
+              <Text size="xs" fw={700}>━━ đường găng ★</Text>
+              <Text size="xs">viền nét đứt = quá hạn (+Nd) · ⛔ bị chặn · ↻ mở lại</Text>
+              <Text size="xs">◯ người (viền đỏ = quá tải) · ⬡ sprint/version · ┄ phụ trách</Text>
             </Group>
           </Paper>
         </Collapse>
 
-        {/* Khung vẽ Canvas đồ thị mạng lưới */}
-        <Box
-          style={{
-            position: 'relative',
-            height: 540,
-            borderRadius: 8,
-            border: '1px solid var(--mantine-color-gray-3)',
-            backgroundColor: '#fafbfc',
-            overflow: 'hidden',
-          }}
-        >
-          {isLoading && (
-            <Center h="100%">
-              <Stack align="center" gap="xs">
-                <Loader size="md" type="dots" />
-                <Text size="sm" c="dimmed">Đang tính toán cấu trúc mạng lưới và điểm nghẽn...</Text>
-              </Stack>
-            </Center>
-          )}
-
-          {isError && (
-            <Center h="100%">
-              <Alert icon={<IconAlertTriangle size={18} />} color="red" title="Lỗi tải đồ thị">
-                Không thể tải dữ liệu mạng lưới của dự án. Vui lòng thử lại.
-              </Alert>
-            </Center>
-          )}
-
-          {!isLoading && !isError && graphData?.nodes?.length === 0 && (
-            <Center h="100%">
-              <Stack align="center" gap="xs">
-                <ThemeIcon size="xl" radius="xl" color="gray" variant="light">
-                  <IconArrowsSplit size={26} />
-                </ThemeIcon>
-                <Text fw={600} size="sm">Chưa có liên kết phụ thuộc nào</Text>
-                <Text size="xs" c="dimmed">
-                  Dự án hiện tại chưa có các issue liên kết hoặc bị chặn để vẽ đồ thị.
-                </Text>
-              </Stack>
-            </Center>
-          )}
-
-          {/* Vùng gắn Vis Network Canvas */}
-          <div
-            ref={containerRef}
-            style={{
-              width: '100%',
-              height: '100%',
-              display: isLoading || isError ? 'none' : 'block',
-              cursor: 'grab',
-            }}
-          />
-
-          {/* Hộp chỉ dẫn nhanh ở góc dưới bên trái */}
+        <Group align="stretch" gap="sm" wrap="wrap">
           <Box
             style={{
-              position: 'absolute',
-              bottom: 10,
-              left: 12,
-              pointerEvents: 'none',
-              backgroundColor: 'rgba(255, 255, 255, 0.88)',
-              backdropFilter: 'blur(4px)',
-              padding: '4px 10px',
-              borderRadius: 6,
-              border: '1px solid #e9ecef',
+              position: 'relative',
+              flex: '1 1 420px',
+              height: 560,
+              borderRadius: 8,
+              border: '1px solid var(--mantine-color-gray-3)',
+              backgroundColor: '#ffffff',
+              overflow: 'hidden',
             }}
           >
-            <Text size="xs" c="dimmed">
-              💡 <b>Mẹo:</b> Click node để làm nổi bật chuỗi phụ thuộc & mở panel chi tiết | Click khoảng trắng để reset
-            </Text>
+            {isLoading && (
+              <Center h="100%">
+                <Stack align="center" gap="xs">
+                  <Loader size="md" type="dots" />
+                  <Text size="sm" c="dimmed">Đang tải đồ thị phụ thuộc...</Text>
+                </Stack>
+              </Center>
+            )}
+            {isError && (
+              <Center h="100%">
+                <Alert icon={<IconAlertTriangle size={18} />} color="red" title="Lỗi tải đồ thị">
+                  Không thể tải dữ liệu đồ thị của dự án. Vui lòng thử lại.
+                </Alert>
+              </Center>
+            )}
+            {!isLoading && !isError && !model && (
+              <Center h="100%">
+                <Stack align="center" gap="xs">
+                  <ThemeIcon size="xl" radius="xl" color="gray" variant="light">
+                    <IconArrowsSplit size={26} />
+                  </ThemeIcon>
+                  <Text fw={600} size="sm">Chưa có issue nào để vẽ</Text>
+                </Stack>
+              </Center>
+            )}
+            <div ref={containerRef} style={{ width: '100%', height: '100%', display: model ? 'block' : 'none' }} />
+            {model && (
+              <Box
+                style={{
+                  position: 'absolute',
+                  bottom: 8,
+                  left: 10,
+                  pointerEvents: 'none',
+                  backgroundColor: 'rgba(255,255,255,0.88)',
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  border: '1px solid #e9ecef',
+                }}
+              >
+                <Text size="xs" c="dimmed">{HINTS[validView.mode]}</Text>
+              </Box>
+            )}
+            {hovered && <IssueTooltip model={model} hovered={hovered} />}
           </Box>
 
-          {/* Rich Floating Tooltip khi hover trên node */}
-          {hoveredNodeData && (
-            <Paper
-              shadow="md"
-              withBorder
-              p="sm"
-              radius="md"
-              style={{
-                position: 'absolute',
-                top: Math.max(10, Math.min(tooltipPos.y - 120, 360)),
-                left: Math.max(10, Math.min(tooltipPos.x + 20, 680)),
-                zIndex: 100,
-                width: 320,
-                backgroundColor: 'rgba(255, 255, 255, 0.98)',
-                backdropFilter: 'blur(6px)',
-                pointerEvents: 'none',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-              }}
-            >
-              <Stack gap="xs">
-                <Group justify="space-between" align="center" wrap="nowrap">
-                  <Group gap={6}>
-                    <Text fw={700} size="sm">
-                      {hoveredNodeData.key}
-                    </Text>
-                    <Badge size="xs" variant="outline" color="blue">
-                      {hoveredNodeData.issuetype || 'Task'}
-                    </Badge>
-                  </Group>
-
-                  <Badge
-                    size="xs"
-                    color={
-                      hoveredNodeData.status_category === 'done'
-                        ? 'green'
-                        : hoveredNodeData.blocked
-                        ? 'orange'
-                        : hoveredNodeData.status_category === 'indeterminate'
-                        ? 'blue'
-                        : 'gray'
-                    }
-                  >
-                    {hoveredNodeData.status || 'Chưa cập nhật'}
-                  </Badge>
-                </Group>
-
-                <Text size="xs" lineClamp={2} fw={500}>
-                  {hoveredNodeData.summary}
-                </Text>
-
-                <Divider size="xs" />
-
-                {/* Hạn chót & Điểm nghẽn */}
-                <Group justify="space-between" gap="xs">
-                  <Text size="xs" c="dimmed">Người phụ trách:</Text>
-                  <Text size="xs" fw={500}>{hoveredNodeData.assignee_name || 'Chưa phân công'}</Text>
-                </Group>
-
-                <Group justify="space-between" gap="xs">
-                  <Text size="xs" c="dimmed">Hạn chót:</Text>
-                  {hoveredNodeData.is_overdue ? (
-                    <Badge size="xs" color="red" variant="filled">
-                      Quá hạn {hoveredNodeData.overdue_days} ngày!
-                    </Badge>
-                  ) : hoveredNodeData.duedate ? (
-                    <Text size="xs" fw={500}>{hoveredNodeData.duedate}</Text>
-                  ) : (
-                    <Text size="xs" c="dimmed">Chưa đặt</Text>
-                  )}
-                </Group>
-
-                {/* Chỉ số rủi ro AI / ML */}
-                <Box>
-                  <Group justify="space-between" mb={2}>
-                    <Text size="xs" c="dimmed">Xác suất trễ hạn (P_delay):</Text>
-                    <Text size="xs" fw={700} c={hoveredNodeData.delay_value >= 0.5 ? 'red' : 'blue'}>
-                      {Math.round((hoveredNodeData.delay_value || 0) * 100)}%
-                    </Text>
-                  </Group>
-                  <Progress
-                    value={(hoveredNodeData.delay_value || 0) * 100}
-                    size="xs"
-                    color={hoveredNodeData.delay_value >= 0.5 ? 'red' : 'blue'}
-                    radius="xl"
-                  />
-                </Box>
-
-                {hoveredNodeData.crit_score > 0 && (
-                  <Group justify="space-between" gap="xs">
-                    <Text size="xs" c="dimmed">Trọng yếu TGN Memory:</Text>
-                    <Badge size="xs" color={hoveredNodeData.is_critical ? 'grape' : 'gray'}>
-                      {hoveredNodeData.crit_score.toFixed(2)} {hoveredNodeData.is_critical ? '(Top 5%)' : ''}
-                    </Badge>
-                  </Group>
-                )}
-
-                {/* Cảnh báo Điểm nghẽn nếu có */}
-                {hoveredNodeData.is_bottleneck && (
-                  <Alert
-                    p="xs"
-                    color="red"
-                    variant="light"
-                    icon={<IconAlertTriangle size={15} />}
-                    title="Nút thắt cổ chai (Bottleneck)"
-                  >
-                    <Text size="xs">
-                      Đang chặn <b>{hoveredNodeData.blocks_count}</b> task khác: {hoveredNodeData.blocks_keys.join(', ')}
-                    </Text>
-                  </Alert>
-                )}
-
-                {hoveredNodeData.blocked && (
-                  <Text size="xs" c="orange">
-                    ⛓️ Bị chặn bởi: <b>{hoveredNodeData.blocked_by_keys.join(', ')}</b>
-                  </Text>
-                )}
-              </Stack>
+          {model && (
+            <Paper withBorder radius="md" p="sm" style={{ flex: '1 1 260px', maxWidth: 360, height: 560, overflowY: 'auto' }}>
+              <InsightPanel model={model} view={validView} go={go} />
             </Paper>
           )}
-        </Box>
+        </Group>
       </Stack>
     </Card>
+  );
+}
+
+const HINTS = {
+  lanes: 'Mỗi làn là một người. Làn đỏ = quá tải, làn vàng = chưa phân công. Bấm task hoặc tên người để xem tâm điểm.',
+  dag: 'Cột = độ sâu trong chuỗi chặn (trái chặn phải). Bấm task để xem tâm điểm.',
+  focusIssue: 'Đọc trái → phải: nguyên nhân → task này → hậu quả. Bấm node khác để dời tâm điểm.',
+  focusPerson: 'Bấm một task để xem chuỗi phụ thuộc của nó.',
+};
+
+function Breadcrumb({ model, view, onBack, onDepth }) {
+  const title = view.mode === 'focusIssue' ? view.key : model?.people.get(view.id)?.name;
+  return (
+    <Group gap="sm" align="center">
+      <Anchor size="sm" onClick={onBack}>← Tổng quan</Anchor>
+      <Text size="sm" c="dimmed">/</Text>
+      <Text size="sm" fw={700}>{title}</Text>
+      {view.mode === 'focusIssue' && (
+        <Group gap={6} ml="md">
+          <Text size="xs" c="dimmed">Độ sâu</Text>
+          <SegmentedControl
+            size="xs"
+            value={String(view.depth)}
+            onChange={(d) => onDepth(Number(d))}
+            data={['1', '2', '3']}
+          />
+        </Group>
+      )}
+    </Group>
+  );
+}
+
+function RiskBadge({ issue }) {
+  const r = RISK[riskOf(issue)];
+  return (
+    <Badge size="sm" variant="outline" style={{ background: r.fill, color: r.border, borderColor: r.border }}>
+      {riskOf(issue) === 'DONE' ? 'Đã xong' : `Rủi ro ${r.label}`}
+    </Badge>
+  );
+}
+
+function Section({ title, children }) {
+  return (
+    <Stack gap={4}>
+      <Text size="xs" fw={700} c="dimmed" tt="uppercase">{title}</Text>
+      {children}
+    </Stack>
+  );
+}
+
+function Row({ label, children }) {
+  return (
+    <Group justify="space-between" gap="xs" wrap="nowrap">
+      <Text size="xs" c="dimmed">{label}</Text>
+      <Text size="xs" fw={500} ta="right">{children}</Text>
+    </Group>
+  );
+}
+
+function InsightPanel({ model, view, go }) {
+  if (view.mode === 'focusIssue') return <IssueInsight model={model} insight={issueInsight(model, view.key)} go={go} />;
+  if (view.mode === 'focusPerson') return <PersonInsight model={model} insight={personInsight(model, view.id)} go={go} />;
+  return <OverviewInsight model={model} insight={overviewInsight(model)} go={go} />;
+}
+
+function OverviewInsight({ model, insight, go }) {
+  return (
+    <Stack gap="sm">
+      <Section title="Cần chú ý hôm nay">
+        {insight.bottlenecks.length === 0 && <Text size="xs" c="dimmed">Không có điểm nghẽn.</Text>}
+        {insight.bottlenecks.map(({ issue, impact }) => (
+          <Button
+            key={issue.key}
+            variant="default"
+            size="compact-sm"
+            justify="space-between"
+            fullWidth
+            onClick={() => go({ mode: 'focusIssue', key: issue.key })}
+            rightSection={<Text size="xs" c="dimmed">kéo theo {impact}</Text>}
+          >
+            <Text size="xs" fw={700} c={RISK[riskOf(issue)].border}>{issue.key}</Text>
+          </Button>
+        ))}
+      </Section>
+      <Section title="Đường găng">
+        <Text size="xs">{insight.criticalPath.join(' → ') || '—'}</Text>
+      </Section>
+      <Divider />
+      <Section title="Người phụ trách">
+        {model.peopleOrder.map((pid) => {
+          const p = model.people.get(pid);
+          return (
+            <Button
+              key={pid}
+              variant="subtle"
+              size="compact-sm"
+              color={p.kind === 'unassigned' ? 'yellow' : p.is_overloaded ? 'red' : 'gray'}
+              justify="space-between"
+              fullWidth
+              onClick={() => go({ mode: 'focusPerson', id: pid })}
+              rightSection={
+                <Text size="xs" c="dimmed">
+                  {p.open_count} mở · {p.high_risk_count} cao{p.is_overloaded ? ' · quá tải' : ''}
+                </Text>
+              }
+            >
+              <Text size="xs" fw={600}>{p.kind === 'unassigned' ? '📥 ' : ''}{p.name}</Text>
+            </Button>
+          );
+        })}
+      </Section>
+    </Stack>
+  );
+}
+
+function IssueInsight({ model, insight, go }) {
+  const { issue, owner, deadlines, factors, down, downHigh, otherDeadlines, suggestions } = insight;
+  return (
+    <Stack gap="sm">
+      <Stack gap={4}>
+        <Text fw={700} size="sm">{issue.key} · {issue.summary}</Text>
+        <Group gap={4}>
+          <RiskBadge issue={issue} />
+          {issue.is_overdue && <Badge size="sm" color="red" variant="light">Quá hạn {issue.overdue_days} ngày</Badge>}
+          {issue.reopen_count > 0 && <Badge size="sm" color="grape" variant="light">Mở lại {issue.reopen_count} lần</Badge>}
+        </Group>
+      </Stack>
+      <Stack gap={2}>
+        <Row label="Xác suất trễ">{Math.round((issue.delay_value || 0) * 100)}%</Row>
+        <Row label="Hạn">
+          {deadlines.length ? deadlines.map((d) => `${d.name} (${daysLeftText(d)})`).join(', ') : issue.duedate || '—'}
+        </Row>
+        <Row label="Trạng thái">{issue.status || '—'}</Row>
+        <Row label="Phụ trách">
+          <Anchor size="xs" onClick={() => go({ mode: 'focusPerson', id: owner.id })}>{owner.name}</Anchor>
+          {owner.is_overloaded && <Text span size="xs" c="red"> · quá tải</Text>}
+        </Row>
+        <Row label="Bị chặn bởi">{model.blockedBy.get(issue.key).join(', ') || '—'}</Row>
+        <Row label="Đang chặn">{model.blocks.get(issue.key).join(', ') || '—'}</Row>
+      </Stack>
+      <Section title="Vì sao rủi ro">
+        {factors.length ? factors.map((f) => <Text key={f} size="xs">• {f}</Text>) : <Text size="xs" c="dimmed">Không có yếu tố nổi bật</Text>}
+      </Section>
+      <Section title="Ảnh hưởng">
+        <Text size="xs">
+          Kéo theo <b>{down.length}</b> task ({downHigh} rủi ro cao)
+          {otherDeadlines.length > 0 && <>, lan sang <b>{otherDeadlines.map((d) => d.name).join(', ')}</b></>}.
+        </Text>
+      </Section>
+      <Section title="Gợi ý">
+        {suggestions.length === 0 && <Text size="xs" c="dimmed">Không có hành động cần làm ngay.</Text>}
+        {suggestions.map((s) =>
+          s.view ? (
+            <Button key={s.text} variant="light" size="compact-sm" justify="flex-start" fullWidth onClick={() => go(s.view)}>
+              {s.text}
+            </Button>
+          ) : (
+            <Text key={s.text} size="xs">• {s.text}</Text>
+          )
+        )}
+      </Section>
+    </Stack>
+  );
+}
+
+function PersonInsight({ model, insight, go }) {
+  const { person, mine, blockingOthers, candidates, movable } = insight;
+  const unassigned = person.id === UNASSIGNED;
+  const target = candidates[0];
+  return (
+    <Stack gap="sm">
+      <Stack gap={4}>
+        <Text fw={700} size="sm">{unassigned ? '📥 ' : ''}{person.name}</Text>
+        <Group gap={4}>
+          {person.is_overloaded && <Badge size="sm" color="red" variant="light">Quá tải</Badge>}
+          {unassigned && <Badge size="sm" color="yellow" variant="light">Hàng đợi triage</Badge>}
+          {!unassigned && !person.is_overloaded && <Badge size="sm" color="gray" variant="light">Bình thường</Badge>}
+        </Group>
+      </Stack>
+      <Stack gap={2}>
+        <Row label="Task mở">
+          {person.open_count}
+          {!unassigned && ` (ngưỡng p90 = ${model.threshold})`}
+        </Row>
+        <Row label="Rủi ro cao">{person.high_risk_count}</Row>
+        <Row label="Quá hạn">{person.overdue_count}</Row>
+      </Stack>
+      <Section title="Đang chặn người khác">
+        {blockingOthers.length === 0 && <Text size="xs" c="dimmed">Không</Text>}
+        {blockingOthers.map((b) => (
+          <Text key={b.key} size="xs">
+            • <Anchor size="xs" onClick={() => go({ mode: 'focusIssue', key: b.key })}>{b.key}</Anchor> →{' '}
+            {b.targets.map((t) => `${t.key} (${t.owner})`).join(', ')}
+          </Text>
+        ))}
+      </Section>
+      {unassigned && target && (
+        <Section title="Gợi ý giao việc">
+          {mine.map((i) => (
+            <Text key={i.key} size="xs">• Giao {i.key} cho {target.name} ({target.open_count} mở)</Text>
+          ))}
+        </Section>
+      )}
+      {person.is_overloaded && (
+        <Section title="Người có thể nhận bớt">
+          {candidates.map((c) => (
+            <Anchor key={c.id} size="xs" onClick={() => go({ mode: 'focusPerson', id: c.id })}>
+              {c.name} ({c.open_count} mở · {c.high_risk_count} cao)
+            </Anchor>
+          ))}
+          {target && movable.map((i) => <Text key={i.key} size="xs">• Chuyển {i.key} cho {target.name}</Text>)}
+        </Section>
+      )}
+    </Stack>
+  );
+}
+
+function IssueTooltip({ model, hovered }) {
+  const { issue, x, y } = hovered;
+  const owner = model.people.get(issue.person_id);
+  return (
+    <Paper
+      shadow="md"
+      withBorder
+      p="sm"
+      radius="md"
+      style={{
+        position: 'absolute',
+        top: Math.max(10, Math.min(y - 120, 330)),
+        left: Math.max(10, x + 20),
+        zIndex: 100,
+        width: 300,
+        pointerEvents: 'none',
+      }}
+    >
+      <Stack gap={6}>
+        <Group justify="space-between" wrap="nowrap">
+          <Text fw={700} size="sm">{issue.key}</Text>
+          <RiskBadge issue={issue} />
+        </Group>
+        <Text size="xs" lineClamp={2} fw={500}>{issue.summary}</Text>
+        <Divider />
+        <Row label="Phụ trách">{owner.name}{owner.is_overloaded ? ' · quá tải' : ''}</Row>
+        <Row label="Hạn chót">{issue.is_overdue ? `Quá hạn ${issue.overdue_days} ngày` : issue.duedate || 'Chưa đặt'}</Row>
+        <Box>
+          <Row label="Xác suất trễ">{Math.round((issue.delay_value || 0) * 100)}%</Row>
+          <Progress value={(issue.delay_value || 0) * 100} size="xs" color={issue.delay_value >= 0.5 ? 'red' : 'blue'} radius="xl" />
+        </Box>
+        <Row label="Chặn / bị chặn">{issue.blocks_count} / {issue.blocked_by_count}</Row>
+        {issue.reopen_count > 0 && <Row label="Mở lại">{issue.reopen_count} lần</Row>}
+      </Stack>
+    </Paper>
   );
 }
