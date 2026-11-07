@@ -582,3 +582,113 @@ def test_issues_admin_and_viewer_project_permissions(client, auth_users, setting
     assert resp_admin.json()["total"] == 2
     keys_admin = {it["key"] for it in resp_admin.json()["items"]}
     assert keys_admin == {"DEMO-1", "OTHER-1"}
+
+
+def test_dashboard_graph_unauthenticated(client):
+    resp = client.get("/api/dashboard/graph")
+    assert resp.status_code == 401
+
+
+def test_dashboard_graph_forbidden(client, auth_users, settings, sample_project):
+    login(client, auth_users["stranger"], settings)
+    resp = client.get("/api/dashboard/graph?project=DEMO")
+    assert resp.status_code == 403
+
+
+def test_dashboard_graph_basic_and_bottlenecks(client, auth_users, settings, sample_project, session):
+    from erw.models import Link
+    now = utcnow()
+    today = now.date()
+
+    # DEMO-1: Overdue, blocks DEMO-2 and DEMO-3 -> Bottleneck
+    i1 = Issue(
+        key="DEMO-1",
+        project_key="DEMO",
+        summary="Prerequisite task",
+        status="Open",
+        status_category="new",
+        duedate=today - timedelta(days=2),
+        updated_at=now,
+    )
+    rs1 = RiskState(
+        issue_key="DEMO-1",
+        level="HIGH",
+        delay_value=0.85,
+        crit_score=0.70,
+        is_critical=True,
+        blocked=False,
+        deadline_label="Quá hạn 2 ngày",
+        deadline_at=now - timedelta(days=2),
+    )
+
+    # DEMO-2: Blocked by DEMO-1, High risk
+    i2 = Issue(
+        key="DEMO-2",
+        project_key="DEMO",
+        summary="Dependent task 1",
+        status="Blocked",
+        status_category="indeterminate",
+        duedate=today + timedelta(days=3),
+        updated_at=now,
+    )
+    rs2 = RiskState(
+        issue_key="DEMO-2",
+        level="HIGH",
+        delay_value=0.75,
+        crit_score=0.60,
+        is_critical=False,
+        blocked=True,
+    )
+
+    # DEMO-3: Blocked by DEMO-1, Done task
+    i3 = Issue(
+        key="DEMO-3",
+        project_key="DEMO",
+        summary="Dependent task 2",
+        status="Done",
+        status_category="done",
+        duedate=today - timedelta(days=1),
+        resolved_at=now - timedelta(days=1),
+        updated_at=now,
+    )
+
+    session.add_all([i1, i2, i3, rs1, rs2])
+    session.commit()
+
+    # Links: DEMO-2 is blocked by DEMO-1, DEMO-3 is blocked by DEMO-1
+    l1 = Link(source_key="DEMO-2", target_key="DEMO-1", type_std="is blocked by", direction="inward")
+    l2 = Link(source_key="DEMO-3", target_key="DEMO-1", type_std="is blocked by", direction="inward")
+    session.add_all([l1, l2])
+    session.commit()
+
+    login(client, auth_users["pm"], settings)
+    resp = client.get("/api/dashboard/graph?project=DEMO")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["project"] == "DEMO"
+    assert data["summary"]["total_nodes"] == 3
+    assert data["summary"]["total_edges"] == 2
+    assert data["summary"]["bottlenecks_count"] == 1
+    assert data["summary"]["overdue_count"] == 1
+    assert data["summary"]["high_risk_count"] == 2
+    assert data["summary"]["blocked_count"] == 1
+    assert data["summary"]["done_count"] == 1
+
+    nodes_by_key = {n["key"]: n for n in data["nodes"]}
+    assert nodes_by_key["DEMO-1"]["is_bottleneck"] is True
+    assert nodes_by_key["DEMO-1"]["is_overdue"] is True
+    assert nodes_by_key["DEMO-1"]["overdue_days"] >= 2
+    assert nodes_by_key["DEMO-1"]["blocks_count"] == 2
+    assert "DEMO-2" in nodes_by_key["DEMO-1"]["blocks_keys"]
+    assert "DEMO-3" in nodes_by_key["DEMO-1"]["blocks_keys"]
+
+    assert nodes_by_key["DEMO-2"]["blocked"] is True
+    assert nodes_by_key["DEMO-2"]["blocked_by_keys"] == ["DEMO-1"]
+
+    # Edges should point from blocker (DEMO-1) to blocked (DEMO-2, DEMO-3)
+    edges = data["edges"]
+    edge_pairs = {(e["from"], e["to"]) for e in edges}
+    assert ("DEMO-1", "DEMO-2") in edge_pairs
+    assert ("DEMO-1", "DEMO-3") in edge_pairs
+

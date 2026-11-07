@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
 
     seed_parser = subparsers.add_parser("seed-demo", help="seed demo data and scenarios")
     seed_parser.add_argument("--reset", action="store_true", help="wipe existing demo data before seeding")
+    seed_parser.add_argument("--rich-network", action="store_true", default=False, help="seed realistic dependency graph with bottlenecks and overdue tasks")
 
     sim_parser = subparsers.add_parser("sim-eval", help="run historical simulation evaluation on DuckDB")
     sim_parser.add_argument("--instance", default="Apache", help="Jira instance name (default: Apache)")
@@ -182,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         engine = make_engine(settings.db_url)
         init_db(engine)
         with SessionLocal(bind=engine) as session:
-            summary = seed_demo_data(session, reset=args.reset)
+            summary = seed_demo_data(session, reset=args.reset, rich_network=args.rich_network)
             print(f"Seed demo data completed successfully: {summary}")
         return 0
 
