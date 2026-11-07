@@ -301,7 +301,8 @@ function layoutFocusIssue(center) {
   });
   const centerX = pos[center].x;
   // Người phụ trách: một hàng bên dưới
-  const who = [...new Set(Object.keys(pos).map(k => byKey[k].who))];
+  const meanX = pid => { const xs = Object.keys(pos).filter(k => byKey[k].who === pid).map(k => pos[k].x); return xs.reduce((a, b) => a + b, 0) / xs.length; };
+  const who = [...new Set(Object.keys(pos).map(k => byKey[k].who))].sort((a, b) => meanX(a) - meanX(b));
   const maxY = Math.max(...Object.values(pos).map(p => p.y)) + H;
   const pPos = {};
   const spread = Math.max(170, (Object.keys(cols).length * 215) / who.length);
@@ -411,7 +412,8 @@ function thinLine(x1, y1, x2, y2, dash = '3 4') {
 
 function fit(extra = 60) {
   const b = svg.getBBox();
-  svg.setAttribute('viewBox', `${b.x - 20} ${b.y - 20} ${Math.max(b.width + extra, 600)} ${Math.max(b.height + extra, 400)}`);
+  svg.setAttribute('viewBox', `${b.x - 20} ${b.y - 20} ${b.width + extra} ${b.height + extra}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMin meet');
 }
 
 function render() {
@@ -420,9 +422,10 @@ function render() {
   const shown = new Set();
   if (state.mode === 'overview') {
     const { pos, lanes, colLabels } = layoutOverview();
+    const laneW = Math.max(...Object.values(pos).map(p => p.x)) + W + 30;
     lanes.forEach(({ pid, y, h }) => {
       const L = load[pid];
-      el('rect', { x: 0, y, width: 1400, height: h, rx: 8, fill: pid === '__un' ? '#fff9db' : L.overloaded ? '#fff5f5' : '#f8f9fa', stroke: '#e9ecef' });
+      el('rect', { x: 0, y, width: laneW, height: h, rx: 8, fill: pid === '__un' ? '#fff9db' : L.overloaded ? '#fff5f5' : '#f8f9fa', stroke: '#e9ecef' });
       const g = el('g', { class: 'node', transform: `translate(14,${y + 16})` });
       txt(g, 0, 8, (pid === '__un' ? '📥 ' : L.overloaded ? '🔴 ' : '◯ ') + people[pid].name, { 'font-weight': 700 });
       txt(g, 0, 26, `${L.open} mở · ${L.high} cao`, { fill: '#868e96', 'font-size': 11 });
