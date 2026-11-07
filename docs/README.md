@@ -54,3 +54,12 @@ Thư mục `docs/` chứa toàn bộ các báo cáo kỹ thuật, tài liệu ph
 | 📄 [**nghien-cuu-ly-thuyet-diem-nghen-va-ung-dung-llm.md**](file:///home/jiooum/0.Workspace/0.SourceCode/tgn/docs/nghien-cuu-ly-thuyet-diem-nghen-va-ung-dung-llm.md) | Khung lý thuyết về điểm nghẽn (Theory of Constraints) và ứng dụng LLM trong phân tích phần mềm. |
 | 📄 [**phuong-an-gan-nhan-bottleneck-bang-llm.md**](file:///home/jiooum/0.Workspace/0.SourceCode/tgn/docs/phuong-an-gan-nhan-bottleneck-bang-llm.md) | Phương pháp sử dụng LLM để gán nhãn và kiểm định dữ liệu điểm nghẽn tự động. |
 | 📄 [**rubric-label-audit-bottleneck.md**](file:///home/jiooum/0.Workspace/0.SourceCode/tgn/docs/rubric-label-audit-bottleneck.md) | Bộ tiêu chí (rubric) đánh giá chất lượng nhãn điểm nghẽn. |
+
+---
+
+## 🚀 5. HƯỚNG DẪN CÀI ĐẶT & TRIỂN KHAI HỆ THỐNG WEB / PIPELINE
+
+| Tài liệu | Mô tả nội dung |
+| :--- | :--- |
+| 📄 [**huong-dan-setup-va-bien-moi-truong.md**](file:///home/jiooum/0.Workspace/0.SourceCode/tgn/docs/huong-dan-setup-va-bien-moi-truong.md) | **Hướng dẫn Cài đặt & Cấu hình Biến Môi trường (.env)**: Hướng dẫn thiết lập hệ thống từ đầu, cách lấy API Token Jira Cloud, Incoming Webhook Slack, Ollama LLM, khởi tạo DB và vận hành ứng dụng Web. |
+
