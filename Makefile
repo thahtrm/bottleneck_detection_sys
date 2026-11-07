@@ -64,6 +64,11 @@ reset-demo:
 	@echo "==> Wiping and re-seeding presentation demo data..."
 	@cd $(BACKEND_DIR) && $(PYTHON) -m erw.cli seed-demo --reset
 
+# Register webhook with Jira Cloud
+register-webhook:
+	@echo "==> Registering Jira Webhook with Jira Cloud..."
+	@cd $(BACKEND_DIR) && $(PYTHON) -m erw.cli register-webhook
+
 # Run historical simulation evaluation (SRS FR-V1)
 sim-eval:
 	@echo "==> Running historical simulation evaluation on DuckDB..."
