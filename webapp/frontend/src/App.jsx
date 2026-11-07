@@ -11,6 +11,7 @@ import {
   Group,
   Button,
   Grid,
+  SegmentedControl,
 } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -22,6 +23,7 @@ import StatCards from './components/StatCards';
 import TaskTable from './components/TaskTable';
 import IssuePanel from './components/IssuePanel';
 import ActionConfirmModal from './components/ActionConfirmModal';
+import NetworkGraph from './components/NetworkGraph';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -57,6 +59,7 @@ function AppContent() {
       key ? queryClient.invalidateQueries({ queryKey: ['issue-suggestion', key] }) : Promise.resolve(),
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
       queryClient.invalidateQueries({ queryKey: ['dashboard-issues'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard-graph'] }),
     ]);
   };
 
@@ -80,6 +83,7 @@ function AppContent() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard-issues'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard-graph'] }),
         queryClient.invalidateQueries({ queryKey: ['projects'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-settings'] }),
       ]);
@@ -165,16 +169,37 @@ function AppContent() {
                 </Card>
               )}
 
-              {/* Bố cục lưới 2 cột: Danh sách Task (trái) và Panel Chi tiết (phải) */}
+              {/* Thanh chuyển đổi chế độ xem nhanh: Bảng Task vs Đồ thị Mạng lưới */}
+              <Group justify="space-between" align="center">
+                <SegmentedControl
+                  size="sm"
+                  value={currentView === 'graph' ? 'graph' : 'table'}
+                  onChange={(val) => setCurrentView(val === 'graph' ? 'graph' : 'dashboard')}
+                  data={[
+                    { label: '📋 Danh sách Task & Rủi ro', value: 'table' },
+                    { label: '🕸️ Đồ thị Mạng lưới & Điểm nghẽn', value: 'graph' },
+                  ]}
+                />
+              </Group>
+
+              {/* Bố cục lưới 2 cột: (Trái: Bảng Task hoặc Đồ thị) và (Phải: Panel Chi tiết) */}
               <Grid gutter="md" align="stretch">
                 <Grid.Col span={{ base: 12, lg: 7 }}>
-                  <TaskTable
-                    selectedProject={selectedProject}
-                    searchQuery={searchQuery}
-                    activeCardFilter={activeFilter}
-                    onSelectIssue={setSelectedIssueKey}
-                    selectedIssueKey={selectedIssueKey}
-                  />
+                  {currentView === 'graph' ? (
+                    <NetworkGraph
+                      selectedProject={selectedProject}
+                      onSelectIssue={setSelectedIssueKey}
+                      selectedIssueKey={selectedIssueKey}
+                    />
+                  ) : (
+                    <TaskTable
+                      selectedProject={selectedProject}
+                      searchQuery={searchQuery}
+                      activeCardFilter={activeFilter}
+                      onSelectIssue={setSelectedIssueKey}
+                      selectedIssueKey={selectedIssueKey}
+                    />
+                  )}
                 </Grid.Col>
 
                 <Grid.Col span={{ base: 12, lg: 5 }}>

@@ -118,6 +118,17 @@ export async function getDashboardStats(project = null) {
 }
 
 /**
+ * Lấy dữ liệu đồ thị mạng lưới phụ thuộc và điểm nghẽn
+ * @param {string|null} [project=null] - Key của dự án, hoặc null/rỗng để lấy tất cả
+ */
+export async function getDashboardGraph(project = null) {
+  const query = project ? `?project=${encodeURIComponent(project)}` : '';
+  return await apiFetch(`/api/dashboard/graph${query}`, {
+    method: 'GET',
+  });
+}
+
+/**
  * Lấy cấu hình hệ thống và trạng thái webhook (Admin settings)
  */
 export async function getAdminSettings() {

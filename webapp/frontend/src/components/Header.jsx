@@ -20,6 +20,7 @@ import {
   IconLogout,
   IconX,
   IconLayoutDashboard,
+  IconHierarchy,
   IconSettings,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
@@ -124,22 +125,35 @@ export default function Header({
           aria-label="Chọn dự án theo dõi"
         />
 
-        {/* Nút chuyển đổi điều hướng dành cho Admin */}
-        {user?.is_admin && (
-          <Group gap={4} wrap="nowrap" ml="xs">
-            <Tooltip label="Bảng điều khiển" withArrow position="bottom">
-              <Button
-                variant={currentView === 'dashboard' ? 'filled' : 'subtle'}
-                color="blue"
-                size="xs"
-                leftSection={<IconLayoutDashboard size={15} stroke={1.5} />}
-                onClick={() => onViewChange && onViewChange('dashboard')}
-                aria-label="Chuyển sang Bảng điều khiển"
-              >
-                <Text span visibleFrom="md">Bảng điều khiển</Text>
-              </Button>
-            </Tooltip>
+        {/* Nút chuyển đổi điều hướng chính */}
+        <Group gap={4} wrap="nowrap" ml="xs">
+          <Tooltip label="Bảng điều khiển" withArrow position="bottom">
+            <Button
+              variant={currentView === 'dashboard' ? 'filled' : 'subtle'}
+              color="blue"
+              size="xs"
+              leftSection={<IconLayoutDashboard size={15} stroke={1.5} />}
+              onClick={() => onViewChange && onViewChange('dashboard')}
+              aria-label="Chuyển sang Bảng điều khiển"
+            >
+              <Text span visibleFrom="md">Bảng điều khiển</Text>
+            </Button>
+          </Tooltip>
 
+          <Tooltip label="Đồ thị mạng lưới & Điểm nghẽn" withArrow position="bottom">
+            <Button
+              variant={currentView === 'graph' ? 'filled' : 'subtle'}
+              color="indigo"
+              size="xs"
+              leftSection={<IconHierarchy size={15} stroke={1.5} />}
+              onClick={() => onViewChange && onViewChange('graph')}
+              aria-label="Chuyển sang Đồ thị mạng lưới"
+            >
+              <Text span visibleFrom="md">Đồ thị mạng lưới</Text>
+            </Button>
+          </Tooltip>
+
+          {user?.is_admin && (
             <Tooltip label="Quản trị hệ thống" withArrow position="bottom">
               <Button
                 variant={currentView === 'settings' ? 'filled' : 'subtle'}
@@ -152,8 +166,8 @@ export default function Header({
                 <Text span visibleFrom="md">Quản trị hệ thống</Text>
               </Button>
             </Tooltip>
-          </Group>
-        )}
+          )}
+        </Group>
       </Group>
 
       {/* Khối ở giữa: Tìm kiếm nhanh */}
