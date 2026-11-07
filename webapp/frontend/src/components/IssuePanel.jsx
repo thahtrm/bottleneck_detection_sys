@@ -346,8 +346,8 @@ export default function IssuePanel({
       setDismissReason('');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['issue-detail', issueKey] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-issues'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard-board'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard-graph'] }),
       ]);
     } catch (err) {
       notifications.show({
@@ -381,28 +381,6 @@ export default function IssuePanel({
       riskState?.deadline_label
     );
   }, [riskState?.deadline_at, issue?.duedate, riskState?.deadline_label]);
-
-  // Placeholder khi chưa chọn issue
-  if (!issueKey) {
-    return (
-      <Card shadow="xs" padding="xl" radius="md" withBorder h="100%">
-        <Center h="100%" py={80}>
-          <Stack align="center" gap="sm" maw={340} ta="center">
-            <ThemeIcon size={64} radius="xl" color="blue" variant="light">
-              <IconSparkles size={32} />
-            </ThemeIcon>
-            <Title order={4} fw={600}>
-              Chi tiết công việc & Đề xuất AI
-            </Title>
-            <Text c="dimmed" size="xs">
-              Nhấp vào bất kỳ công việc nào trong bảng bên trái để xem phân tích rủi ro,
-              điểm số học máy p_delay, yếu tố cảnh báo và khuyến nghị hành động từ LLM (qwen3:1.7b).
-            </Text>
-          </Stack>
-        </Center>
-      </Card>
-    );
-  }
 
   // Loading skeleton khi đang tải thông tin issue
   if (isIssueLoading) {

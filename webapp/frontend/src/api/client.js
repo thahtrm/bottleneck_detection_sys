@@ -107,12 +107,16 @@ export async function getProjects() {
 }
 
 /**
- * Lấy dữ liệu thống kê tổng quan (Dashboard stats)
- * @param {string|null} [project=null] - Key của dự án, hoặc null/rỗng để lấy tất cả
+ * Lấy bảng rủi ro: thẻ công việc, sprint, tiến độ và cột trạng thái Jira
+ * @param {{project?: string, q?: string, sprint?: number|null}} params
  */
-export async function getDashboardStats(project = null) {
-  const query = project ? `?project=${encodeURIComponent(project)}` : '';
-  return await apiFetch(`/api/dashboard/stats${query}`, {
+export async function getBoard({ project, q, sprint }) {
+  const params = new URLSearchParams();
+  if (project) params.set('project', project);
+  if (q) params.set('q', q);
+  if (sprint != null) params.set('sprint', String(sprint));
+  const query = params.toString();
+  return await apiFetch(`/api/dashboard/board${query ? `?${query}` : ''}`, {
     method: 'GET',
   });
 }
@@ -138,27 +142,6 @@ export async function getAdminSettings() {
 }
 
 /**
- * Lấy danh sách task rủi ro từ dashboard
- * @param {Object} [params={}] - Các tham số lọc (project, level, status_category, is_critical, blocked, assignee_id, q, sort_by, order, limit, offset)
- * @returns {Promise<{total: number, limit: number, offset: number, items: Array}>}
- */
-export async function getDashboardIssues(params = {}) {
-  const searchParams = new URLSearchParams();
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      searchParams.append(key, String(value));
-    }
-  });
-
-  const queryString = searchParams.toString();
-  const path = `/api/dashboard/issues${queryString ? `?${queryString}` : ''}`;
-  return await apiFetch(path, {
-    method: 'GET',
-  });
-}
-
-/**
  * Lấy chi tiết toàn diện của một công việc (issue) kèm điểm số, rủi ro, liên kết và lịch sử
  * @param {string} key - Mã issue (ví dụ: 'DEMO-1')
  */
@@ -176,6 +159,18 @@ export async function getIssueDetail(key) {
 export async function getIssueSuggestion(key) {
   if (!key) throw new Error('Mã công việc không được để trống');
   return await apiFetch(`/api/issues/${encodeURIComponent(key)}/suggestion`, {
+    method: 'GET',
+  });
+}
+
+/**
+ * Lấy các chuyển trạng thái Jira hợp lệ cho công việc (chỉ PM)
+ * @param {string} key - Mã issue
+ * @returns {Promise<Array<{id: string, name: string, to_status: string, to_category: string}>>}
+ */
+export async function getIssueTransitions(key) {
+  if (!key) throw new Error('Mã công việc không được để trống');
+  return await apiFetch(`/api/issues/${encodeURIComponent(key)}/transitions`, {
     method: 'GET',
   });
 }

@@ -1,0 +1,85 @@
+.board {
+  display: flex;
+  gap: var(--mantine-spacing-sm);
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: var(--mantine-spacing-xs);
+}
+
+.column {
+  flex: 0 0 290px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 250px);
+  min-height: 160px;
+  background: var(--mantine-color-gray-0);
+  border: 1px solid var(--mantine-color-gray-3);
+  border-radius: var(--mantine-radius-md);
+}
+
+.columnHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--mantine-color-gray-3);
+}
+
+.columnBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px 8px 12px;
+  background: var(--mantine-color-white);
+  border: 1px solid var(--mantine-color-gray-3);
+  border-left: 4px solid var(--stripe);
+  border-radius: var(--mantine-radius-sm);
+  cursor: pointer;
+  outline: none;
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.card:hover {
+  box-shadow: var(--mantine-shadow-sm);
+}
+
+.card:focus-visible {
+  box-shadow: 0 0 0 2px var(--mantine-color-blue-5);
+}
+
+.card[data-selected] {
+  border-color: var(--mantine-color-blue-5);
+  border-left-color: var(--stripe);
+  background: var(--mantine-color-blue-0);
+}
+
+.row {
+  cursor: pointer;
+  outline: none;
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-5);
+  outline-offset: -2px;
+}
+
+.row[data-selected] {
+  background: var(--mantine-color-blue-0);
+}
+
+.riskCell {
+  box-shadow: inset 4px 0 0 var(--stripe);
+  white-space: nowrap;
+}
+
+.groupRow {
+  background: var(--mantine-color-gray-1);
+}

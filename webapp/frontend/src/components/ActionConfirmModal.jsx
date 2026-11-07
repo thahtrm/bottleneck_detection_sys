@@ -11,6 +11,7 @@ import {
   Checkbox,
   TextInput,
   Textarea,
+  Select,
   Alert,
   Divider,
   ThemeIcon,
@@ -34,9 +35,9 @@ import {
   IconX,
   IconAlertTriangle,
 } from '@tabler/icons-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
-import { proposeAction, confirmAction } from '../api/client';
+import { proposeAction, confirmAction, getIssueTransitions } from '../api/client';
 
 /**
  * Định nghĩa thông tin nhãn, màu sắc và icon cho từng loại hành động
@@ -78,6 +79,59 @@ const ACTION_TYPE_META = {
     placeholder: 'Mô tả chi tiết nguyên nhân nghẽn và đề xuất chỉ đạo tháo gỡ...',
   },
 };
+
+function StatusTransitionInput({ issueKey, value, onChange, disabled }) {
+  const meta = ACTION_TYPE_META.change_status;
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['issue-transitions', issueKey],
+    queryFn: () => getIssueTransitions(issueKey),
+    enabled: Boolean(issueKey),
+    retry: false,
+    staleTime: 0,
+  });
+
+  if (isError) {
+    return (
+      <TextInput
+        label={meta.inputLabel}
+        placeholder={meta.placeholder}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.currentTarget.value)}
+        size="xs"
+        description="Không tải được danh sách chuyển trạng thái từ Jira. Nhập tên trạng thái đích."
+      />
+    );
+  }
+
+  const transitions = [...new Map((data || []).map((t) => [t.to_status, t])).values()];
+  const options = transitions.map((t) => ({
+    value: t.to_status,
+    label: t.name && t.name !== t.to_status ? `${t.to_status} (${t.name})` : t.to_status,
+  }));
+  const empty = !isLoading && options.length === 0;
+  return (
+    <Select
+      label={meta.inputLabel}
+      placeholder={isLoading ? 'Đang tải trạng thái từ Jira...' : 'Chọn trạng thái đích'}
+      data={options}
+      value={value || null}
+      onChange={(next) => onChange(next || '')}
+      disabled={disabled || isLoading || empty}
+      size="xs"
+      description={
+        empty
+          ? 'Jira không cho phép chuyển trạng thái nào từ trạng thái hiện tại.'
+          : 'Chỉ hiện các bước chuyển hợp lệ trên workflow Jira'
+      }
+    />
+  );
+}
+
+function transitionErrorMessage(detail) {
+  const allowed = detail.available.length ? ` Có thể chuyển sang: ${detail.available.join(', ')}.` : '';
+  return `Jira không cho phép chuyển sang trạng thái "${detail.target}".${allowed}`;
+}
 
 /**
  * Định dạng mốc thời gian ISO cho thông báo xung đột
@@ -186,8 +240,7 @@ export default function ActionConfirmModal({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['issue-detail', issueKey] }),
         queryClient.invalidateQueries({ queryKey: ['issue-suggestion', issueKey] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-issues'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard-board'] }),
       ]);
     }
     notifications.show({
@@ -271,6 +324,8 @@ export default function ActionConfirmModal({
               ? detail
               : detail.message || detail.error || null,
         });
+      } else if (err.status === 422 && err.data?.detail?.error === 'transition_not_allowed') {
+        setGeneralError(transitionErrorMessage(err.data.detail));
       } else {
         setGeneralError(
           err.message || 'Đã có lỗi xảy ra trong quá trình ghi dữ liệu lên Jira.'
@@ -320,14 +375,11 @@ export default function ActionConfirmModal({
 
       case 'change_status':
         return (
-          <TextInput
-            label={meta.inputLabel}
-            placeholder={meta.placeholder}
+          <StatusTransitionInput
+            issueKey={issueKey}
             value={item.value}
             disabled={!item.enabled || isSubmitting}
-            onChange={(e) => handleUpdateValue(index, e.currentTarget.value)}
-            size="xs"
-            description="Tên trạng thái đích trên workflow của Jira"
+            onChange={(value) => handleUpdateValue(index, value)}
           />
         );
 

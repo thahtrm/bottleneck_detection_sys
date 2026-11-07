@@ -1,74 +1,39 @@
-import React, { useState, useEffect } from 'react';
-import {
-  AppShell,
-  Center,
-  Loader,
-  Text,
-  Container,
-  Card,
-  Stack,
-  Title,
-  Group,
-  Button,
-  Grid,
-  SegmentedControl,
-} from '@mantine/core';
+import React, { useState } from 'react';
+import { AppShell, Center, Loader, ScrollArea, Stack, Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { getProjects } from './api/client';
+import { useDashboardState } from './dashboard/urlState.js';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
 import Header from './components/Header';
-import StatCards from './components/StatCards';
-import TaskTable from './components/TaskTable';
+import BoardView from './components/board/BoardView';
 import IssuePanel from './components/IssuePanel';
 import ActionConfirmModal from './components/ActionConfirmModal';
 import NetworkGraph from './components/NetworkGraph';
 
+const ACTION_QUERY_KEYS = [['dashboard-board'], ['dashboard-graph'], ['issue-detail'], ['issue-suggestion']];
+const REFRESH_QUERY_KEYS = [['dashboard-board'], ['dashboard-graph'], ['projects'], ['admin-settings']];
+
+function moveStatusProposal(card) {
+  return {
+    issueKey: card.key,
+    issue: { updated_at: card.updated_at, summary: card.summary },
+    suggestion: {
+      actions: [{ action_type: 'change_status', target: '', value: '', reason: 'PM chuyển trạng thái từ bảng' }],
+    },
+    suggestionId: null,
+  };
+}
+
 function AppContent() {
   const { user, loading } = useAuth();
   const queryClient = useQueryClient();
-
-  const [currentView, setCurrentView] = useState('dashboard');
-  const [selectedProject, setSelectedProject] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('');
+  const [state, patch] = useDashboardState();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [selectedIssueKey, setSelectedIssueKey] = useState(null);
   const [confirmModalData, setConfirmModalData] = useState(null);
   const [confirmModalOpened, setConfirmModalOpened] = useState(false);
 
-  // Nếu người dùng không phải admin thì tự động quay về dashboard
-  useEffect(() => {
-    if (user && !user.is_admin && currentView === 'settings') {
-      setCurrentView('dashboard');
-    }
-  }, [user, currentView]);
-
-  // Callback mở modal xác nhận hành động PM
-  const handleOpenConfirmAction = (proposalData) => {
-    setConfirmModalData(proposalData);
-    setConfirmModalOpened(true);
-  };
-
-  // Callback làm mới dữ liệu sau khi xác nhận & ghi Jira thành công
-  const handleActionSuccess = async () => {
-    const key = confirmModalData?.issueKey || selectedIssueKey;
-    await Promise.all([
-      key ? queryClient.invalidateQueries({ queryKey: ['issue-detail', key] }) : Promise.resolve(),
-      key ? queryClient.invalidateQueries({ queryKey: ['issue-suggestion', key] }) : Promise.resolve(),
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
-      queryClient.invalidateQueries({ queryKey: ['dashboard-issues'] }),
-      queryClient.invalidateQueries({ queryKey: ['dashboard-graph'] }),
-    ]);
-  };
-
-  // Reset selected issue khi đổi dự án
-  useEffect(() => {
-    setSelectedIssueKey(null);
-  }, [selectedProject]);
-
-  // Lấy danh sách dự án từ API
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: getProjects,
@@ -76,25 +41,20 @@ function AppContent() {
     staleTime: 30000,
   });
 
-  // Xử lý làm mới dữ liệu
+  const invalidate = (keys) => Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+
+  const handleOpenConfirmAction = (proposalData) => {
+    setConfirmModalData(proposalData);
+    setConfirmModalOpened(true);
+  };
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-issues'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-graph'] }),
-        queryClient.invalidateQueries({ queryKey: ['projects'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-settings'] }),
-      ]);
+      await invalidate(REFRESH_QUERY_KEYS);
     } finally {
       setIsRefreshing(false);
     }
-  };
-
-  // Lọc nhanh khi click vào một trong 5 Stat Cards (toggle nếu click lại)
-  const handleFilterByCard = (filterType) => {
-    setActiveFilter((prev) => (prev === filterType ? '' : filterType));
   };
 
   if (loading) {
@@ -114,115 +74,66 @@ function AppContent() {
     return <Login />;
   }
 
+  const view = state.view === 'settings' && !user.is_admin ? 'board' : state.view;
+  const pmProjects = new Set(projects.filter((p) => p.role === 'pm').map((p) => p.key));
+  const canMoveStatus = (card) => user.is_admin || pmProjects.has(card.project_key);
+  const selectIssue = (issue) => patch({ issue });
+  const panelOpen = Boolean(state.issue) && view !== 'settings';
+
   return (
-    <AppShell header={{ height: 60 }} padding="md">
+    <AppShell
+      header={{ height: 60 }}
+      aside={{ width: 440, breakpoint: 'sm', collapsed: { desktop: !panelOpen, mobile: !panelOpen } }}
+      padding="md"
+    >
       <AppShell.Header>
         <Header
           projects={projects}
-          selectedProject={selectedProject}
-          onSelectProject={setSelectedProject}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
+          selectedProject={state.project}
+          onSelectProject={(project) => patch({ project })}
+          searchQuery={state.q}
+          onSearchChange={(q) => patch({ q })}
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
-          currentView={currentView}
-          onViewChange={setCurrentView}
+          view={view}
+          onViewChange={(next) => patch({ view: next })}
         />
       </AppShell.Header>
 
+      {panelOpen && (
+        <AppShell.Aside>
+          <AppShell.Section grow component={ScrollArea} p="sm">
+            <IssuePanel
+              key={state.issue}
+              issueKey={state.issue}
+              onClose={() => selectIssue(null)}
+              onOpenConfirmAction={handleOpenConfirmAction}
+              projects={projects}
+              onSelectIssue={selectIssue}
+            />
+          </AppShell.Section>
+        </AppShell.Aside>
+      )}
+
       <AppShell.Main>
-        {currentView === 'settings' ? (
-          <Container size="xl" py="md">
-            <Settings onBackToDashboard={() => setCurrentView('dashboard')} />
-          </Container>
-        ) : (
-          <Container size="xl" py="md">
-            <Stack gap="lg">
-              {/* Bộ thẻ thống kê rủi ro thời gian thực */}
-              <StatCards
-                selectedProject={selectedProject}
-                onFilterByCard={handleFilterByCard}
-                activeFilter={activeFilter}
-              />
-
-              {/* Thông báo bộ lọc thẻ đang kích hoạt */}
-              {activeFilter && (
-                <Card
-                  withBorder
-                  padding="sm"
-                  radius="md"
-                  bg="var(--mantine-color-blue-light)"
-                >
-                  <Group justify="space-between" align="center">
-                    <Text size="sm" fw={500}>
-                      Đang lọc theo tiêu chí: <strong>{activeFilter}</strong>
-                    </Text>
-                    <Button
-                      variant="subtle"
-                      size="xs"
-                      color="blue"
-                      onClick={() => setActiveFilter('')}
-                    >
-                      Bỏ lọc
-                    </Button>
-                  </Group>
-                </Card>
-              )}
-
-              {/* Thanh chuyển đổi chế độ xem nhanh: Bảng Task vs Đồ thị Mạng lưới */}
-              <Group justify="space-between" align="center">
-                <SegmentedControl
-                  size="sm"
-                  value={currentView === 'graph' ? 'graph' : 'table'}
-                  onChange={(val) => setCurrentView(val === 'graph' ? 'graph' : 'dashboard')}
-                  data={[
-                    { label: '📋 Danh sách Task & Rủi ro', value: 'table' },
-                    { label: '🕸️ Đồ thị Mạng lưới & Điểm nghẽn', value: 'graph' },
-                  ]}
-                />
-              </Group>
-
-              {/* Bố cục lưới 2 cột: (Trái: Bảng Task hoặc Đồ thị) và (Phải: Panel Chi tiết) */}
-              <Grid gutter="md" align="stretch">
-                <Grid.Col span={{ base: 12, lg: 7 }}>
-                  {currentView === 'graph' ? (
-                    <NetworkGraph
-                      selectedProject={selectedProject}
-                      onSelectIssue={setSelectedIssueKey}
-                      selectedIssueKey={selectedIssueKey}
-                    />
-                  ) : (
-                    <TaskTable
-                      selectedProject={selectedProject}
-                      searchQuery={searchQuery}
-                      activeCardFilter={activeFilter}
-                      onSelectIssue={setSelectedIssueKey}
-                      selectedIssueKey={selectedIssueKey}
-                    />
-                  )}
-                </Grid.Col>
-
-                <Grid.Col span={{ base: 12, lg: 5 }}>
-                  <IssuePanel
-                    key={selectedIssueKey || 'placeholder'}
-                    issueKey={selectedIssueKey}
-                    onClose={() => setSelectedIssueKey(null)}
-                    onOpenConfirmAction={handleOpenConfirmAction}
-                    projects={projects}
-                    onSelectIssue={setSelectedIssueKey}
-                  />
-                </Grid.Col>
-              </Grid>
-            </Stack>
-          </Container>
+        {view === 'settings' && <Settings onBackToDashboard={() => patch({ view: 'board' })} />}
+        {view === 'graph' && (
+          <NetworkGraph selectedProject={state.project} onSelectIssue={selectIssue} selectedIssueKey={state.issue} />
+        )}
+        {(view === 'board' || view === 'list') && (
+          <BoardView
+            state={state}
+            patch={patch}
+            canMoveStatus={canMoveStatus}
+            onMoveStatus={(card) => handleOpenConfirmAction(moveStatusProposal(card))}
+          />
         )}
 
-        {/* Modal Xác nhận & Ghi Jira */}
         <ActionConfirmModal
           opened={confirmModalOpened}
           onClose={() => setConfirmModalOpened(false)}
           proposalData={confirmModalData}
-          onSuccess={handleActionSuccess}
+          onSuccess={() => invalidate(ACTION_QUERY_KEYS)}
         />
       </AppShell.Main>
     </AppShell>

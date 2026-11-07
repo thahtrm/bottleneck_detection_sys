@@ -164,8 +164,7 @@ export default function Settings({ onBackToDashboard }) {
       // Làm mới dữ liệu sau khi chạy
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin-settings'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-issues'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard-board'] }),
       ]);
     } catch (err) {
       if (err.status === 409) {
@@ -232,8 +231,7 @@ export default function Settings({ onBackToDashboard }) {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['projects'] }),
         queryClient.invalidateQueries({ queryKey: ['admin-settings'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-issues'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard-board'] }),
       ]);
     } catch (err) {
       notifications.show({

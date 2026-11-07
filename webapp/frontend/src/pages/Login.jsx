@@ -115,7 +115,7 @@ export default function Login() {
 
           <Box mt="lg" pt="sm" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
             <Text size="xs" c="dimmed" ta="center">
-              Tài khoản mẫu: <b>admin@earlyrisk.local</b> | <b>admin123</b>
+              Tài khoản mẫu: <b>admin@earlyrisk.local</b> | <b>Admin@123456</b>
             </Text>
           </Box>
         </Paper>

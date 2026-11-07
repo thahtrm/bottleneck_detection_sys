@@ -4,6 +4,7 @@ import {
   Title,
   ThemeIcon,
   Select,
+  SegmentedControl,
   TextInput,
   ActionIcon,
   Tooltip,
@@ -19,13 +20,17 @@ import {
   IconUser,
   IconLogout,
   IconX,
-  IconLayoutDashboard,
-  IconHierarchy,
-  IconSettings,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { getAdminSettings } from '../api/client';
+
+const VIEW_OPTIONS = [
+  { value: 'board', label: 'Bảng' },
+  { value: 'list', label: 'Danh sách' },
+  { value: 'graph', label: 'Đồ thị' },
+];
+const ADMIN_VIEW_OPTIONS = [...VIEW_OPTIONS, { value: 'settings', label: 'Quản trị' }];
 
 /**
  * Format thời gian webhook ISO thành chuỗi hiển thị thân thiện tiếng Việt
@@ -56,7 +61,7 @@ export default function Header({
   onSearchChange,
   onRefresh,
   isRefreshing = false,
-  currentView = 'dashboard',
+  view,
   onViewChange,
 }) {
   const { user, logout } = useAuth();
@@ -96,17 +101,17 @@ export default function Header({
 
   // Nhãn vai trò người dùng
   const roleLabel = user?.is_admin ? 'Admin' : 'PM / Viewer';
-  const roleColor = user?.is_admin ? 'red' : 'blue';
+  const roleColor = user?.is_admin ? 'dark' : 'blue';
 
   return (
-    <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-      {/* Khối bên trái: Logo + Chọn dự án */}
-      <Group gap="md" wrap="nowrap" style={{ flexShrink: 0 }}>
-        <Group gap="xs" wrap="nowrap">
+    <Group h="100%" px="md" gap="sm" justify="space-between" wrap="nowrap" style={{ minWidth: 0 }}>
+      {/* Khối bên trái: Logo + Chọn dự án. Nút xem không được co, để chữ không bị cắt. */}
+      <Group gap="sm" wrap="nowrap" style={{ flex: '1 1 auto' }}>
+        <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
           <ThemeIcon size="lg" radius="md" color="blue" variant="filled">
             <IconShieldAlert size={22} stroke={1.5} />
           </ThemeIcon>
-          <Box visibleFrom="xs">
+          <Box visibleFrom="xl">
             <Title order={4} style={{ whiteSpace: 'nowrap' }}>
               Early Risk Web
             </Title>
@@ -119,59 +124,26 @@ export default function Header({
           onChange={(val) => onSelectProject && onSelectProject(val || '')}
           placeholder="Chọn dự án"
           size="sm"
-          w={{ base: 140, sm: 190, md: 230 }}
+          miw={120}
+          maw={230}
+          style={{ flex: '1 1 160px' }}
           allowDeselect={false}
           checkIconPosition="right"
           aria-label="Chọn dự án theo dõi"
         />
 
-        {/* Nút chuyển đổi điều hướng chính */}
-        <Group gap={4} wrap="nowrap" ml="xs">
-          <Tooltip label="Bảng điều khiển" withArrow position="bottom">
-            <Button
-              variant={currentView === 'dashboard' ? 'filled' : 'subtle'}
-              color="blue"
-              size="xs"
-              leftSection={<IconLayoutDashboard size={15} stroke={1.5} />}
-              onClick={() => onViewChange && onViewChange('dashboard')}
-              aria-label="Chuyển sang Bảng điều khiển"
-            >
-              <Text span visibleFrom="md">Bảng điều khiển</Text>
-            </Button>
-          </Tooltip>
-
-          <Tooltip label="Đồ thị mạng lưới & Điểm nghẽn" withArrow position="bottom">
-            <Button
-              variant={currentView === 'graph' ? 'filled' : 'subtle'}
-              color="indigo"
-              size="xs"
-              leftSection={<IconHierarchy size={15} stroke={1.5} />}
-              onClick={() => onViewChange && onViewChange('graph')}
-              aria-label="Chuyển sang Đồ thị mạng lưới"
-            >
-              <Text span visibleFrom="md">Đồ thị mạng lưới</Text>
-            </Button>
-          </Tooltip>
-
-          {user?.is_admin && (
-            <Tooltip label="Quản trị hệ thống" withArrow position="bottom">
-              <Button
-                variant={currentView === 'settings' ? 'filled' : 'subtle'}
-                color="blue"
-                size="xs"
-                leftSection={<IconSettings size={15} stroke={1.5} />}
-                onClick={() => onViewChange && onViewChange('settings')}
-                aria-label="Chuyển sang Quản trị hệ thống"
-              >
-                <Text span visibleFrom="md">Quản trị hệ thống</Text>
-              </Button>
-            </Tooltip>
-          )}
-        </Group>
+        <SegmentedControl
+          size="sm"
+          data={user?.is_admin ? ADMIN_VIEW_OPTIONS : VIEW_OPTIONS}
+          value={view}
+          onChange={onViewChange}
+          aria-label="Chế độ xem"
+          style={{ flexShrink: 0 }}
+        />
       </Group>
 
       {/* Khối ở giữa: Tìm kiếm nhanh */}
-      <Box style={{ flex: 1, maxWidth: 460 }} mx="sm">
+      <Box style={{ flex: '1 1 160px', minWidth: 96, maxWidth: 360 }}>
         <TextInput
           placeholder="Tìm task theo key hoặc tóm tắt..."
           leftSection={<IconSearch size={16} stroke={1.5} />}
@@ -218,6 +190,7 @@ export default function Header({
             variant="dot"
             color="green"
             size="md"
+            visibleFrom="xl"
             style={{ cursor: 'help', textTransform: 'none' }}
           >
             {webhookLabel}
@@ -226,11 +199,11 @@ export default function Header({
 
         {/* Thông tin người dùng & Đăng xuất */}
         <Group gap="xs" wrap="nowrap" ml="xs">
-          <Badge color={roleColor} variant="light" size="sm">
+          <Badge color={roleColor} variant="light" size="sm" visibleFrom="lg">
             {roleLabel}
           </Badge>
 
-          <Group gap={6} wrap="nowrap" visibleFrom="sm">
+          <Group gap={6} wrap="nowrap" visibleFrom="xl">
             <IconUser size={16} stroke={1.5} />
             <Text fw={500} size="sm" style={{ whiteSpace: 'nowrap' }}>
               {user?.name || user?.email}
@@ -246,7 +219,7 @@ export default function Header({
               onClick={logout}
               px="xs"
             >
-              <Text span visibleFrom="md">Đăng xuất</Text>
+              <Text span visibleFrom="xl">Đăng xuất</Text>
             </Button>
           </Tooltip>
         </Group>
