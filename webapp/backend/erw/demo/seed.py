@@ -22,6 +22,7 @@ from erw.models import (
     Sprint,
     Suggestion,
     User,
+    Version,
 )
 
 
@@ -52,6 +53,47 @@ def _upsert_user(
     return user
 
 
+def _seed_rich_deadlines_and_reopens(session: Session, now) -> None:
+    session.merge(Sprint(
+        id=102,
+        board_id=3,
+        name="Sprint 2 - Hardening",
+        state="active",
+        start_at=now - timedelta(days=5),
+        end_at=now + timedelta(days=2),
+    ))
+    session.merge(Version(
+        id=201,
+        project_key="DEMO",
+        name="v1.0 Go-Live",
+        release_date=now.date() + timedelta(days=14),
+        released=False,
+    ))
+    session.flush()
+    for key in ("DEMO-103", "DEMO-104", "DEMO-107", "DEMO-111", "DEMO-112", "DEMO-113"):
+        session.merge(IssueSprint(issue_key=key, sprint_id=101))
+    for key in ("DEMO-102", "DEMO-105", "DEMO-108", "DEMO-109"):
+        session.merge(IssueSprint(issue_key=key, sprint_id=102))
+    for key in ("DEMO-110", "DEMO-114", "DEMO-115"):
+        session.merge(IssueVersion(issue_key=key, version_id=201))
+    reopens = [("DEMO-102", "demo-reopen-1"), ("DEMO-102", "demo-reopen-2"), ("DEMO-109", "demo-reopen-1")]
+    for days_ago, (key, change_id) in enumerate(reopens, start=1):
+        exists = session.execute(
+            select(Change.id).where(Change.issue_key == key, Change.change_id == change_id, Change.idx == 0)
+        ).first()
+        if exists is None:
+            session.add(Change(
+                issue_key=key,
+                change_id=change_id,
+                idx=0,
+                at=now - timedelta(days=days_ago),
+                field="status",
+                from_str="Done",
+                to_str="Reopened",
+            ))
+    session.flush()
+
+
 def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = False) -> dict[str, Any]:
     """Seed standard users, demo project configuration, and scenario issues into SQLite."""
     now = utcnow()
@@ -68,6 +110,7 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
             IssueVersion,
             Change,
             Sprint,
+            Version,
             Issue,
             ProjectMember,
             Project,
@@ -389,6 +432,24 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
             },
         ])
 
+    if rich_network:
+        team = {
+            "an": "Phạm Minh An",
+            "binh": "Lê Thanh Bình",
+            "chi": "Đỗ Thu Chi",
+            "dung": "Vũ Quốc Dũng",
+        }
+        owners = {
+            "DEMO-105": "an", "DEMO-108": "an", "DEMO-109": "an", "DEMO-103": "an", "DEMO-110": "an",
+            "DEMO-101": "binh", "DEMO-106": "binh", "DEMO-111": "binh", "DEMO-112": "binh",
+            "DEMO-102": "chi", "DEMO-113": "chi",
+            "DEMO-104": "dung", "DEMO-116": "dung",
+        }
+        for item in issues_data:
+            owner = owners.get(item["key"])
+            item["assignee_id"] = owner and f"demo-{owner}"
+            item["assignee_name"] = owner and team[owner]
+
     for item in issues_data:
         issue = session.get(Issue, item["key"])
         if issue is None:
@@ -442,6 +503,9 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
         else:
             link.direction = direct
     session.flush()
+
+    if rich_network:
+        _seed_rich_deadlines_and_reopens(session, now)
 
     # Risk States
     risk_states_data = [
