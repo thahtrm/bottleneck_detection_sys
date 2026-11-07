@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Wireframe · Đồ thị node cho PM</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --line: #dde1e6; --text: #1f2933; --muted: #6b7785;
+    --high: #e03131; --high-bg: #fff0f0; --med: #f08c00; --med-bg: #fff6e6;
+    --low: #2f9e44; --low-bg: #ebfbee; --done: #adb5bd; --done-bg: #f1f3f5;
+    --accent: #1c7ed6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--bg); }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 15px; margin: 0; }
+  header select, header input { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; }
+  header input { width: 220px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-left: auto; }
+  .seg button { border: 0; background: #fff; padding: 6px 12px; font: inherit; cursor: pointer; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .kpis { display: flex; gap: 10px; padding: 10px 16px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; min-width: 130px; cursor: pointer; }
+  .kpi b { font-size: 20px; display: block; }
+  .kpi span { color: var(--muted); }
+  .kpi.on { outline: 2px solid var(--accent); }
+  .toolbar { display: flex; gap: 16px; align-items: center; padding: 0 16px 8px; color: var(--muted); flex-wrap: wrap; }
+  .toolbar label { cursor: pointer; }
+  .crumbs { padding: 0 16px 8px; display: none; gap: 6px; align-items: center; }
+  .crumbs a { color: var(--accent); cursor: pointer; text-decoration: none; }
+  .crumbs .depth button { border: 1px solid var(--line); background: #fff; padding: 2px 9px; cursor: pointer; border-radius: 4px; }
+  .crumbs .depth button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { display: grid; grid-template-columns: 260px 1fr 300px; gap: 10px; padding: 0 16px 10px; height: calc(100vh - 205px); min-height: 520px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: auto; }
+  .panel h3 { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 12px 12px 6px; }
+  .row { padding: 7px 12px; border-top: 1px solid #f0f2f4; cursor: pointer; display: flex; gap: 8px; align-items: flex-start; }
+  .row:hover, .row.hl { background: #eef5fd; }
+  .row .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; flex: none; }
+  .row small { color: var(--muted); display: block; }
+  .row .tags { margin-left: auto; white-space: nowrap; color: var(--muted); }
+  #canvas { position: relative; }
+  svg { width: 100%; height: 100%; display: block; }
+  .node { cursor: pointer; }
+  .node text { pointer-events: none; }
+  .dim { opacity: .18; }
+  .detail { padding: 12px; }
+  .detail h2 { font-size: 15px; margin: 0 0 4px; }
+  .detail .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-weight: 600; font-size: 12px; }
+  .detail ul { padding-left: 18px; margin: 4px 0 10px; }
+  .detail dl { display: grid; grid-template-columns: 95px 1fr; gap: 3px 8px; margin: 8px 0 10px; }
+  .detail dt { color: var(--muted); }
+  .detail dd { margin: 0; }
+  .detail .act { display: block; width: 100%; text-align: left; margin: 4px 0; padding: 7px 10px; border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer; font: inherit; }
+  .detail .act:hover { border-color: var(--accent); }
+  .empty { color: var(--muted); padding: 16px 12px; }
+  footer { display: flex; gap: 18px; padding: 8px 16px; background: var(--panel); border-top: 1px solid var(--line); color: var(--muted); flex-wrap: wrap; align-items: center; }
+  footer i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+  #tip { position: fixed; pointer-events: none; background: #1f2933; color: #fff; padding: 6px 9px; border-radius: 6px; font-size: 12px; display: none; max-width: 260px; z-index: 9; }
+  .note { position: absolute; left: 10px; bottom: 8px; color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Đồ thị phụ thuộc</h1>
+  <select><option>Dự án SPR</option></select>
+  <input id="search" placeholder="🔍 Tìm issue / người…">
+  <div class="seg"><button id="mOverview" class="on">Tổng quan</button><button id="mFocus">Tâm điểm</button></div>
+</header>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="toolbar" id="toolbar">
+  <label><input type="checkbox" id="optLanes" checked> Gom theo người phụ trách</label>
+  <label><input type="checkbox" id="optRelate"> Hiện Relate / Duplicate</label>
+  <label><input type="checkbox" id="optDone"> Hiện task đã xong</label>
+  <span>· Bấm một node để vào chế độ Tâm điểm</span>
+</div>
+
+<div class="crumbs" id="crumbs"></div>
+
+<main>
+  <aside class="panel" id="left"></aside>
+  <section class="panel" id="canvas"><svg id="svg"></svg><div class="note" id="note"></div></section>
+  <aside class="panel" id="right"></aside>
+</main>
+
+<footer>
+  <span><i style="background:var(--high)"></i>Rủi ro cao</span>
+  <span><i style="background:var(--med)"></i>Trung bình</span>
+  <span><i style="background:var(--low)"></i>Thấp</span>
+  <span><i style="background:var(--done)"></i>Đã xong</span>
+  <span>━▶ Chặn</span>
+  <span style="color:var(--high)">━▶ Đang lan trễ</span>
+  <span>═ Đường găng ★</span>
+  <span>⛔ bị chặn · ↻ mở lại · +Nd quá hạn</span>
+  <span>◯ Người · ⬡ Sprint/Version · ┄ phụ trách</span>
+</footer>
+
+<div id="tip"></div>
+
+<script>
+// ───────────────────────── Dữ liệu mẫu ─────────────────────────
+const P90_OPEN = 4; // ngưỡng p90 số task mở của dự án (dữ liệu mẫu)
+const people = {
+  an:   { id: 'an',   name: 'An' },
+  binh: { id: 'binh', name: 'Bình' },
+  chi:  { id: 'chi',  name: 'Chi' },
+  dung: { id: 'dung', name: 'Dũng' },
+  __un: { id: '__un', name: 'Chưa phân công', virtual: true },
+};
+const sprints = {
+  s14: { id: 's14', name: 'Sprint 14', daysLeft: 3 },
+  v21: { id: 'v21', name: 'Release 2.1', daysLeft: 12 },
+};
+const issues = [
+  { key: 'SPR-2',  summary: 'Thiết kế schema người dùng', level: 'DONE', who: 'chi', done: true, sprint: 's14' },
+  { key: 'SPR-3',  summary: 'Cấu hình OAuth provider',     level: 'LOW',  who: 'dung', sprint: 's14', delay: 0 },
+  { key: 'SPR-7',  summary: 'Token refresh service',       level: 'MED',  who: 'chi',  sprint: 's14', delay: 2,
+    factors: ['Ước lượng 8 SP nhưng mới làm 30%'] },
+  { key: 'SPR-12', summary: 'Auth API',                    level: 'HIGH', who: 'an',   sprint: 's14', delay: 5, overdue: 5, blocked: true, reopen: 0,
+    factors: ['Chặn 3 task, 1 task trên đường găng', 'An có 6 task mở (p90 dự án = 4)', 'Bị chặn bởi SPR-7 (đang rủi ro)', 'Nằm ở Open 6 ngày trước khi được nhận'] },
+  { key: 'SPR-20', summary: 'Payment gateway',             level: 'HIGH', who: 'binh', sprint: 'v21', delay: 4, blocked: true,
+    factors: ['Phụ thuộc SPR-12 đang trễ 5 ngày', 'Nằm trên đường găng của Release 2.1'] },
+  { key: 'SPR-25', summary: 'Hoá đơn PDF',                 level: 'LOW',  who: 'binh', sprint: 'v21', delay: 0, blocked: true },
+  { key: 'SPR-31', summary: 'Báo cáo phiên đăng nhập',     level: 'MED',  who: 'an',   sprint: 's14', delay: 2, reopen: 2, blocked: true,
+    factors: ['Đã mở lại 2 lần', 'Phụ thuộc SPR-12'] },
+  { key: 'SPR-35', summary: 'Audit log đăng nhập',         level: 'MED',  who: 'an',   sprint: 's14', delay: 1, blocked: true,
+    factors: ['Phụ thuộc SPR-12'] },
+  { key: 'SPR-40', summary: 'Đồng bộ hồ sơ người dùng',    level: 'HIGH', who: 'an',   sprint: 's14', delay: 3, overdue: 2,
+    factors: ['Quá hạn 2 ngày', 'Assignee quá tải'] },
+  { key: 'SPR-41', summary: 'Sửa lỗi avatar',              level: 'LOW',  who: 'an',   sprint: 's14', delay: 0 },
+  { key: 'SPR-42', summary: 'Đổi mật khẩu',                level: 'MED',  who: 'an',   sprint: 's14', delay: 1 },
+  { key: 'SPR-44', summary: 'UI màn đăng nhập',            level: 'MED',  who: '__un', sprint: 's14', delay: 2,
+    factors: ['Chưa có người nhận 9 ngày', 'Task chưa gán chờ lâu gấp 6,3 lần'] },
+  { key: 'SPR-50', summary: 'Kiểm thử E2E đăng nhập',      level: 'LOW',  who: '__un', sprint: 's14', delay: 0, blocked: true },
+  { key: 'SPR-52', summary: 'Thông báo đổi hồ sơ',         level: 'HIGH', who: '__un', sprint: 'v21', delay: 3, blocked: true,
+    factors: ['Chưa có người nhận', 'Phụ thuộc SPR-40 đang quá hạn'] },
+  { key: 'SPR-60', summary: 'Hoàn tiền',                   level: 'MED',  who: 'binh', sprint: 'v21', delay: 1, blocked: true,
+    factors: ['Phụ thuộc SPR-20'] },
+  { key: 'SPR-61', summary: 'Tài liệu API',                level: 'LOW',  who: 'dung', sprint: 'v21', delay: 0 },
+];
+const links = [
+  { from: 'SPR-2',  to: 'SPR-3',  kind: 'blocks' },
+  { from: 'SPR-3',  to: 'SPR-12', kind: 'blocks' },
+  { from: 'SPR-7',  to: 'SPR-12', kind: 'blocks' },
+  { from: 'SPR-12', to: 'SPR-20', kind: 'blocks' },
+  { from: 'SPR-12', to: 'SPR-31', kind: 'blocks' },
+  { from: 'SPR-12', to: 'SPR-35', kind: 'blocks' },
+  { from: 'SPR-20', to: 'SPR-25', kind: 'blocks' },
+  { from: 'SPR-20', to: 'SPR-60', kind: 'blocks' },
+  { from: 'SPR-40', to: 'SPR-52', kind: 'blocks' },
+  { from: 'SPR-44', to: 'SPR-50', kind: 'blocks' },
+  { from: 'SPR-41', to: 'SPR-42', kind: 'relates' },
+  { from: 'SPR-61', to: 'SPR-20', kind: 'relates' },
+];
+
+// ───────────────────────── Tính toán dẫn xuất ─────────────────────────
+const byKey = Object.fromEntries(issues.map(i => [i.key, i]));
+const blocks = {}, blockedBy = {};
+issues.forEach(i => { blocks[i.key] = []; blockedBy[i.key] = []; });
+links.filter(l => l.kind === 'blocks').forEach(l => { blocks[l.from].push(l.to); blockedBy[l.to].push(l.from); });
+
+const RISK_RANK = { HIGH: 3, MED: 2, LOW: 1, DONE: 0 };
+const isRisky = i => !i.done && (i.level === 'HIGH' || i.overdue);
+const propagates = l => l.kind === 'blocks' && isRisky(byKey[l.from]);
+
+function downstreamAll(key, seen = new Set()) {
+  for (const k of blocks[key]) if (!seen.has(k)) { seen.add(k); downstreamAll(k, seen); }
+  return seen;
+}
+// Đường găng: chuỗi chặn dài nhất giữa các task chưa xong
+const critical = (() => {
+  const open = issues.filter(i => !i.done).map(i => i.key);
+  const memo = {};
+  const longest = k => memo[k] ??= [k, ...(blocks[k].filter(x => !byKey[x].done).map(longest).sort((a, b) => b.length - a.length)[0] || [])];
+  const best = open.map(longest).sort((a, b) => b.length - a.length)[0] || [];
+  return new Set(best.length >= 3 ? best : []);
+})();
+issues.forEach(i => {
+  i.blocksN = blocks[i.key].length;
+  i.critical = critical.has(i.key);
+  i.bottleneck = !i.done && i.blocksN >= 1 && (i.blocksN >= 2 || isRisky(i));
+});
+const load = {};
+Object.values(people).forEach(p => {
+  const mine = issues.filter(i => i.who === p.id && !i.done);
+  load[p.id] = {
+    open: mine.length,
+    high: mine.filter(i => i.level === 'HIGH').length,
+    overdue: mine.filter(i => i.overdue).length,
+    overloaded: !p.virtual && (mine.length > P90_OPEN || mine.filter(i => i.level === 'HIGH').length >= 2),
+  };
+});
+
+// ───────────────────────── Trạng thái giao diện ─────────────────────────
+const state = { mode: 'overview', focus: null, depth: 2, filter: 'ALL', lanes: true, relate: false, done: false, q: '', hover: null };
+
+const $ = id => document.getElementById(id);
+const svg = $('svg');
+const NS = 'http://www.w3.org/2000/svg';
+const W = 156, H = 58;
+
+const color = i => i.done ? ['var(--done)', 'var(--done-bg)'] :
+  ({ HIGH: ['var(--high)', 'var(--high-bg)'], MED: ['var(--med)', 'var(--med-bg)'], LOW: ['var(--low)', 'var(--low-bg)'] })[i.level];
+
+function el(tag, attrs = {}, parent = svg) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  parent.appendChild(e);
+  return e;
+}
+function txt(parent, x, y, s, attrs = {}) {
+  const t = el('text', { x, y, 'font-size': 12, ...attrs }, parent);
+  t.textContent = s;
+  return t;
+}
+
+function matchesFilter(i) {
+  const f = state.filter;
+  if (f === 'HIGH') return i.level === 'HIGH' && !i.done;
+  if (f === 'OVERDUE') return !!i.overdue;
+  if (f === 'BOTTLENECK') return i.bottleneck;
+  if (f === 'OVERLOAD') return load[i.who]?.overloaded;
+  if (f === 'UNASSIGNED') return i.who === '__un';
+  return true;
+}
+function matchesSearch(i) {
+  const q = state.q.trim().toLowerCase();
+  if (!q) return true;
+  return i.key.toLowerCase().includes(q) || i.summary.toLowerCase().includes(q) || people[i.who].name.toLowerCase().includes(q);
+}
+
+// ───────────────────────── Bố cục ─────────────────────────
+function layerOf(keys) {
+  // độ sâu = đường chặn dài nhất từ nguồn, chỉ xét trong tập keys
+  const set = new Set(keys), memo = {};
+  const d = k => memo[k] ??= Math.max(0, ...blockedBy[k].filter(x => set.has(x)).map(x => d(x) + 1));
+  return Object.fromEntries(keys.map(k => [k, d(k)]));
+}
+
+function layoutOverview() {
+  const vis = issues.filter(i => state.done || !i.done);
+  const keys = vis.map(i => i.key);
+  const connected = keys.filter(k => blocks[k].some(x => keys.includes(x)) || blockedBy[k].some(x => keys.includes(x)));
+  const isolated = keys.filter(k => !connected.includes(k));
+  const layer = layerOf(connected);
+  const maxL = Math.max(0, ...Object.values(layer));
+  isolated.forEach(k => layer[k] = maxL + 1);
+  const pos = {};
+  const colX = c => 40 + c * 205;
+
+  if (!state.lanes) {
+    const cols = {};
+    keys.forEach(k => (cols[layer[k]] ??= []).push(k));
+    Object.entries(cols).forEach(([c, ks]) => {
+      ks.sort((a, b) => RISK_RANK[byKey[b].level] - RISK_RANK[byKey[a].level]);
+      ks.forEach((k, r) => pos[k] = { x: colX(+c), y: 50 + r * 82 });
+    });
+    return { pos, lanes: [], colLabels: isolated.length ? [{ x: colX(maxL + 1), label: 'Không phụ thuộc' }] : [] };
+  }
+  // Làn theo người phụ trách
+  const order = Object.keys(people).sort((a, b) =>
+    (b === '__un') - (a === '__un') || load[b].high - load[a].high || load[b].open - load[a].open);
+  const lanes = [];
+  let y = 20;
+  for (const pid of order) {
+    const mine = keys.filter(k => byKey[k].who === pid);
+    if (!mine.length) continue;
+    const perCol = {};
+    mine.forEach(k => (perCol[layer[k]] ??= []).push(k));
+    const rows = Math.max(...Object.values(perCol).map(a => a.length));
+    const h = rows * 74 + 22;
+    Object.entries(perCol).forEach(([c, ks]) => ks.forEach((k, r) => pos[k] = { x: 150 + +c * 205, y: y + 18 + r * 74 }));
+    lanes.push({ pid, y, h });
+    y += h + 8;
+  }
+  return { pos, lanes, colLabels: [] };
+}
+
+function layoutFocusIssue(center) {
+  const level = { [center]: 0 };
+  const walk = (k, dir, d) => {
+    if (d > state.depth) return;
+    for (const n of (dir < 0 ? blockedBy[k] : blocks[k])) {
+      if (!state.done && byKey[n].done) continue;
+      if (level[n] === undefined) { level[n] = dir * d; walk(n, dir, d + 1); }
+    }
+  };
+  walk(center, -1, 1); walk(center, 1, 1);
+  if (state.relate) links.filter(l => l.kind !== 'blocks' && (l.from === center || l.to === center))
+    .forEach(l => { const o = l.from === center ? l.to : l.from; if (level[o] === undefined) level[o] = 0; });
+  const cols = {};
+  Object.entries(level).forEach(([k, l]) => (cols[l] ??= []).push(k));
+  const minL = Math.min(...Object.keys(cols).map(Number));
+  const pos = {};
+  Object.entries(cols).forEach(([l, ks]) => {
+    ks.sort((a, b) => (a === center ? -1 : b === center ? 1 : RISK_RANK[byKey[b].level] - RISK_RANK[byKey[a].level]));
+    ks.forEach((k, r) => pos[k] = { x: 50 + (+l - minL) * 215, y: 130 + r * 96 });
+  });
+  const centerX = pos[center].x;
+  // Người phụ trách: một hàng bên dưới
+  const who = [...new Set(Object.keys(pos).map(k => byKey[k].who))];
+  const maxY = Math.max(...Object.values(pos).map(p => p.y)) + H;
+  const pPos = {};
+  const spread = Math.max(170, (Object.keys(cols).length * 215) / who.length);
+  who.forEach((pid, i) => pPos[pid] = { x: 50 + W / 2 + i * spread, y: maxY + 90 });
+  // Sprint của tâm điểm ở trên
+  const sp = byKey[center].sprint;
+  return { pos, pPos, sPos: { [sp]: { x: centerX + W / 2, y: 50 } }, minL, colsN: Object.keys(cols).length };
+}
+
+function layoutFocusPerson(pid) {
+  const mine = issues.filter(i => i.who === pid && (state.done || !i.done))
+    .sort((a, b) => RISK_RANK[b.level] - RISK_RANK[a.level] || (b.delay || 0) - (a.delay || 0));
+  const pos = {};
+  mine.forEach((i, n) => pos[i.key] = { x: 40 + n * 180, y: 200 });
+  // task của người khác đang bị task của người này chặn
+  const others = [...new Set(mine.flatMap(i => blocks[i.key]).filter(k => byKey[k].who !== pid))];
+  others.forEach((k, n) => pos[k] = { x: 40 + n * 180, y: 40, other: true });
+  const span = Math.max(mine.length, 1) * 180 - 24;
+  return { pos, pPos: { [pid]: { x: 40 + span / 2, y: 380 } } };
+}
+
+// ───────────────────────── Vẽ ─────────────────────────
+function defs() {
+  const d = el('defs');
+  for (const [id, c] of [['arr', '#868e96'], ['arrRed', '#e03131']]) {
+    const m = el('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, d);
+    el('path', { d: 'M0,0 L10,5 L0,10 z', fill: c }, m);
+  }
+  const f = el('filter', { id: 'glow', x: '-30%', y: '-30%', width: '160%', height: '160%' }, d);
+  el('feDropShadow', { dx: 0, dy: 0, stdDeviation: 5, 'flood-color': '#e03131', 'flood-opacity': .55 }, f);
+}
+
+function drawEdge(a, b, l, dimmed) {
+  const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2;
+  const mx = (x1 + x2) / 2;
+  const red = propagates(l), crit = critical.has(l.from) && critical.has(l.to);
+  const soft = l.kind !== 'blocks';
+  const d = x2 > x1 ? `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`
+                    : `M${a.x + W / 2},${a.y + H} C${a.x + W / 2},${a.y + H + 40} ${b.x + W / 2},${b.y - 40} ${b.x + W / 2},${b.y}`;
+  el('path', {
+    d, fill: 'none',
+    stroke: soft ? '#ced4da' : red ? '#e03131' : '#868e96',
+    'stroke-width': soft ? 1.2 : crit ? 4 : 2,
+    'stroke-dasharray': soft ? '5 4' : '',
+    'marker-end': soft ? '' : `url(#${red ? 'arrRed' : 'arr'})`,
+    class: dimmed ? 'dim' : '',
+  });
+  if (soft) txt(svg, mx - 18, (y1 + y2) / 2 - 4, l.kind === 'relates' ? 'Liên quan' : 'Trùng lặp', { fill: '#adb5bd', 'font-size': 10 });
+}
+
+function drawIssue(i, p, { big = false, dimmed = false, faded = false } = {}) {
+  const [stroke, fill] = color(i);
+  const g = el('g', { class: 'node' + (dimmed ? ' dim' : ''), transform: `translate(${p.x},${p.y})`, opacity: faded ? .55 : 1 });
+  const w = W, h = H;
+  if (i.bottleneck) g.setAttribute('filter', 'url(#glow)');
+  el('rect', {
+    width: w, height: h, rx: 9, fill, stroke,
+    'stroke-width': big ? 3.5 : i.critical ? 2.6 : 1.6,
+    'stroke-dasharray': i.overdue ? '6 3' : '',
+  }, g);
+  if (big) el('rect', { x: -5, y: -5, width: w + 10, height: h + 10, rx: 12, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 }, g);
+  txt(g, 10, 20, i.key, { 'font-weight': 700, fill: stroke });
+  const right = [i.critical ? '★' : '', i.blocked ? '⛔' : '', i.reopen ? `↻${i.reopen}` : ''].join(' ').trim();
+  txt(g, w - 8, 20, right, { 'text-anchor': 'end' });
+  txt(g, 10, 37, i.summary.length > 21 ? i.summary.slice(0, 20) + '…' : i.summary, { fill: '#495057', 'font-size': 11 });
+  const meta = i.done ? 'Đã xong' : `${({ HIGH: 'Cao', MED: 'TB', LOW: 'Thấp' })[i.level]}${i.overdue ? ` · +${i.overdue}d` : i.delay ? ` · ~${i.delay}d` : ''}`;
+  txt(g, 10, 51, meta, { fill: stroke, 'font-size': 11, 'font-weight': 600 });
+  txt(g, w - 8, 51, people[i.who].virtual ? '—' : people[i.who].name, { 'text-anchor': 'end', fill: '#868e96', 'font-size': 11 });
+  g.addEventListener('click', () => go('issue', i.key));
+  tip(g, () => `<b>${i.key}</b> · ${i.summary}<br>Rủi ro: ${i.done ? 'Đã xong' : i.level}${i.overdue ? ` · quá hạn ${i.overdue} ngày` : ''}<br>Phụ trách: ${people[i.who].name}<br>Chặn ${i.blocksN} task · bị chặn bởi ${blockedBy[i.key].length}`);
+  g.addEventListener('mouseenter', () => { state.hover = i.key; syncHover(); });
+  g.addEventListener('mouseleave', () => { state.hover = null; syncHover(); });
+  g.dataset.key = i.key;
+}
+
+function drawPerson(pid, p, big = false) {
+  const per = people[pid], L = load[pid];
+  const r = big ? 40 : 30;
+  const g = el('g', { class: 'node', transform: `translate(${p.x},${p.y})` });
+  if (per.virtual) {
+    el('rect', { x: -70, y: -24, width: 140, height: 48, rx: 8, fill: '#fff9db', stroke: '#f08c00', 'stroke-dasharray': '5 3', 'stroke-width': 2 }, g);
+    txt(g, 0, -3, '📥 Chưa phân công', { 'text-anchor': 'middle', 'font-weight': 700 });
+    txt(g, 0, 14, `${L.open} task · ${L.high} cao`, { 'text-anchor': 'middle', fill: '#868e96', 'font-size': 11 });
+  } else {
+    el('circle', { r, fill: L.overloaded ? 'var(--high-bg)' : '#f1f3f5', stroke: L.overloaded ? 'var(--high)' : '#adb5bd', 'stroke-width': L.overloaded ? 3 : 1.5 }, g);
+    txt(g, 0, 5, per.name, { 'text-anchor': 'middle', 'font-weight': 700, 'font-size': big ? 15 : 13 });
+    txt(g, 0, r + 15, `${L.open} mở · ${L.high} cao${L.overloaded ? ' · quá tải' : ''}`, { 'text-anchor': 'middle', fill: L.overloaded ? 'var(--high)' : '#868e96', 'font-size': 11 });
+  }
+  g.addEventListener('click', () => go('person', pid));
+  tip(g, () => `<b>${per.name}</b><br>${L.open} task mở · ${L.high} rủi ro cao · ${L.overdue} quá hạn${L.overloaded ? `<br>⚠ Quá tải (p90 dự án = ${P90_OPEN})` : ''}`);
+}
+
+function drawSprint(sid, p) {
+  const s = sprints[sid];
+  const hasHigh = issues.some(i => i.sprint === sid && i.level === 'HIGH' && !i.done);
+  const danger = s.daysLeft <= 3 && hasHigh;
+  const g = el('g', { transform: `translate(${p.x},${p.y})` });
+  const rx = 78, ry = 26;
+  el('polygon', { points: `${-rx},0 ${-rx + 18},${-ry} ${rx - 18},${-ry} ${rx},0 ${rx - 18},${ry} ${-rx + 18},${ry}`, fill: danger ? 'var(--high-bg)' : '#f8f9fa', stroke: danger ? 'var(--high)' : '#adb5bd', 'stroke-width': 2 }, g);
+  txt(g, 0, -3, '⬡ ' + s.name, { 'text-anchor': 'middle', 'font-weight': 700 });
+  txt(g, 0, 14, `còn ${s.daysLeft} ngày${danger ? ' · bị đe doạ' : ''}`, { 'text-anchor': 'middle', fill: danger ? 'var(--high)' : '#868e96', 'font-size': 11 });
+}
+
+function thinLine(x1, y1, x2, y2, dash = '3 4') {
+  el('line', { x1, y1, x2, y2, stroke: '#ced4da', 'stroke-width': 1.3, 'stroke-dasharray': dash });
+}
+
+function fit(extra = 60) {
+  const b = svg.getBBox();
+  svg.setAttribute('viewBox', `${b.x - 20} ${b.y - 20} ${Math.max(b.width + extra, 600)} ${Math.max(b.height + extra, 400)}`);
+}
+
+function render() {
+  svg.innerHTML = '';
+  defs();
+  const shown = new Set();
+  if (state.mode === 'overview') {
+    const { pos, lanes, colLabels } = layoutOverview();
+    lanes.forEach(({ pid, y, h }) => {
+      const L = load[pid];
+      el('rect', { x: 0, y, width: 1400, height: h, rx: 8, fill: pid === '__un' ? '#fff9db' : L.overloaded ? '#fff5f5' : '#f8f9fa', stroke: '#e9ecef' });
+      const g = el('g', { class: 'node', transform: `translate(14,${y + 16})` });
+      txt(g, 0, 8, (pid === '__un' ? '📥 ' : L.overloaded ? '🔴 ' : '◯ ') + people[pid].name, { 'font-weight': 700 });
+      txt(g, 0, 26, `${L.open} mở · ${L.high} cao`, { fill: '#868e96', 'font-size': 11 });
+      if (L.overloaded) txt(g, 0, 42, 'quá tải', { fill: 'var(--high)', 'font-size': 11, 'font-weight': 600 });
+      g.addEventListener('click', () => go('person', pid));
+    });
+    colLabels.forEach(c => txt(svg, c.x, 30, c.label, { fill: '#adb5bd', 'font-size': 11 }));
+    const active = k => matchesFilter(byKey[k]) && matchesSearch(byKey[k]);
+    links.filter(l => (l.kind === 'blocks' || state.relate) && pos[l.from] && pos[l.to])
+      .forEach(l => drawEdge(pos[l.from], pos[l.to], l, !(active(l.from) || active(l.to))));
+    Object.entries(pos).forEach(([k, p]) => { shown.add(k); drawIssue(byKey[k], p, { dimmed: !active(k) }); });
+    if (!state.lanes) {
+      const maxY = Math.max(...Object.values(pos).map(p => p.y)) + H + 70;
+      const ids = Object.keys(people).sort((a, b) => load[b].high - load[a].high || load[b].open - load[a].open);
+      txt(svg, 40, maxY - 38, 'NGƯỜI PHỤ TRÁCH (bấm để xem task của từng người)', { fill: '#adb5bd', 'font-size': 11 });
+      ids.forEach((pid, n) => drawPerson(pid, { x: 110 + n * 190, y: maxY }));
+    }
+    $('note').textContent = state.lanes ? 'Mỗi làn là một người. Làn đỏ = quá tải, làn vàng = chưa phân công.' : 'Cột = độ sâu trong chuỗi chặn (trái chặn phải).';
+  } else if (state.focus?.type === 'issue') {
+    const c = state.focus.id;
+    const { pos, pPos, sPos, minL, colsN } = layoutFocusIssue(c);
+    // tiêu đề cột
+    for (let l = 0; l < colsN; l++) {
+      const lv = l + minL;
+      txt(svg, 50 + l * 215 + W / 2, 112, lv < 0 ? `Chặn nó (${-lv} bước)` : lv > 0 ? `Bị ảnh hưởng (${lv} bước)` : 'TÂM ĐIỂM', { 'text-anchor': 'middle', fill: lv === 0 ? 'var(--accent)' : '#adb5bd', 'font-size': 11, 'font-weight': 600 });
+    }
+    // sprint
+    Object.entries(sPos).forEach(([sid, p]) => {
+      Object.entries(pos).filter(([k]) => byKey[k].sprint === sid).forEach(([k, q]) => thinLine(p.x, p.y + 26, q.x + W / 2, q.y, '1 4'));
+      drawSprint(sid, p);
+    });
+    // người
+    Object.entries(pos).forEach(([k, q]) => { const pp = pPos[byKey[k].who]; thinLine(q.x + W / 2, q.y + H, pp.x, pp.y - 30); });
+    links.filter(l => pos[l.from] && pos[l.to] && (l.kind === 'blocks' || state.relate)).forEach(l => drawEdge(pos[l.from], pos[l.to], l, false));
+    Object.entries(pos).forEach(([k, p]) => { shown.add(k); drawIssue(byKey[k], p, { big: k === c }); });
+    Object.entries(pPos).forEach(([pid, p]) => drawPerson(pid, p));
+    $('note').textContent = 'Đọc từ trái sang phải: nguyên nhân → task này → hậu quả. Bấm node khác để dời tâm điểm.';
+  } else if (state.focus?.type === 'person') {
+    const pid = state.focus.id;
+    const { pos, pPos } = layoutFocusPerson(pid);
+    const pp = pPos[pid];
+    Object.entries(pos).filter(([, q]) => !q.other).forEach(([, q]) => thinLine(q.x + W / 2, q.y + H, pp.x, pp.y - 40, ''));
+    links.filter(l => l.kind === 'blocks' && pos[l.from] && pos[l.to]).forEach(l => {
+      const a = pos[l.from], b = pos[l.to];
+      el('path', { d: `M${a.x + W / 2},${a.y} C${a.x + W / 2},${a.y - 50} ${b.x + W / 2},${b.y + H + 50} ${b.x + W / 2},${b.y + H}`, fill: 'none', stroke: propagates(l) ? '#e03131' : '#868e96', 'stroke-width': 2, 'marker-end': `url(#${propagates(l) ? 'arrRed' : 'arr'})` });
+    });
+    if (Object.values(pos).some(q => q.other)) txt(svg, 40, 25, 'Task của người khác đang bị chặn bởi task của người này', { fill: '#adb5bd', 'font-size': 11 });
+    txt(svg, 40, 186, 'Task đang phụ trách (rủi ro giảm dần từ trái sang phải)', { fill: '#adb5bd', 'font-size': 11 });
+    Object.entries(pos).forEach(([k, p]) => { shown.add(k); drawIssue(byKey[k], p, { faded: p.other }); });
+    drawPerson(pid, pp, true);
+    $('note').textContent = 'Bấm một task để xem chuỗi phụ thuộc của nó.';
+  }
+  fit();
+  renderLeft();
+  renderRight();
+  renderKpis();
+  renderCrumbs();
+}
+
+// ───────────────────────── Panel ─────────────────────────
+function renderKpis() {
+  const open = issues.filter(i => !i.done);
+  const k = [
+    ['HIGH', '🔴', open.filter(i => i.level === 'HIGH').length, 'Rủi ro cao'],
+    ['OVERDUE', '⏰', open.filter(i => i.overdue).length, 'Quá hạn'],
+    ['BOTTLENECK', '⛔', open.filter(i => i.bottleneck).length, 'Điểm nghẽn'],
+    ['OVERLOAD', '👤', Object.values(load).filter(l => l.overloaded).length, 'Người quá tải'],
+    ['UNASSIGNED', '📥', load.__un.open, 'Chưa phân công'],
+  ];
+  $('kpis').innerHTML = k.map(([f, ic, n, l]) => `<div class="kpi ${state.filter === f ? 'on' : ''}" data-f="${f}"><b>${ic} ${n}</b><span>${l}</span></div>`).join('');
+  $('kpis').querySelectorAll('.kpi').forEach(e => e.onclick = () => {
+    state.filter = state.filter === e.dataset.f ? 'ALL' : e.dataset.f;
+    if (state.mode !== 'overview') { state.mode = 'overview'; state.focus = null; }
+    render();
+  });
+}
+
+function renderLeft() {
+  const top = issues.filter(i => !i.done && matchesSearch(i))
+    .sort((a, b) => b.bottleneck - a.bottleneck || RISK_RANK[b.level] - RISK_RANK[a.level] || (b.overdue || 0) - (a.overdue || 0) || (b.delay || 0) - (a.delay || 0));
+  const dotC = i => color(i)[0];
+  const tags = i => [i.overdue ? `+${i.overdue}d` : '', i.critical ? '★' : '', i.blocked ? '⛔' : '', i.reopen ? `↻${i.reopen}` : ''].filter(Boolean).join(' ');
+  const ppl = Object.keys(people).sort((a, b) => ((a === '__un') - (b === '__un')) || load[b].high - load[a].high || load[b].open - load[a].open);
+  $('left').innerHTML =
+    '<h3>Top rủi ro</h3>' +
+    top.map((i, n) => `<div class="row" data-k="${i.key}"><span class="dot" style="background:${dotC(i)}"></span>
+      <div><b>${n + 1}. ${i.key}</b><small>${i.summary} · ${people[i.who].name}</small></div><span class="tags">${tags(i)}</span></div>`).join('') +
+    '<h3>Người phụ trách</h3>' +
+    ppl.map(pid => { const L = load[pid]; return `<div class="row" data-p="${pid}">
+      <span class="dot" style="background:${pid === '__un' ? '#f08c00' : L.overloaded ? 'var(--high)' : '#ced4da'}"></span>
+      <div><b>${people[pid].name}</b><small>${L.open} mở · ${L.high} cao · ${L.overdue} quá hạn${L.overloaded ? ' · quá tải' : ''}</small></div></div>`; }).join('');
+  $('left').querySelectorAll('[data-k]').forEach(e => {
+    e.onclick = () => go('issue', e.dataset.k);
+    e.onmouseenter = () => { state.hover = e.dataset.k; syncHover(); };
+    e.onmouseleave = () => { state.hover = null; syncHover(); };
+  });
+  $('left').querySelectorAll('[data-p]').forEach(e => e.onclick = () => go('person', e.dataset.p));
+}
+
+function renderRight() {
+  const R = $('right');
+  if (state.mode === 'overview') {
+    const bn = issues.filter(i => i.bottleneck).sort((a, b) => downstreamAll(b.key).size - downstreamAll(a.key).size);
+    R.innerHTML = `<div class="detail"><h2>Cần chú ý hôm nay</h2>
+      <p style="color:var(--muted)">Các điểm nghẽn xếp theo số task bị kéo theo.</p>
+      ${bn.map(i => `<button class="act" data-k="${i.key}"><b>${i.key}</b> · ${i.summary}<br>
+        <small style="color:var(--muted)">kéo theo ${downstreamAll(i.key).size} task · ${people[i.who].name}</small></button>`).join('')}
+      <h3 style="margin:14px 0 6px">Đường găng</h3>
+      <p>${[...critical].join(' → ') || '—'}</p></div>`;
+    R.querySelectorAll('[data-k]').forEach(e => e.onclick = () => go('issue', e.dataset.k));
+    return;
+  }
+  if (state.focus.type === 'issue') {
+    const i = byKey[state.focus.id], L = load[i.who];
+    const down = [...downstreamAll(i.key)].map(k => byKey[k]).filter(x => !x.done);
+    const ups = blockedBy[i.key].map(k => byKey[k]).filter(x => !x.done && (isRisky(x) || x.level === 'MED'));
+    const [c, bg] = color(i);
+    const acts = [];
+    if (L.overloaded) acts.push(`Chuyển bớt việc của ${people[i.who].name}`);
+    if (i.who === '__un') acts.push('Giao người phụ trách ngay');
+    ups.forEach(u => acts.push(`Ưu tiên gỡ ${u.key} (đang chặn)`));
+    if (down.length) acts.push(`Báo trước cho ${[...new Set(down.map(d => people[d.who].name))].join(', ')}`);
+    acts.push('Mở trên Jira ↗');
+    R.innerHTML = `<div class="detail">
+      <h2>${i.key} · ${i.summary}</h2>
+      <span class="badge" style="background:${bg};color:${c}">${i.done ? 'Đã xong' : 'Rủi ro ' + ({ HIGH: 'cao', MED: 'trung bình', LOW: 'thấp' })[i.level]}</span>
+      ${i.overdue ? `<span class="badge" style="background:var(--high-bg);color:var(--high)">Quá hạn ${i.overdue} ngày</span>` : ''}
+      <dl>
+        <dt>Trễ dự kiến</dt><dd>${i.delay ? `~${i.delay} ngày` : '—'}</dd>
+        <dt>Hạn</dt><dd>${sprints[i.sprint].name} (còn ${sprints[i.sprint].daysLeft} ngày)</dd>
+        <dt>Phụ trách</dt><dd><a href="#" data-p="${i.who}">${people[i.who].name}</a>${L.overloaded ? ' <span style="color:var(--high)">· quá tải</span>' : ''}</dd>
+        <dt>Bị chặn bởi</dt><dd>${blockedBy[i.key].join(', ') || '—'}</dd>
+        <dt>Đang chặn</dt><dd>${blocks[i.key].join(', ') || '—'}</dd>
+      </dl>
+      <h3 style="margin:0 0 4px">Vì sao rủi ro</h3>
+      <ul>${(i.factors || ['Không có yếu tố nổi bật']).map(f => `<li>${f}</li>`).join('')}</ul>
+      <h3 style="margin:0 0 4px">Ảnh hưởng</h3>
+      <p>Kéo theo <b>${down.length}</b> task (${down.filter(d => d.level === 'HIGH').length} rủi ro cao)${down.some(d => d.sprint !== i.sprint) ? `, lan sang ${sprints[down.find(d => d.sprint !== i.sprint).sprint].name}` : ''}.</p>
+      <h3 style="margin:8px 0 4px">Gợi ý</h3>
+      ${acts.map(a => `<button class="act">${a}</button>`).join('')}
+    </div>`;
+    R.querySelector('[data-p]').onclick = e => { e.preventDefault(); go('person', i.who); };
+    return;
+  }
+  const pid = state.focus.id, L = load[pid];
+  const mine = issues.filter(i => i.who === pid && !i.done);
+  const blockingOthers = mine.filter(i => blocks[i.key].some(k => byKey[k].who !== pid));
+  const cand = Object.keys(people).filter(x => x !== pid && !people[x].virtual).sort((a, b) => load[a].open - load[b].open).slice(0, 2);
+  const movable = mine.filter(i => i.level !== 'HIGH' && !blocks[i.key].length).slice(0, 2);
+  R.innerHTML = `<div class="detail">
+    <h2>${pid === '__un' ? '📥 ' : ''}${people[pid].name}</h2>
+    ${L.overloaded ? '<span class="badge" style="background:var(--high-bg);color:var(--high)">Quá tải</span>' : pid === '__un' ? '<span class="badge" style="background:#fff3bf;color:#e67700">Hàng đợi triage</span>' : '<span class="badge" style="background:#f1f3f5">Bình thường</span>'}
+    <dl>
+      <dt>Task mở</dt><dd>${L.open} ${pid !== '__un' ? `(p90 dự án = ${P90_OPEN})` : ''}</dd>
+      <dt>Rủi ro cao</dt><dd>${L.high}</dd>
+      <dt>Quá hạn</dt><dd>${L.overdue}</dd>
+    </dl>
+    <h3 style="margin:0 0 4px">Đang chặn người khác</h3>
+    <ul>${blockingOthers.map(i => `<li>${i.key} → ${blocks[i.key].filter(k => byKey[k].who !== pid).map(k => `${k} (${people[byKey[k].who].name})`).join(', ')}</li>`).join('') || '<li>Không</li>'}</ul>
+    ${pid === '__un' ? `<h3 style="margin:0 0 4px">Gợi ý giao việc</h3>${mine.map(i => `<button class="act">Giao ${i.key} cho ${people[cand[0]].name}</button>`).join('')}`
+      : L.overloaded ? `<h3 style="margin:0 0 4px">Người có thể nhận bớt</h3>
+        <ul>${cand.map(c => `<li>${people[c].name} (${load[c].open} mở · ${load[c].high} cao)</li>`).join('')}</ul>
+        ${movable.map(i => `<button class="act">Chuyển ${i.key} cho ${people[cand[0]].name}</button>`).join('')}` : ''}
+  </div>`;
+}
+
+function renderCrumbs() {
+  const C = $('crumbs');
+  $('toolbar').style.display = state.mode === 'overview' ? 'flex' : 'none';
+  $('mOverview').classList.toggle('on', state.mode === 'overview');
+  $('mFocus').classList.toggle('on', state.mode === 'focus');
+  if (state.mode === 'overview') { C.style.display = 'none'; return; }
+  C.style.display = 'flex';
+  const f = state.focus;
+  C.innerHTML = `<a id="back">← Tổng quan</a> / <b>${f.type === 'issue' ? f.id : people[f.id].name}</b>` +
+    (f.type === 'issue' ? `<span style="margin-left:20px;color:var(--muted)">Độ sâu</span><span class="depth">${[1, 2, 3].map(d => `<button data-d="${d}" class="${state.depth === d ? 'on' : ''}">${d}</button>`).join(' ')}</span>
+      <label style="margin-left:12px;color:var(--muted)"><input type="checkbox" id="fRelate" ${state.relate ? 'checked' : ''}> Relate</label>` : '');
+  $('back').onclick = () => { state.mode = 'overview'; state.focus = null; render(); };
+  C.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { state.depth = +b.dataset.d; render(); });
+  const fr = $('fRelate'); if (fr) fr.onchange = () => { state.relate = fr.checked; $('optRelate').checked = fr.checked; render(); };
+}
+
+// ───────────────────────── Tương tác ─────────────────────────
+function go(type, id) { state.mode = 'focus'; state.focus = { type, id }; render(); }
+
+function syncHover() {
+  svg.querySelectorAll('g.node[data-key]').forEach(g => {
+    const on = g.dataset.key === state.hover;
+    g.querySelector('rect').setAttribute('stroke-width', on ? 4 : '');
+    if (!on) g.querySelector('rect').removeAttribute('stroke-width');
+    if (!on) {
+      const i = byKey[g.dataset.key];
+      const big = state.focus?.type === 'issue' && state.focus.id === i.key;
+      g.querySelector('rect').setAttribute('stroke-width', big ? 3.5 : i.critical ? 2.6 : 1.6);
+    }
+  });
+  $('left').querySelectorAll('[data-k]').forEach(r => r.classList.toggle('hl', r.dataset.k === state.hover));
+}
+
+const tipEl = $('tip');
+function tip(g, html) {
+  g.addEventListener('mousemove', e => { tipEl.innerHTML = html(); tipEl.style.display = 'block'; tipEl.style.left = e.clientX + 14 + 'px'; tipEl.style.top = e.clientY + 14 + 'px'; });
+  g.addEventListener('mouseleave', () => tipEl.style.display = 'none');
+}
+
+$('mOverview').onclick = () => { state.mode = 'overview'; state.focus = null; render(); };
+$('mFocus').onclick = () => {
+  if (!state.focus) {
+    const top = issues.filter(i => i.bottleneck).sort((a, b) => downstreamAll(b.key).size - downstreamAll(a.key).size)[0];
+    return go('issue', top.key);
+  }
+  state.mode = 'focus'; render();
+};
+$('optLanes').onchange = e => { state.lanes = e.target.checked; render(); };
+$('optRelate').onchange = e => { state.relate = e.target.checked; render(); };
+$('optDone').onchange = e => { state.done = e.target.checked; render(); };
+$('search').oninput = e => { state.q = e.target.value; render(); };
+
+render();
+</script>
+</body>
+</html>
