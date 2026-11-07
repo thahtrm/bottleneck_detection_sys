@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     batch_time: str = "06:45"
     digest_time: str = "08:00"
     model_mode: Literal["shadow", "active"] = "shadow"
-    llm_model: str = "qwen3:1.7b"
+    llm_model: str = "gemma4:e4b"
     delay_threshold: float = 0.39
     criticality_top_pct: float = 0.05
 

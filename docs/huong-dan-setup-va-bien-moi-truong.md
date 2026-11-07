@@ -269,7 +269,7 @@ Hệ thống sử dụng LLM để giải thích nguyên nhân rủi ro và đ�
 Cấu hình trong `webapp/backend/.env`:
 ```ini
 OLLAMA_URL=http://localhost:11434
-LLM_MODEL=qwen3:1.7b
+LLM_MODEL=gemma4:e4b
 ```
 - **Cài đặt Ollama:**
   ```bash
@@ -277,10 +277,7 @@ LLM_MODEL=qwen3:1.7b
   ```
 - **Tải model khuyến nghị:**
   ```bash
-  # Model nhỏ gọn (1.7B tham số, chạy cực nhẹ trên RAM/CPU):
-  ollama run qwen2.5:1.5b
-  # hoặc:
-  ollama pull qwen2.5-coder:1.5b
+  ollama pull gemma4:e4b
   ```
 
 #### Tùy chọn B: Sử dụng LM Studio hoặc OpenAI API
@@ -376,7 +373,7 @@ SLACK_MAX_PER_HOUR=20
 
 # --- Mô hình Ngôn ngữ Lớn (LLM / GenAI) ---
 OLLAMA_URL=http://localhost:11434
-LLM_MODEL=qwen3:1.7b
+LLM_MODEL=gemma4:e4b
 
 # --- Mô hình Học Máy Dự Đoán Rủi Ro (DuckDB & Weights) ---
 BASE_DUCKDB=data/jira.duckdb

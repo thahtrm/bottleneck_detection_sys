@@ -855,7 +855,7 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
     suggestion = session.execute(
         select(Suggestion).where(
             Suggestion.issue_key == "DEMO-104",
-            Suggestion.model == "qwen3:1.7b",
+            Suggestion.model == "gemma4:e4b",
         )
     ).scalar_one_or_none()
 
@@ -863,7 +863,7 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
         suggestion = Suggestion(
             issue_key="DEMO-104",
             issue_updated_at=now,
-            model="qwen3:1.7b",
+            model="gemma4:e4b",
             output=suggestion_output,
             valid=True,
             created_at=now,

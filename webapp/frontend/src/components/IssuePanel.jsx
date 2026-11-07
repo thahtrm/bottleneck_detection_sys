@@ -371,7 +371,7 @@ export default function IssuePanel({
   }, [suggestionData, issueData]);
 
   const currentModel =
-    suggestionData?.model || issueData?.suggestion?.model || 'qwen3:1.7b';
+    suggestionData?.model || issueData?.suggestion?.model || 'gemma4:e4b';
 
   // Thông tin thời hạn
   const deadlineInfo = useMemo(() => {
@@ -864,7 +864,7 @@ export default function IssuePanel({
               </Stack>
             </Tabs.Panel>
 
-            {/* TAB 2: ĐỀ XUẤT HÀNH ĐỘNG TỪ LLM (qwen3:1.7b) */}
+            {/* TAB 2: ĐỀ XUẤT HÀNH ĐỘNG TỪ LLM */}
             <Tabs.Panel value="suggestion">
               <Stack gap="md">
                 {/* 2.1 Trạng thái đang phân tích (Pending: 202 Accepted, đang poll 3s) */}
@@ -878,7 +878,7 @@ export default function IssuePanel({
                         AI đang phân tích các yếu tố rủi ro và chuẩn bị phương án khắc phục...
                       </Title>
                       <Text size="xs" c="dimmed" ta="center" maw={380}>
-                        Mô hình Ollama <strong>qwen3:1.7b</strong> đang đánh giá đồ thị rủi ro,
+                        Mô hình Ollama <strong>{currentModel}</strong> đang đánh giá đồ thị rủi ro,
                         tổng hợp lịch sử thay đổi và tối ưu hóa giải pháp cho PM. Hệ thống tự động
                         kiểm tra kết quả mỗi 3 giây.
                       </Text>

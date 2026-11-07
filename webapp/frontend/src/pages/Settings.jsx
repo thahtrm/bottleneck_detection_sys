@@ -100,7 +100,7 @@ export default function Settings({ onBackToDashboard }) {
   // Form states
   const [delayThreshold, setDelayThreshold] = useState(0.39);
   const [criticalityTopPct, setCriticalityTopPct] = useState(0.05);
-  const [llmModel, setLlmModel] = useState('qwen3:1.7b');
+  const [llmModel, setLlmModel] = useState('gemma4:e4b');
 
   // Action loading states
   const [isRunningBatch, setIsRunningBatch] = useState(false);
@@ -463,10 +463,10 @@ export default function Settings({ onBackToDashboard }) {
 
             <TextInput
               label="Model LLM (Mô hình ngôn ngữ đề xuất hành động)"
-              description="Tên mô hình Ollama được dùng để tạo khuyến nghị và giải thích nguyên nhân rủi ro. Mặc định: qwen3:1.7b"
+              description="Tên mô hình Ollama được dùng để tạo khuyến nghị và giải thích nguyên nhân rủi ro. Mặc định: gemma4:e4b"
               value={llmModel}
               onChange={(e) => setLlmModel(e.currentTarget.value)}
-              placeholder="qwen3:1.7b"
+              placeholder="gemma4:e4b"
               required
             />
 

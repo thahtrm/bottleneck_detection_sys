@@ -9,11 +9,11 @@ from typing import Any
 
 import httpx
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from erw.db import SessionLocal, make_engine, utcnow
-from erw.models import Issue, RiskState, Suggestion
+from erw.models import Change, Issue, IssueSprint, Link, RiskState, Sprint, Suggestion
 from erw.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -65,7 +65,8 @@ def build_system_prompt() -> str:
         "Bạn là chuyên gia quản trị dự án phần mềm Jira (Agile/Scrum PM). "
         "Nhiệm vụ của bạn là phân tích các rủi ro trễ hạn của công việc (issue) dựa trên thông tin "
         "về Issue, RiskState, và các yếu tố rủi ro (factors) đã được hệ thống ghi nhận.\n"
-        "Hãy đưa ra giải thích nguyên nhân rủi ro và các đề xuất hành động cụ thể để giảm thiểu rủi ro.\n\n"
+        "Hãy đưa ra giải thích nguyên nhân rủi ro và các đề xuất hành động cụ thể để giảm thiểu rủi ro.\n"
+        "Tin nhắn người dùng có mô tả task, người phụ trách hiện tại, lịch sử tiến độ, sprint và các task liên quan.\n\n"
         "QUY TẮC BẮT BUỘC:\n"
         "1. Giải thích bằng tiếng Việt tự nhiên, chuyên nghiệp; giữ nguyên các thuật ngữ Agile/kỹ thuật thông dụng "
         "(Sprint, Backlog, Blocker, Story Points, Due Date, Assignee, v.v.).\n"
@@ -90,7 +91,94 @@ def build_system_prompt() -> str:
     )
 
 
-def build_user_prompt(issue: Issue, risk_state: RiskState | None, actual_factors: list[str]) -> str:
+def _collect_text(node: Any, parts: list[str]) -> None:
+    if isinstance(node, dict):
+        text = node.get("text")
+        if isinstance(text, str) and text.strip():
+            parts.append(text.strip())
+        for child in node.get("content") or []:
+            _collect_text(child, parts)
+    elif isinstance(node, list):
+        for child in node:
+            _collect_text(child, parts)
+
+
+def _plain_text(value: Any, limit: int = 4000) -> str:
+    if isinstance(value, str):
+        text = value.strip()
+    elif isinstance(value, (dict, list)):
+        parts: list[str] = []
+        _collect_text(value, parts)
+        text = "\n".join(parts).strip()
+    else:
+        return ""
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+def _issue_description(issue: Issue) -> str:
+    raw = issue.raw if isinstance(issue.raw, dict) else {}
+    fields = raw.get("fields") if isinstance(raw.get("fields"), dict) else {}
+    text = _plain_text(fields.get("description"))
+    if text:
+        return text
+    return _plain_text(raw.get("description")) or "Không có mô tả"
+
+
+def _assignee_line(name: str | None, account_id: str | None) -> str:
+    if name and account_id:
+        return f"{name} (accountId: {account_id})"
+    if name:
+        return name
+    if account_id:
+        return f"accountId: {account_id}"
+    return "Chưa phân công"
+
+
+def _factor_lines(risk_state: RiskState | None) -> list[str]:
+    if risk_state is None or not isinstance(risk_state.factors, list):
+        return []
+    lines: list[str] = []
+    for factor in risk_state.factors:
+        if isinstance(factor, str):
+            lines.append(factor)
+            continue
+        if not isinstance(factor, dict):
+            continue
+        factor_id = factor.get("id") or factor.get("name") or factor.get("label") or ""
+        label = factor.get("label") or ""
+        value = factor.get("value") or factor.get("detail") or ""
+        bits = [str(part) for part in (factor_id, label, value) if part]
+        if bits:
+            lines.append(" | ".join(bits))
+    return lines
+
+
+def _when(value: datetime | None) -> str:
+    if value is None:
+        return "không rõ thời điểm"
+    return value.isoformat()
+
+
+def _related_line(issue_key: str, link: Link, other: Issue | None) -> str:
+    other_key = link.target_key if link.source_key == issue_key else link.source_key
+    if other is None:
+        summary, status, owner = "không có trong hệ thống", "N/A", "Chưa phân công"
+    else:
+        summary = other.summary
+        status = other.status or "N/A"
+        owner = _assignee_line(other.assignee_name, other.assignee_id)
+    direction = "inward" if link.direction in ("0", "inward") else "outward"
+    return f"  - {other_key} | {summary} | {status} | phụ trách: {owner} | {link.type_std} | {direction}"
+
+
+def build_user_prompt(
+    session: Session,
+    issue: Issue,
+    risk_state: RiskState | None,
+    actual_factors: list[str],
+) -> str:
     factors_str = json.dumps(actual_factors, ensure_ascii=False) if actual_factors else "[]"
     deadline_info = "Không có"
     if risk_state and risk_state.deadline_at:
@@ -102,21 +190,103 @@ def build_user_prompt(issue: Issue, risk_state: RiskState | None, actual_factors
     is_blocked = "Có" if (risk_state and risk_state.blocked) else "Không"
     is_critical = "Có" if (risk_state and risk_state.is_critical) else "Không"
 
+    changes = list(
+        session.scalars(
+            select(Change)
+            .where(Change.issue_key == issue.key)
+            .order_by(Change.at.desc(), Change.id.desc())
+            .limit(20)
+        ).all()
+    )
+    changes.reverse()
+    if changes:
+        progress = "\n".join(
+            f"  - {_when(change.at)} | {change.field}: {change.from_str or change.from_val or 'trống'} → {change.to_str or change.to_val or 'trống'}"
+            for change in changes
+        )
+    else:
+        progress = "  Không có lịch sử thay đổi"
+
+    links = list(
+        session.scalars(select(Link).where(or_(Link.source_key == issue.key, Link.target_key == issue.key))).all()
+    )
+    other_keys = [link.target_key if link.source_key == issue.key else link.source_key for link in links]
+    others = (
+        {row.key: row for row in session.scalars(select(Issue).where(Issue.key.in_(other_keys))).all()}
+        if other_keys
+        else {}
+    )
+    if links:
+        related = "\n".join(
+            _related_line(
+                issue.key,
+                link,
+                others.get(link.target_key if link.source_key == issue.key else link.source_key),
+            )
+            for link in links
+        )
+    else:
+        related = "  Không có task liên kết"
+
+    sprint_ids = list(session.scalars(select(IssueSprint.sprint_id).where(IssueSprint.issue_key == issue.key)).all())
+    sprints = list(session.scalars(select(Sprint).where(Sprint.id.in_(sprint_ids))).all()) if sprint_ids else []
+    mate_keys = (
+        list(
+            session.scalars(
+                select(IssueSprint.issue_key)
+                .where(IssueSprint.sprint_id.in_(sprint_ids), IssueSprint.issue_key != issue.key)
+                .limit(40)
+            ).all()
+        )
+        if sprint_ids
+        else []
+    )
+    mates = list(session.scalars(select(Issue).where(Issue.key.in_(mate_keys))).all()) if mate_keys else []
+    if sprints:
+        sprint_head = "\n".join(
+            f"  - {sprint.name or sprint.id} | trạng thái sprint: {sprint.state or 'N/A'} | {_when(sprint.start_at)} → {_when(sprint.end_at)}"
+            for sprint in sprints
+        )
+    else:
+        sprint_head = "  Không thuộc sprint nào"
+    if mates:
+        roster = "\n".join(
+            f"  - {mate.key} | {mate.summary} | {mate.status or 'N/A'} | phụ trách: {_assignee_line(mate.assignee_name, mate.assignee_id)}"
+            for mate in mates
+        )
+    else:
+        roster = "  Không có task khác trong cùng sprint"
+
+    factor_detail = _factor_lines(risk_state)
+    factor_block = "\n".join(f"  - {line}" for line in factor_detail) if factor_detail else "  Không có"
+    delay_value = risk_state.delay_value if risk_state and risk_state.delay_value is not None else "N/A"
+    deadline_label = risk_state.deadline_label if risk_state and risk_state.deadline_label else "Không có"
+
     return (
-        f"Hãy phân tích và đề xuất hành động cho issue sau:\n"
+        "Hãy phân tích và đề xuất hành động cho issue sau:\n"
         f"- Mã issue: {issue.key}\n"
         f"- Tóm tắt: {issue.summary}\n"
         f"- Phân loại: {issue.issuetype or 'N/A'}\n"
         f"- Mức ưu tiên: {issue.priority or 'N/A'}\n"
-        f"- Trạng thái: {issue.status or 'N/A'}\n"
-        f"- Người thực hiện: {issue.assignee_name or issue.assignee_id or 'Chưa phân công'}\n"
+        f"- Trạng thái hiện tại: {issue.status or 'N/A'} (nhóm: {issue.status_category or 'N/A'})\n"
+        f"- Người phụ trách hiện tại: {_assignee_line(issue.assignee_name, issue.assignee_id)}\n"
         f"- Hạn chót (Deadline/DueDate): {deadline_info}\n"
+        f"- Nhãn hạn: {deadline_label}\n"
         f"- Story Points: {issue.story_points if issue.story_points is not None else 'N/A'}\n"
+        f"- Tạo lúc: {_when(issue.created_at)}\n"
+        f"- Cập nhật lúc: {_when(issue.updated_at)}\n"
         f"- Mức độ rủi ro (Risk Level): {risk_level}\n"
+        f"- Xác suất trễ (delay_value): {delay_value}\n"
         f"- Bị chặn (Blocked): {is_blocked}\n"
         f"- Trọng yếu (Critical): {is_critical}\n"
-        f"- Danh sách yếu tố rủi ro thực tế (factors): {factors_str}\n\n"
-        f"Yêu cầu: Trả về JSON theo đúng schema đã hướng dẫn. Chỉ trích dẫn factor từ danh sách factors thực tế ở trên."
+        f"- Mô tả:\n{_issue_description(issue)}\n"
+        f"- Tiến độ (changelog, cũ đến mới):\n{progress}\n"
+        f"- Sprint:\n{sprint_head}\n"
+        f"- Task khác trong cùng sprint:\n{roster}\n"
+        f"- Task liên kết:\n{related}\n"
+        f"- Yếu tố rủi ro (id | nhãn | giá trị):\n{factor_block}\n"
+        f"- Danh sách factor được phép trích dẫn: {factors_str}\n\n"
+        "Yêu cầu: Trả về JSON theo đúng schema đã hướng dẫn. Chỉ trích dẫn factor từ danh sách được phép ở trên."
     )
 
 
@@ -151,9 +321,9 @@ def call_ollama_chat(
 
     c = client or _http_client
     if c is not None:
-        resp = c.post(url, json=payload, timeout=30.0)
+        resp = c.post(url, json=payload, timeout=120.0)
     else:
-        with httpx.Client(timeout=30.0) as http_client:
+        with httpx.Client(timeout=120.0) as http_client:
             resp = http_client.post(url, json=payload)
 
     resp.raise_for_status()
@@ -226,7 +396,7 @@ def generate_suggestion(
     display_factors, valid_factors = _extract_factors(risk_state)
 
     system_prompt = build_system_prompt()
-    user_prompt = build_user_prompt(issue, risk_state, display_factors)
+    user_prompt = build_user_prompt(session, issue, risk_state, display_factors)
 
     last_raw_or_parsed: Any = {}
     valid_output: SuggestionOutput | None = None

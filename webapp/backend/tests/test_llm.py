@@ -13,6 +13,7 @@ from erw.integrations.llm import (
     ALLOWED_ACTION_TYPES,
     ActionItem,
     SuggestionOutput,
+    build_user_prompt,
     call_ollama_chat,
     enqueue_suggestion,
     generate_suggestion,
@@ -20,7 +21,7 @@ from erw.integrations.llm import (
     is_suggestion_in_progress,
     validate_suggestion,
 )
-from erw.models import Issue, RiskState, Suggestion
+from erw.models import Change, Issue, IssueSprint, Link, RiskState, Sprint, Suggestion
 
 
 def test_validate_suggestion_valid():
@@ -381,3 +382,104 @@ def test_enqueue_suggestion_and_is_in_progress(session, settings, engine):
     assert rec is not None
     assert rec.valid is True
     assert rec.output["summary"] == "Async ok"
+
+
+def test_user_prompt_includes_task_progress_and_owner(session):
+    now = datetime(2026, 11, 8, tzinfo=UTC)
+    session.add(
+        Issue(
+            key="DEMO-101",
+            project_key="DEMO",
+            summary="Xây dựng API gateway phân quyền JWT",
+            issuetype="Story",
+            priority="High",
+            status="In Progress",
+            status_category="indeterminate",
+            assignee_id="demo-binh",
+            assignee_name="Lê Thanh Bình",
+            story_points=8.0,
+            created_at=now,
+            updated_at=now,
+            raw={
+                "fields": {
+                    "description": {
+                        "type": "doc",
+                        "content": [
+                            {
+                                "type": "paragraph",
+                                "content": [{"type": "text", "text": "API gateway cho phép refresh token"}],
+                            }
+                        ],
+                    }
+                }
+            },
+        )
+    )
+    session.add(
+        Issue(
+            key="DEMO-105",
+            project_key="DEMO",
+            summary="Chờ sandbox API",
+            issuetype="Task",
+            status="Open",
+            status_category="new",
+            assignee_id="demo-an",
+            assignee_name="Phạm Minh An",
+        )
+    )
+    session.add(
+        Issue(
+            key="DEMO-104",
+            project_key="DEMO",
+            summary="Refactor ETL",
+            issuetype="Task",
+            status="In Progress",
+            status_category="indeterminate",
+            assignee_name="Vũ Quốc Dũng",
+        )
+    )
+    session.flush()
+    session.add(Link(source_key="DEMO-101", target_key="DEMO-105", type_std="blocks", direction="0"))
+    session.add(Sprint(id=101, name="Sprint 1 - Demo", state="active", start_at=now, end_at=now))
+    session.flush()
+    session.add(IssueSprint(issue_key="DEMO-101", sprint_id=101))
+    session.add(IssueSprint(issue_key="DEMO-104", sprint_id=101))
+    session.add(
+        Change(
+            issue_key="DEMO-101",
+            change_id="c1",
+            idx=0,
+            at=now,
+            field="status",
+            from_str="To Do",
+            to_str="In Progress",
+        )
+    )
+    risk = RiskState(
+        issue_key="DEMO-101",
+        level="HIGH",
+        blocked=False,
+        is_critical=False,
+        deadline_type="duedate",
+        deadline_at=now,
+        deadline_label="Hạn due date",
+        factors=[{"id": "stagnant", "label": "Đứng ở In Progress", "value": "5 ngày", "source": "changelog"}],
+    )
+    session.add(risk)
+    session.commit()
+
+    issue = session.get(Issue, "DEMO-101")
+    prompt = build_user_prompt(session, issue, risk, ["stagnant"])
+
+    assert "Lê Thanh Bình" in prompt
+    assert "demo-binh" in prompt
+    assert "API gateway cho phép refresh token" in prompt
+    assert "To Do" in prompt
+    assert "DEMO-105" in prompt
+    assert "Phạm Minh An" in prompt
+    assert "DEMO-104" in prompt
+    assert "Vũ Quốc Dũng" in prompt
+    assert "Sprint 1 - Demo" in prompt
+    assert "Đứng ở In Progress" in prompt
+    assert "5 ngày" in prompt
+    assert "stagnant" in prompt

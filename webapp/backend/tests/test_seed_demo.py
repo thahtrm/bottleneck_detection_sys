@@ -143,7 +143,7 @@ def test_seed_demo_data_basic(session):
 
     sugg = session.execute(select(Suggestion).where(Suggestion.issue_key == "DEMO-104")).scalar_one_or_none()
     assert sugg is not None
-    assert sugg.model == "qwen3:1.7b"
+    assert sugg.model == "gemma4:e4b"
     assert sugg.valid is True
     assert "actions" in sugg.output
     assert len(sugg.output["actions"]) == 2

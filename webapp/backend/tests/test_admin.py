@@ -85,7 +85,7 @@ def test_get_settings_success(client, auth_users, settings, session):
     assert data["webhook_url"] == f"{settings.public_base_url}/webhooks/jira/***"
     assert data["last_webhook_at"] == "2026-11-04T05:00:00Z"
     assert data["last_catch_up_at"] == "2026-11-04T05:05:00Z"
-    assert data["llm_model"] == "qwen3:1.7b"
+    assert data["llm_model"] == "gemma4:e4b"
     assert data["delay_threshold"] == 0.39
     assert data["criticality_top_pct"] == 0.05
     assert data["model_mode"] == settings.model_mode
