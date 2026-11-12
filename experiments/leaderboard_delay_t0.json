@@ -1,0 +1,158 @@
+{
+  "xgboost_t0": {
+    "track": "xgboost_t0",
+    "timestamp": "2026-10-28T20:22:35.043165+00:00",
+    "optimal_threshold": 0.5,
+    "val_f1_at_optimal_threshold": 0.606,
+    "test_metrics": {
+      "f1_score": 0.4627,
+      "precision": 0.3355,
+      "recall": 0.7456,
+      "pr_auc": 0.4177,
+      "roc_auc": 0.7368,
+      "brier_score": 0.2082,
+      "confusion_matrix": {
+        "tp": 55955,
+        "fp": 110836,
+        "tn": 160288,
+        "fn": 19095
+      }
+    },
+    "target_status": {
+      "f1_target_passed (>= 0.80)": false,
+      "precision_constraint_passed (>= 0.75)": false,
+      "recall_constraint_passed (>= 0.80)": false,
+      "all_constraints_met": false
+    }
+  },
+  "survival_aft_t0": {
+    "track": "survival_aft_t0",
+    "timestamp": "2026-10-28T20:23:27.180851+00:00",
+    "optimal_threshold": 0.05,
+    "val_f1_at_optimal_threshold": 0.5805,
+    "test_metrics": {
+      "f1_score": 0.4411,
+      "precision": 0.3141,
+      "recall": 0.7405,
+      "pr_auc": 0.3948,
+      "roc_auc": 0.7129,
+      "brier_score": 0.1762,
+      "confusion_matrix": {
+        "tp": 55578,
+        "fp": 121391,
+        "tn": 149733,
+        "fn": 19472
+      }
+    },
+    "target_status": {
+      "f1_target_passed (>= 0.80)": false,
+      "precision_constraint_passed (>= 0.75)": false,
+      "recall_constraint_passed (>= 0.80)": false,
+      "all_constraints_met": false
+    }
+  },
+  "catboost_survival_t0": {
+    "track": "catboost_survival_t0",
+    "timestamp": "2026-10-28T20:23:58.140020+00:00",
+    "optimal_threshold": 0.19,
+    "val_f1_at_optimal_threshold": 0.575,
+    "test_metrics": {
+      "f1_score": 0.4274,
+      "precision": 0.2887,
+      "recall": 0.8225,
+      "pr_auc": 0.3798,
+      "roc_auc": 0.7039,
+      "brier_score": 0.1608,
+      "confusion_matrix": {
+        "tp": 61725,
+        "fp": 152073,
+        "tn": 119051,
+        "fn": 13325
+      }
+    },
+    "target_status": {
+      "f1_target_passed (>= 0.80)": false,
+      "precision_constraint_passed (>= 0.75)": false,
+      "recall_constraint_passed (>= 0.80)": true,
+      "all_constraints_met": false
+    }
+  },
+  "catboost_competing_risks_t0": {
+    "track": "catboost_competing_risks_t0",
+    "timestamp": "2026-10-28T20:24:26.168653+00:00",
+    "optimal_threshold": 0.67,
+    "val_f1_at_optimal_threshold": 0.5628,
+    "test_metrics": {
+      "f1_score": 0.4137,
+      "precision": 0.3115,
+      "recall": 0.6158,
+      "pr_auc": 0.3482,
+      "roc_auc": 0.6512,
+      "brier_score": 0.3233,
+      "confusion_matrix": {
+        "tp": 46219,
+        "fp": 102177,
+        "tn": 168947,
+        "fn": 28831
+      }
+    },
+    "target_status": {
+      "f1_target_passed (>= 0.80)": false,
+      "precision_constraint_passed (>= 0.75)": false,
+      "recall_constraint_passed (>= 0.80)": false,
+      "all_constraints_met": false
+    }
+  },
+  "delay_blend_t0": {
+    "track": "delay_blend_t0",
+    "timestamp": "2026-10-28T20:26:58.936445+00:00",
+    "optimal_threshold": 0.39,
+    "val_f1_at_optimal_threshold": 0.5844,
+    "test_metrics": {
+      "f1_score": 0.4446,
+      "precision": 0.3043,
+      "recall": 0.8247,
+      "pr_auc": 0.4138,
+      "roc_auc": 0.7268,
+      "brier_score": 0.1896,
+      "confusion_matrix": {
+        "tp": 61893,
+        "fp": 141480,
+        "tn": 129644,
+        "fn": 13157
+      }
+    },
+    "target_status": {
+      "f1_target_passed (>= 0.80)": false,
+      "precision_constraint_passed (>= 0.75)": false,
+      "recall_constraint_passed (>= 0.80)": true,
+      "all_constraints_met": false
+    }
+  },
+  "delay_official_t0": {
+    "track": "delay_official_t0",
+    "timestamp": "2026-10-28T20:26:59.543493+00:00",
+    "optimal_threshold": 0.39,
+    "val_f1_at_optimal_threshold": 0.5846,
+    "test_metrics": {
+      "f1_score": 0.4448,
+      "precision": 0.3046,
+      "recall": 0.8244,
+      "pr_auc": 0.4139,
+      "roc_auc": 0.7268,
+      "brier_score": 0.188,
+      "confusion_matrix": {
+        "tp": 61870,
+        "fp": 141244,
+        "tn": 129880,
+        "fn": 13180
+      }
+    },
+    "target_status": {
+      "f1_target_passed (>= 0.80)": false,
+      "precision_constraint_passed (>= 0.75)": false,
+      "recall_constraint_passed (>= 0.80)": true,
+      "all_constraints_met": false
+    }
+  }
+}

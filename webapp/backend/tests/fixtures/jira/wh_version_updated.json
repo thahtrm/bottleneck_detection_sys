@@ -1,0 +1,15 @@
+{
+  "timestamp": 1793725692562,
+  "webhookEvent": "jira:version_updated",
+  "version": {
+    "self": "https://example.atlassian.net/rest/api/2/version/10000",
+    "id": "10000",
+    "name": "v0.1-s3",
+    "archived": false,
+    "released": false,
+    "releaseDate": "2026-11-13",
+    "overdue": false,
+    "userReleaseDate": "13/Nov/26",
+    "projectId": 10002
+  }
+}

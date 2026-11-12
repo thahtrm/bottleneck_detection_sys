@@ -25,9 +25,11 @@
    - 2.2. Giao Thức Phân Chia Thời Gian Tuyệt Đối (Strict Chronological Split)
    - 2.3. Hiện Tượng Dịch Chuyển Tiên Nghiệm Thời Gian (Temporal Prior Shift) & Bùng Nổ Task Ảo
 3. [CHƯƠNG 3: PHƯƠNG PHÁP LUẬN TIỀN XỬ LÝ & KỸ THUẬT ĐẶC TRƯNG HỌC (METHODOLOGY & FEATURE ENGINEERING FRAMEWORK)](#chương-3-phương-pháp-luận-tiền-xử-lý--kỹ-thuật-đặc-trưng-học-methodology--feature-engineering-framework)
-   - 3.1. Thuật Toán Mô Phỏng Sự Kiện Lịch Sử Cửa Sổ Trượt $O(N)$
-   - 3.2. Hệ Thống 264 Đặc Trưng Kỹ Thuật Số Đa Chiều (`float32`)
-   - 3.3. Cổng Sàng Lọc Tiền Dự Đoán 3 Lớp (Three-Layer Pre-Prediction Purification Gate)
+   - 3.1. Pipeline Làm Sạch Dữ Liệu Gốc & Chuẩn Hóa Thực Thể (Data Cleansing & Entity Canonicalization)
+   - 3.2. Thuật Toán Mô Phỏng Sự Kiện Lịch Sử Cửa Sổ Trượt $O(N)$ (Chronological Workload Simulation)
+   - 3.3. Phân Loại Toàn Diện Hệ Thống 264 Đặc Trưng Số Học Đa Chiều (`float32`)
+   - 3.4. Định Dạng Dữ Liệu Khoảng Cho Phân Tích Sinh Tồn (Survival Right-Censoring Framework)
+   - 3.5. Cổng Sàng Lọc Tiền Dự Đoán 3 Lớp (Three-Layer Pre-Prediction Purification Gate)
 4. [CHƯƠNG 4: CHỨNG MINH TOÁN HỌC GIỚI HẠN PRECISION TẠI $T_0$ & BẢN CHẤT CẢNH BÁO GIẢ](#chương-4-chứng-minh-toán-học-giới-hạn-precision-tại-t_0--bản-chất-cảnh-báo-giả)
    - 4.1. Giải Phẫu Bản Chất Ma Trận Nhầm Lẫn tại $T_0$ (False Positive Taxonomy)
    - 4.2. Định Lý Giới Hạn Độ Chính Xác Tiên Tri (Theoretical Oracle Precision Bound Theorem)
@@ -195,65 +197,158 @@ Nghiên cứu cấu trúc sâu hơn trên tập Out-of-Time Test Set ($N = 346,1
 
 ## CHƯƠNG 3: PHƯƠNG PHÁP LUẬN TIỀN XỬ LÝ & KỸ THUẬT ĐẶC TRƯNG HỌC (METHODOLOGY & FEATURE ENGINEERING FRAMEWORK)
 
-### 3.1. Thuật Toán Mô Phỏng Sự Kiện Lịch Sử Cửa Sổ Trượt $O(N)$
-Để đảm bảo nguyên tắc **Zero Temporal Data Leakage**, quy trình tiền xử lý được lập trình tại [`prepare_censored_dataset.py`](file:///home/jiooum/0.Workspace/0.SourceCode/tgn/prepare_censored_dataset.py) sử dụng thuật toán mô phỏng sự kiện lịch sử theo cửa sổ trượt $O(N)$. 
-- Hệ thống sắp xếp toàn bộ **$4,993,729$ sự kiện** tạo issue và đóng issue theo trật tự thời gian tuyệt đối.
-- Một con trỏ thời gian tịnh tiến liên tục. Tại mỗi thời điểm $t = \text{created\_ts}$ của một issue mới, toàn bộ các biến số về trạng thái của kỹ sư phụ trách (`assignee`), người báo cáo (`reporter`), và dự án (`project`) được trích xuất chỉ dựa trên các sự kiện đã diễn ra **trước hoặc đúng tại $t$** ($t_{\text{event}} \le t$).
+### 3.1. Pipeline Làm Sạch Dữ Liệu Gốc & Chuẩn Hóa Thực Thể (Data Cleansing & Entity Canonicalization)
+Trước khi đưa vào pipeline trích xuất đặc trưng toán học, dữ liệu thô từ cơ sở dữ liệu DuckDB / MongoDB phải trải qua quy trình tiền xử lý, làm sạch và chuẩn hóa nghiêm ngặt:
+
+1. **Xử Lý Giá Trị Khuyết Thiếu (Missing Values Imputation)**:
+   - `assignee`: Gán nhãn tường minh `(unassigned)` cho các ticket chưa có người nhận tại mốc $T_0$, đồng thời khởi tạo cờ nhị phân `is_unassigned = 1`.
+   - `reporter`: Gán nhãn `(unassigned)` nếu người tạo ticket ẩn danh hoặc bị khuyết.
+   - `priority_raw`: Điền giá trị trung vị mặc định `Major` nếu trường ưu tiên bị bỏ trống.
+   - `issuetype`: Điền nhãn mặc định `Bug`.
+
+2. **Chuẩn Hóa Thang Đo Độ Ưu Tiên (Priority Normalization)**:
+   Do 16 hệ sinh thái phần mềm sử dụng các lược đồ định danh độ ưu tiên hoàn toàn khác nhau (ví dụ: Mojang dùng `Low/Medium/High`, Spring dùng `Major/Minor/Blocker`, một số instance dùng `P1/P2/P3` hoặc `1 - Blocker`, `4 - Normal`), module [`normalize.py`](file:///mnt/Data/0.Workspace/0.SourceCode/tgn/src/early_risk_detection/data/normalize.py) chuyển đổi toàn bộ nhãn phân loại về thang đo liên tục $P_{\text{norm}} \in [0, 1]$:
+   - `Blocker` / `P1` / `Immediate`: $1.0$
+   - `Critical` / `P2` / `Very High`: $0.8$
+   - `Major` / `P3` / `High`: $0.6$
+   - `Normal` / `P4` / `Medium`: $0.4$
+   - `Minor` / `P5` / `Low`: $0.2$
+   - `Trivial` / `P6` / `Very Low`: $0.0$
+
+3. **Phân Cụm Chủ Đề Nghiệp Vụ (Issue Type & Theme Categorization)**:
+   Ánh xạ hàng trăm loại tác vụ Jira dị biệt về 3 chủ đề kiến trúc cốt lõi (`issuetype_theme_t0`):
+   - `requirements` (Story, New Feature, Epic, Improvement): Đại diện cho các tác vụ mở rộng phạm vi sản phẩm.
+   - `maintenance` (Bug, Defect, Vulnerability, Refactoring): Đại diện cho công tác duy tu, sửa chữa mã nguồn.
+   - `other` (Task, Sub-task, Documentation, Question): Các hoạt động hỗ trợ kỹ thuật khác.
+
+4. **Xác Lập Hạn Mức Kế Hoạch Vận Hành (Operational SLA Heuristic)**:
+   Trong thực tế phần mềm, phần lớn các ticket không có trường `due_date` cứng. Hệ thống tính toán thời lượng kỳ vọng $\text{PlannedDurationDays}$ (ngày) dựa trên kết hợp độ ưu tiên và loại hình công việc:
+   $$\text{PlannedDurationDays} = \begin{cases} 14.0 & \text{nếu } P_{\text{norm}} \ge 0.8 \text{ (Blocker/Critical)} \\ 30.0 & \text{nếu } P_{\text{norm}} = 0.6 \text{ (Major)} \\ 90.0 & \text{nếu thuộc chủ đề } \text{requirements} \text{ hoặc chứa } \text{Feature} \\ 21.0 & \text{nếu chứa } \text{Task/Sub-task} \\ 45.0 & \text{mặc định cho các trường hợp còn lại} \end{cases}$$
+
+5. **Xây Dựng Proxy Story Points Liên Tục**:
+   Với các dự án thiếu trường Story Points tường minh, giá trị Story Point $SP \in [1, 10]$ được mô hình hóa đại diện dựa trên độ ưu tiên, chủ đề kỹ thuật và độ dài văn bản đặc tả:
+   $$SP = \text{round}\left(1.0 + 3.0 \cdot P_{\text{norm}} + \text{ThemeWeight} + \min\left(\frac{\text{WordCount}}{15.0}, 2.0\right)\right)$$
+   với $\text{ThemeWeight} = 4.0$ cho `requirements`, $2.0$ cho `maintenance`, và $1.0$ cho các loại khác.
+
+---
+
+### 3.2. Thuật Toán Mô Phỏng Sự Kiện Lịch Sử Cửa Sổ Trượt $O(N)$ (Chronological Workload Simulation)
+Để đảm bảo nguyên tắc tuyệt đối **Zero Temporal Data Leakage**, quy trình tiền xử lý được lập trình tại [`src/early_risk_detection/delay/features.py`](file:///mnt/Data/0.Workspace/0.SourceCode/tgn/src/early_risk_detection/delay/features.py) sử dụng thuật toán mô phỏng sự kiện lịch sử theo cửa sổ trượt $O(N)$ trên toàn bộ **$4,993,729$ sự kiện**:
 
 ```mermaid
-flowchart LR
-    subgraph Engine["Engine Mô Phỏng Sự Kiện Lịch Sử O(N)"]
-        Stream["Dòng 4.99M Sự Kiện Tạo & Đóng Task<br/>Sắp xếp theo timestamp tuyệt đối"] --> Pointer["Con trỏ Thời Gian t = created_ts"]
-        Pointer --> History["Cập Nhật Trạng Thái Quá Khứ (t_event <= t)<br/>Assignee Queue, Velocity 90d, Graph Links"]
+flowchart TD
+    subgraph EventStream["Dòng Sự Kiện Hợp Nhất (Created & Resolved Events)"]
+        E1["Sự kiện Tạo Task: (created_ts, type=0, issue_id)"]
+        E2["Sự kiện Đóng Task: (resolved_ts, type=1, issue_id)"]
     end
-    History --> FeatureMatrix["Ma Trận 264 Đặc Trưng Kỹ Thuật Số (float32)<br/>Zero Temporal Data Leakage"]
+    
+    EventStream --> Sort["Sắp xếp thứ tự thời gian bền vững O(N log N)<br/>np.lexsort((ev_type, ev_ts))"]
+    
+    subgraph SimulationEngine["Engine Quản Lý Hàng Đợi Trượt O(N)"]
+        Pointer["Con trỏ thời gian t dịch chuyển liên tục"]
+        Queue["FIFO Deque 90 ngày (ts - 90*86400):<br/>• Assignee Active & Resolved Queue<br/>• Reporter Activity Queue<br/>• Project Throughput Queue<br/>• Unassigned Backlog Queue"]
+        Pointer --> Queue
+    end
+    
+    Sort --> SimulationEngine
+    
+    SimulationEngine -->|"Sự kiện Tạo (type=0)"| Extract["TRÍCH XUẤT ĐẶC TRƯNG TĨNH TẠI T0:<br/>• Tính WCI trên danh sách Active<br/>• Lấy vận tốc hoàn thành 90 ngày<br/>• Nạp task vào danh sách Active của Assignee"]
+    
+    SimulationEngine -->|"Sự kiện Đóng (type=1)"| Release["GIẢI PHÓNG TẢI & GHI NHẬN THÀNH TÍCH:<br/>• Giải phóng task khỏi danh sách Active của owner_t0<br/>• Ghi nhận cycle time & kết quả trễ vào hồ sơ assignee_final<br/>• Pop các sự kiện cũ quá 90 ngày khỏi deque"]
 ```
 
-### 3.2. Hệ Thống 264 Đặc Trưng Kỹ Thuật Số Đa Chiều (`float32`)
-Hệ thống trích xuất một không gian biểu diễn gồm 264 đặc trưng số đa chiều phản ánh toàn diện các khía cạnh kỹ thuật:
+#### Các Điểm Nhấn Kỹ Thuật Độc Đáo Trong Thiết Kế:
+1. **Triệt tiêu Rò rỉ Nhãn khi Tạo và Đóng Đồng Thời ($\Delta t = 0$)**:
+   Trong các tập dữ liệu thực tế, có các ticket đóng ngay tại giây khởi tạo (ví dụ: bot tự động tạo rồi đóng duplicate ngay lập tức). Bằng việc sử dụng khóa sắp xếp `order = np.lexsort((ev_type, ev_ts))` với `ev_type = 0` (Tạo) đứng trước `ev_type = 1` (Đóng), hệ thống đảm bảo tại cùng một timestamp, sự kiện tạo luôn được trích xuất đặc trưng **trước khi** sự kiện đóng được ghi nhận vào lịch sử. Do đó, một task không bao giờ có thể tự nhìn thấy kết quả của chính mình.
+2. **Cấu Trúc Hàng Đợi Hai Đầu Trượt 90 Ngày (`collections.deque`)**:
+   Đối với mỗi lập trình viên, người báo cáo và dự án, một hàng đợi FIFO lưu trữ các sự kiện `(timestamp, duration, is_delayed)`. Khi con trỏ thời gian tiến tới mốc $t$, các bản ghi có $\text{timestamp} < t - 90 \times 86400$ giây được loại bỏ qua `popleft()`, duy trì các chỉ số vận tốc ngắn hạn 90 ngày với độ phức tạp thời gian amortized $O(1)$ cho mỗi sự kiện.
+3. **Phân Tách Nhân Quả Giữa Người Nhận $T_0$ và Người Giải Quyết Cuối Cùng**:
+   - Tải tắc nghẽn WCI được tính dựa trên người chịu trách nhiệm tại thời điểm tạo (`assignee_t0`).
+   - Khi task đóng, tải được giải phóng khỏi `assignee_t0`, trong khi thành tích hoàn thành (và cờ trễ hạn) được tích lũy vào hồ sơ năng lực của người giải quyết thực tế (`assignee_final`).
+
+---
+
+### 3.3. Phân Loại Toàn Diện Hệ Thống 264 Đặc Trưng Số Học Đa Chiều (`float32`)
+Toàn bộ ma trận đặc trưng được xây dựng không chứa bất kỳ giá trị phân loại dạng chuỗi thô nào, đạt chuẩn hóa `float32` tương thích tối đa với các bộ tăng tốc GPU và thư viện Tree-based Boosting:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                      KHÔNG GIAN 264 ĐẶC TRƯNG KỸ THUẬT SỐ (float32)                    │
+│                   HỆ THỐNG PHÂN LOẠI 264 ĐẶC TRƯNG KỸ THUẬT SỐ (float32)               │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│  1. Ngữ Nghĩa Sâu (NLP Embeddings):                                                    │
-│     • 16 chiều TruncatedSVD từ 768-dim Ollama nomic-embed-text (3.76GB npy)            │
-│     • semantic_delay_risk (Cosine tương đồng với các cụm lỗi trễ lịch sử)             │
-│     • 40 từ khóa kỹ thuật chuyên sâu qua Term Frequency - Inverse Document Frequency   │
-│     • Requirement Ambiguity Index (Tỷ lệ từ mơ hồ: 'maybe', 'could', 'investigate'...) │
+│  1. Động Lực Học Tải Kỹ Sư & Hàng Đợi Xả Việc (Workload Dynamics & Queue Clearing):    │
+│     • assignee_wci: Chỉ số tắc nghẽn tải tích lũy trên tối đa 30 task đang mở          │
+│     • scf, scf_90d: Hệ số nén lịch biểu kế hoạch so với vận tốc lịch sử và 90 ngày     │
+│     • queue_clearing_estimate, hist_queue_clearing_estimate: Thời gian xả hàng đợi     │
+│     • queue_clearing_ratio, hist_queue_clearing_ratio: Tỷ số xả hàng đợi trên SLA     │
+│     • pressure_index, pressure_index_90d: Chỉ số áp lực tổng hợp                       │
+│     • is_assignee_overloaded (>10 active), is_assignee_fresh, is_assignee_experienced  │
 │                                                                                        │
-│  2. Động Lực Học Tải Công Việc & Nghẽn Cổ Chai:                                        │
-│     • Assignee Workload Congestion Index: WCI(t)                                       │
-│     • Schedule Compression Factor: SCF                                                 │
-│     • Rolling 90-day Velocity: active_per_completed_90d                                │
-│     • assignee_active_count, project_active_count, is_unassigned                       │
+│  2. Vận Tốc & Gia Tốc Phong Độ Dự Án (Velocity & Acceleration Dynamics):               │
+│     • assignee_delay_velocity (assignee_90d_delay_rate - assignee_hist_delay_rate)     │
+│     • assignee_cycle_velocity (assignee_90d_cycle_time - assignee_hist_cycle_time)     │
+│     • reporter_delay_velocity, project_delay_velocity                                  │
+│     • assignee_vs_project_delay (assignee_90d_delay_rate - project_90d_delay_rate)     │
+│     • project_cycle_vs_assignee (project_90d_cycle_time - assignee_90d_cycle_time)     │
+│     • rolling_mean_delay, rolling_max_delay, rolling_min_delay                         │
 │                                                                                        │
-│  3. Tô Pô Đồ Thị Phụ Thuộc (Graph Centrality):                                         │
-│     • blocks_count (Số task bị chặn), depends_count (Số task đang chờ)                 │
-│     • has_block_or_depend (Cờ nhị phân quan hệ phụ thuộc)                              │
-│     • links_per_sp (Mật độ liên kết trên Story Point)                                  │
+│  3. Xử Lý Ngôn Ngữ Tự Nhiên Chuyên Sâu (NLP Embeddings & Domain Lexicons):             │
+│     • 16 thành phần TruncatedSVD từ không gian nhúng 768 chiều Ollama nomic-embed-text │
+│     • semantic_delay_risk: Xác suất rủi ro trễ từ bộ phân loại SGD tuyến tính           │
+│     • semantic_unassigned_risk (= semantic_delay_risk * is_unassigned)                 │
+│     • semantic_sp_ratio (= semantic_delay_risk * sp_planned_ratio)                     │
+│     • ambiguity_score: Tỷ lệ từ vựng đặc tả mơ hồ (maybe, could, should, tbd, review)  │
+│     • tech_concurrency_risk: Từ khóa đa luồng (deadlock, race, thread, mutex, async)   │
+│     • tech_scope_risk: Từ khóa mở rộng phạm vi (refactor, architecture, redesign)       │
+│     • tech_total_risk, chars_per_word, is_long_summary, is_short_summary               │
 │                                                                                        │
-│  4. Mã Hóa Mục Tiêu Làm Mịn Nhân Tử (Smoothed Out-of-Fold Target Encoding):             │
-│     • assignee_te, reporter_te, project_te, issuetype_te, priority_raw_te              │
-│     • m-estimate smoothing: (k*y_mean + m*global_mean) / (k + m)                        │
+│  4. Tô-pô Đồ Thị Phụ Thuộc Causal tại T0 (Graph Dependency Centrality):                │
+│     • blocks_count (Bậc ra - số task bị chặn), depends_count (Bậc vào - số task chờ)   │
+│     • num_links (Tổng số liên kết đã biết tại T0), has_block_or_depend, has_links      │
+│     • dep_density (= (blocks + 1) * (depends + 1)), links_per_sp, is_isolated          │
+│                                                                                        │
+│  5. Biến Đổi Phi Tuyến & Giảm Lệch Phân Phối (Log-Transforms & Non-Linear Cross):      │
+│     • log1p biến đổi cho 14 biến lệch phải nặng: active, completed, WCI, SCF, SP...     │
+│     • Tương tác chéo: wci_x_scf, wci_div_scf, sp_x_scf, sp_div_scf, wci_x_planned...   │
+│                                                                                        │
+│  6. Mã Hóa Phân Loại Out-of-Fold Làm Mịn & Chu Kỳ Lịch Biểu (Encodings & Calendar):    │
+│     • Smoothed Out-of-Fold Target Encoding (K-Fold=5, m=20): assignee, reporter, prj...│
+│     • Top-16 One-Hot Encodings: instance, project, issuetype, issuetype_theme          │
+│     • Biến đổi lượng giác lịch biểu: sin_month, cos_month, sin_dow, cos_dow, is_weekend│
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Công Thức Toán Học Cho Các Đặc Trưng Trọng Yếu:
-1. **Chỉ số Tắc nghẽn Tải làm việc của Kỹ sư phụ trách (Workload Congestion Index - WCI)**:
-   $$\text{WCI}_u(t) = \sum_{j \in \text{ActiveIssues}_u(t)} \frac{\text{StoryPoints}_j}{\max\left(1, \frac{\text{DueDate}_j - t}{86400}\right)}$$
-   $\text{WCI}_u(t)$ phản ánh áp lực tích tụ tại thời điểm $t$: kỹ sư càng phải gánh nhiều task có Story Points lớn mà thời gian còn lại đến hạn chót (Deadline) càng ngắn thì chỉ số nghẽn càng bùng nổ.
+#### Chi Tiết Các Công Thức Toán Học Trọng Tâm:
+1. **Chỉ số Tắc nghẽn Tải làm việc (Workload Congestion Index - WCI)**:
+   $$\text{WCI}_u(t) = \sum_{j \in \text{Top30Active}_u(t)} \frac{SP_j}{\max\left(1.0, \frac{\text{DueDate}_j - t}{86400}\right)}$$
+   Hàm số này tích hợp đồng thời khối lượng công việc đang chờ (Story Points) và mức độ gấp gáp của thời hạn hoàn thành: các task có hạn chót càng gần thì hệ số phạt mẫu số càng nhỏ, khiến chỉ số $\text{WCI}$ bùng nổ.
 
 2. **Hệ số Nén Lịch biểu (Schedule Compression Factor - SCF)**:
-   $$\text{SCF}_i = \frac{\text{PlannedDurationDays}_i}{\max(1, \text{MedianCycleTime}_{u(i)})}$$
-   Đo lường tính khả thi của kế hoạch bàn giao: nếu thời gian phân bổ dự kiến ngắn hơn nhiều so với vận tốc giải quyết công việc trung vị lịch sử của lập trình viên được giao việc, nguy cơ vỡ kế hoạch là tất yếu.
+   $$\text{SCF}_i = \frac{\text{PlannedDurationDays}_i}{\max(1.0, \text{AssigneeHistCycleTime}_{u(i)})}$$
+   Khi $\text{SCF} < 1.0$, thời gian được giao ngắn hơn tốc độ giải quyết công việc trung bình trong quá khứ của kỹ sư. Cờ cảnh báo `is_extreme_compressed` được kích hoạt khi $\text{SCF} < 0.5$.
 
-3. **Mã hóa Mục tiêu Out-of-Fold có Làm mịn (Smoothed Target Encoding)**:
-   Để triệt tiêu Overfitting và Leakage đối với các biến phân loại có lực lượng lớn (High Cardinality) như `assignee` và `reporter`:
-   $$\hat{y}_{\text{category}} = \frac{n \cdot \bar{y}_{\text{local}} + m \cdot y_{\text{global}}}{n + m}$$
-   với $m = 20$ là siêu tham số làm mịn (Smoothing Weight).
+3. **Chỉ số Áp Lực Tổng Hợp (Integrated Pressure Index)**:
+   $$\text{PressureIndex}_i = \frac{SP_i \cdot \text{WCI}_{u(i)}}{\text{SCF}_i \cdot \text{PlannedDurationDays}_i + 10^{-4}}$$
 
-### 3.3. Cổng Sàng Lọc Tiền Dự Đoán 3 Lớp (Three-Layer Pre-Prediction Purification Gate)
+4. **Ước Lượng Giải Phóng Hàng Đợi (Queue Clearing Estimate)**:
+   $$\text{QueueClearingEstimate}_u(t) = \text{AssigneeActiveCount}_u(t) \cdot \text{Assignee90dCycleTime}_u(t)$$
+   $$\text{QueueClearingRatio}_i = \frac{\text{QueueClearingEstimate}_{u(i)}(t)}{\text{PlannedDurationDays}_i + 10^{-4}}$$
+   Nếu tỷ số này vượt quá $1.0$, ngay cả khi kỹ sư dừng nhận việc mới và làm việc với vận tốc tối đa 90 ngày, họ vẫn không thể hoàn thành hàng đợi hiện tại trước khi task mới đến hạn.
+
+5. **Mã Hóa Mục Tiêu Out-of-Fold có Làm Mịn Nhân Tử (Smoothed OOF Target Encoding)**:
+   Để triệt tiêu triệt để rủi ro rò rỉ nhãn và hiện tượng quá khớp (Overfitting) trên các biến phân loại có lực lượng lớn (như `assignee` với hơn $100,000$ kỹ sư và `reporter` với hơn $300,000$ người tạo ticket), lớp `DelayFeaturizer` áp dụng phân rã $5$-Fold Stratified K-Fold trên tập Train:
+   $$\hat{y}_{\text{category}} = \frac{n \cdot \bar{y}_{\text{fold}} + m \cdot y_{\text{global}}}{n + m}$$
+   với $m = 20.0$ là trọng số tiên nghiệm làm mịn (Smoothing Prior Weight).
+
+---
+
+### 3.4. Định Dạng Dữ Liệu Khoảng Cho Phân Tích Sinh Tồn (Survival Right-Censoring Framework)
+Đối với các mô hình học máy sinh tồn (XGBoost Survival AFT, CatBoost AFT, CatBoost Competing Risks), mỗi mẫu dữ liệu được biểu diễn dưới dạng khoảng sinh tồn $[t_{\text{lower}}, t_{\text{upper}}]$:
+$$\begin{cases} t_{\text{lower}} = t_{\text{upper}} = \text{duration\_days} = \frac{\text{resolved\_ts} - \text{created\_ts}}{86400} & \text{nếu issue đã đóng } (\text{is\_resolved} = 1) \\ t_{\text{lower}} = \frac{\text{max\_dataset\_ts} - \text{created\_ts}}{86400}, \quad t_{\text{upper}} = +\infty & \text{nếu issue còn đang mở } (\text{is\_resolved} = 0) \end{cases}$$
+Quy chuẩn này cho phép mô hình học được toàn bộ tri thức từ **$195,422$ issues chưa đóng tại thời điểm phân tách dữ liệu**, biến các task đang làm dở thành thông tin giá trị thay vì phải loại bỏ lãng phí.
+
+---
+
+### 3.5. Cổng Sàng Lọc Tiền Dự Đoán 3 Lớp (Three-Layer Pre-Prediction Purification Gate)
 Để giải quyết dứt điểm lượng $178,251$ nhiệm vụ ảo (`Non-Work` / `Duplicate`) chiếm hơn một nửa tập Test, chúng tôi xây dựng kiến trúc **Stage 1 Pre-Prediction Purification Gate** ([`pre_triage_filter.py`](file:///home/jiooum/0.Workspace/0.SourceCode/tgn/pre_triage_filter.py)) vận hành độc lập trước khi kích hoạt bộ dự đoán trễ hạn:
 
 ```mermaid

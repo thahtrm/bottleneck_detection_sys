@@ -1,0 +1,27 @@
+{
+  "distribution": "normal",
+  "scale": 0.8,
+  "optimal_threshold": 0.05,
+  "val_f1": 0.5805300066060267,
+  "test_f1": 0.44106198342188485,
+  "test_precision": 0.3140550039837486,
+  "test_recall": 0.7405463024650233,
+  "test_pr_auc": 0.3948101238987939,
+  "test_roc_auc": 0.7128987317346975,
+  "test_brier": 0.17622147152588066,
+  "best_hyperparameters": {
+    "aft_loss_distribution": "normal",
+    "aft_loss_distribution_scale": 0.8,
+    "max_depth": 8,
+    "learning_rate": 0.06499128029377067,
+    "min_child_weight": 4.535216690911719,
+    "subsample": 0.8,
+    "colsample_bytree": 0.75,
+    "reg_alpha": 0.24220924468350755,
+    "reg_lambda": 0.5539503949241689,
+    "half_life_days": 1342.642553197619,
+    "censored_weight_boost": 1.0820307416481012
+  },
+  "train_samples": 1810894,
+  "censored_samples": 195422
+}

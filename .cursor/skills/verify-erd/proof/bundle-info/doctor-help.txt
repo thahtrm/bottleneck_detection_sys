@@ -1,0 +1,17 @@
+COMMAND: .venv/bin/erd --help
+usage: erd [-h] {score,bundle} ...
+
+Early risk detection for Jira issues.
+
+positional arguments:
+  {score,bundle}
+    score         score issues of a Jira DuckDB with a model bundle
+    bundle        inspect a model bundle
+
+options:
+  -h, --help      show this help message and exit
+
+pass-through commands: etl (Mongo -> DuckDB ETL), embed (Ollama text
+embeddings for a DuckDB), eval criticality (criticality evaluation harness),
+eval delay (delay evaluation harness)
+EXIT:0

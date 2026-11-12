@@ -3,11 +3,11 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=pycharm,python
 
 # Custom
-log/
-results/
-saved_checkpoints/
-saved_models/
-data/
+/log/
+/results/
+/saved_checkpoints/
+/saved_models/
+/data/
 .DS_Store
 
 # Local tooling, vendored libs, and dumps
@@ -249,3 +249,18 @@ dmypy.json
 .pytype/
 
 # End of https://www.toptal.com/developers/gitignore/api/pycharm,python
+
+# Generated artifacts (refactor/packaging)
+outputs/
+bundles/
+catboost_info/
+/*.npy
+/*.csv
+
+# Packaging
+dist/
+
+# Large per-issue prediction dumps of the T0 pipeline (reports / params stay tracked)
+experiments/delay_t0/**/*.csv
+.superpowers/
+webapp/spikes/.env.s3
