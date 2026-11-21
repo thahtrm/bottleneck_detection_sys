@@ -28,6 +28,11 @@ try:
 except Exception:  # optional dep at runtime / test envs without PDF extras
     pisa = None  # type: ignore[assignment]
 
+try:
+    from PIL import Image as PILImage
+except Exception:  # pillow ships with xhtml2pdf stack; keep optional for lean tests
+    PILImage = None  # type: ignore[assignment]
+
 log = logging.getLogger(__name__)
 
 KEY_RE = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
@@ -42,8 +47,10 @@ SECTION_IDS = (
     "actions",
 )
 
-# xhtml2pdf only allows font files under the document base dir (/app/webapp/backend).
-_FONT_DIR = Path(__file__).resolve().parents[1] / "assets" / "fonts"
+# xhtml2pdf only allows assets under the document base dir (/app/webapp/backend).
+_ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets"
+_FONT_DIR = _ASSETS_DIR / "fonts"
+_BADGE_DIR = _ASSETS_DIR / "badges"
 _FONT_CANDIDATES = (
     _FONT_DIR / "DejaVuSans.ttf",
     Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
@@ -522,26 +529,63 @@ def merge_narrative(facts_md: str, narratives: dict[str, str]) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
+def _img_tag(path: Path, alt: str) -> str:
+    """Embed PNG with explicit pixel size so xhtml2pdf does not stretch/crop chrome."""
+    width = height = 0
+    if PILImage is not None:
+        try:
+            with PILImage.open(path) as im:
+                width, height = im.size
+        except Exception:
+            width = height = 0
+    size_attr = f' width="{width}" height="{height}"' if width and height else ""
+    return f'<img src="{path}" alt="{escape(alt)}"{size_attr} />'
+
+
 def _badge_html(code: str, label: str) -> str:
+    """Status chip as a pre-rasterized PNG — xhtml2pdf mis-centers DejaVu in bgcolor boxes."""
+    path = _BADGE_DIR / f"{code}.png"
+    if path.is_file():
+        return _img_tag(path, label)
     colors = {
-        "AT_RISK": ("#d93025", "#ffffff"),
-        "WATCH": ("#e37400", "#ffffff"),
-        "HEALTHY": ("#188038", "#ffffff"),
-        "HIGH": ("#d93025", "#ffffff"),
-        "MED": ("#e37400", "#ffffff"),
-        "LOW": ("#188038", "#ffffff"),
-        "BLOCKED": ("#5f6368", "#ffffff"),
+        "AT_RISK": "#d93025",
+        "WATCH": "#e37400",
+        "HEALTHY": "#188038",
+        "HIGH": "#d93025",
+        "MED": "#e37400",
+        "LOW": "#188038",
+        "BLOCKED": "#5f6368",
     }
-    bg, fg = colors.get(code, ("#1a73e8", "#ffffff"))
+    bg = colors.get(code, "#1a73e8")
     return (
-        f'<span style="display:inline-block;padding:3px 10px;border-radius:999px;'
-        f'background:{bg};color:{fg};font-size:11px;font-weight:700;'
-        f'letter-spacing:0.04em;text-transform:uppercase;">{escape(label)}</span>'
+        f'<span style="background-color:{bg};color:#ffffff;font-size:10px;font-weight:bold;">'
+        f"&nbsp;{escape(label).upper()}&nbsp;</span>"
     )
 
 
 def _level_badge(level: str) -> str:
     return _badge_html(level, level)
+
+
+def _section_num_html(num: int) -> str:
+    path = _BADGE_DIR / f"num_{int(num)}.png"
+    if path.is_file():
+        return _img_tag(path, str(int(num)))
+    return f'<font color="#1a73e8"><b>{int(num)}</b></font>'
+
+
+def _insight_html(text: str) -> str:
+    body = escape(text.strip())
+    return (
+        '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:12px;">'
+        "<tr>"
+        '<td width="5" bgcolor="#20beff">&nbsp;</td>'
+        '<td bgcolor="#e8f7ff" style="padding:12px 14px 12px 14px;">'
+        '<p style="margin:0 0 6px 0;"><font color="#1a73e8" size="1"><b>AI INSIGHT</b></font></p>'
+        f'<p style="margin:0;"><font color="#202124" size="2">{body}</font></p>'
+        "</td>"
+        "</tr></table>"
+    )
 
 
 def _ul_html(items: list[str]) -> str:
@@ -552,7 +596,7 @@ def _ul_html(items: list[str]) -> str:
 
 
 def render_health_html(snap: HealthSnapshot, narratives: dict[str, str] | None = None) -> str:
-    """Card + KPI grid + numbered sections for xhtml2pdf (table-based layout)."""
+    """Card + KPI grid + numbered sections — table/bgcolor layout for xhtml2pdf alignment."""
     narratives = narratives or {}
     o = snap.facts["overview"]
     p = snap.facts["progress"]
@@ -564,12 +608,13 @@ def render_health_html(snap: HealthSnapshot, narratives: dict[str, str] | None =
     status_code, status_label = overall_status(snap)
 
     def kpi_cell(label: str, value: Any, accent: str = "#1a73e8") -> str:
+        # Helvetica for Latin KPI chrome — DejaVu digit metrics sit low in xhtml2pdf cells.
         return (
-            "<td width='16%' style='border:1px solid #e8eaed;border-radius:8px;padding:12px 8px;"
-            "text-align:center;background:#ffffff;'>"
-            f"<div style='font-size:22px;font-weight:800;color:{accent};'>{escape(str(value))}</div>"
-            f"<div style='font-size:10px;font-weight:700;letter-spacing:0.06em;color:#5f6368;"
-            f"text-transform:uppercase;margin-top:4px;'>{escape(label)}</div>"
+            "<td width='16%' align='center' valign='middle' "
+            "style='border:1px solid #e8eaed;padding:10px 4px;background-color:#ffffff;'>"
+            f"<font face='Helvetica' color='{accent}' size='4'><b>{escape(str(value))}</b></font>"
+            "<br/>"
+            f"<font face='Helvetica' color='#5f6368' size='1'><b>{escape(label).upper()}</b></font>"
             "</td>"
         )
 
@@ -577,48 +622,39 @@ def render_health_html(snap: HealthSnapshot, narratives: dict[str, str] | None =
     for item in r["top"]:
         badges = _level_badge(item["level"])
         if item["blocked"]:
-            badges += " " + _badge_html("BLOCKED", "Blocked")
+            badges += "&nbsp;" + _badge_html("BLOCKED", "Blocked")
         risk_rows.append(
             "<tr>"
-            f"<td style='padding:8px;border-bottom:1px solid #e8eaed;font-family:monospace;font-weight:700;'>"
-            f"{escape(item['key'])}</td>"
-            f"<td style='padding:8px;border-bottom:1px solid #e8eaed;'>{badges}</td>"
-            f"<td style='padding:8px;border-bottom:1px solid #e8eaed;'>{escape(item['summary'])}</td>"
-            f"<td style='padding:8px;border-bottom:1px solid #e8eaed;color:#5f6368;'>"
+            f"<td valign='middle' style='padding:8px;border-bottom:1px solid #e8eaed;"
+            f"font-weight:bold;'>{escape(item['key'])}</td>"
+            f"<td valign='middle' style='padding:8px;border-bottom:1px solid #e8eaed;'>{badges}</td>"
+            f"<td valign='middle' style='padding:8px;border-bottom:1px solid #e8eaed;'>"
+            f"{escape(item['summary'])}</td>"
+            f"<td valign='middle' style='padding:8px;border-bottom:1px solid #e8eaed;color:#5f6368;'>"
             f"{escape(item['deadline'] or 'chưa hạn')}<br/>@{escape(item['assignee'])}</td>"
             "</tr>"
         )
 
     def section(num: int, title: str, sid: str, body_html: str) -> str:
         insight = (narratives.get(sid) or "").strip()
-        insight_html = ""
-        if insight:
-            insight_html = (
-                "<div style='margin-top:12px;padding:12px 14px;border-left:4px solid #20beff;"
-                "background:#e8f7ff;border-radius:0 8px 8px 0;'>"
-                "<div style='font-size:10px;font-weight:800;letter-spacing:0.08em;color:#1a73e8;"
-                "text-transform:uppercase;margin-bottom:6px;'>AI Insight</div>"
-                f"<div style='font-size:12px;line-height:1.45;color:#202124;'>{escape(insight)}</div>"
-                "</div>"
-            )
+        insight_block = _insight_html(insight) if insight else ""
         return (
-            "<div style='margin:18px 0 0 0;padding:16px;border:1px solid #e8eaed;border-radius:12px;"
-            "background:#ffffff;'>"
-            "<table width='100%'><tr>"
-            f"<td width='36' valign='top'><div style='width:28px;height:28px;border-radius:14px;"
-            f"background:#1a73e8;color:#fff;text-align:center;line-height:28px;font-weight:800;"
-            f"font-size:13px;'>{num}</div></td>"
-            f"<td valign='middle'><div style='font-size:15px;font-weight:800;color:#202124;'>"
-            f"{escape(title)}</div></td>"
+            '<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+            'style="margin-top:14px;border:1px solid #e8eaed;background-color:#ffffff;">'
+            "<tr><td style='padding:14px;'>"
+            '<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+            f'<td width="32" valign="middle">{_section_num_html(num)}</td>'
+            f'<td valign="middle" style="font-size:15px;font-weight:bold;color:#202124;padding-left:8px;">'
+            f"{escape(title)}</td>"
             "</tr></table>"
-            f"<div style='margin-top:10px;'>{body_html}</div>"
-            f"{insight_html}"
-            "</div>"
+            f'<div style="margin-top:10px;">{body_html}</div>'
+            f"{insight_block}"
+            "</td></tr></table>"
         )
 
     overview_body = (
         f"<p><strong>Dự án:</strong> {escape(o['name'])} "
-        f"(<span style='font-family:monospace;'>{escape(o['project'])}</span>)</p>"
+        f"(<span style='font-family:ReportSans;'>{escape(o['project'])}</span>)</p>"
         f"<p><strong>Sprint:</strong> {escape(o['sprint_line'] or 'Không có sprint active')}</p>"
         f"<p>Open {o['open_count']} · Done {o['done_count']} · "
         f"HIGH/MED {o['high_count']}/{o['med_count']} · "
@@ -638,8 +674,8 @@ def render_health_html(snap: HealthSnapshot, narratives: dict[str, str] | None =
     risk_body = (
         f"<p>Risky open: <strong>{r['risky_count']}</strong> (raised 24h: {r['raised_24h']})</p>"
         + (
-            "<table width='100%' cellpadding='0' cellspacing='0'>"
-            "<tr style='background:#f8f9fa;'>"
+            "<table width='100%' cellpadding='0' cellspacing='0' border='0'>"
+            "<tr bgcolor='#f8f9fa'>"
             "<th align='left' style='padding:8px;font-size:10px;color:#5f6368;'>KEY</th>"
             "<th align='left' style='padding:8px;font-size:10px;color:#5f6368;'>STATUS</th>"
             "<th align='left' style='padding:8px;font-size:10px;color:#5f6368;'>SUMMARY</th>"
@@ -674,57 +710,58 @@ def render_health_html(snap: HealthSnapshot, narratives: dict[str, str] | None =
     )
     actions_body = _ul_html([f"{x['key']} — {x['reason']}: {x['detail']}" for x in a["candidates"]])
 
+    status_row = (
+        '<p style="margin:10px 0 0 0;">'
+        f"{_badge_html(status_code, status_label)}"
+        f'&nbsp;&nbsp;<span style="color:#5f6368;font-size:12px;">'
+        f"Sprint: {escape(o['sprint_line'] or 'Không có sprint active')}</span>"
+        "</p>"
+    )
+
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"/>
 <style>
   @page {{ margin: 1.4cm; }}
   {_pdf_font_css()}
   body {{ color: #202124; font-size: 12px; }}
-  .card {{ border: 1px solid #dadce0; border-radius: 16px; padding: 20px; background: #fff; }}
-  .hero {{ background: linear-gradient(135deg, #e8f7ff 0%, #ffffff 55%, #fff8e1 100%);
-           border: 1px solid #e8eaed; border-radius: 16px; padding: 20px; margin-bottom: 16px; }}
   .muted {{ color: #5f6368; font-size: 11px; }}
   ul {{ margin: 6px 0 6px 18px; padding: 0; }}
   li {{ margin: 3px 0; line-height: 1.4; }}
   p {{ margin: 6px 0; line-height: 1.45; }}
 </style></head><body>
-<div class="card">
-  <div class="hero">
-    <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#1a73e8;text-transform:uppercase;">
-      Daily Project Health
-    </div>
-    <div style="font-size:22px;font-weight:800;margin:6px 0 4px 0;">{escape(snap.project)} · {escape(o['name'])}</div>
-    <div class="muted">{escape(snap.day_label)} · TZ {escape(snap.tz)} · Generated {escape(snap.generated_at)}</div>
-    <div style="margin-top:12px;">{_badge_html(status_code, status_label)}
-      <span style="margin-left:10px;color:#5f6368;font-size:12px;">
-        Sprint: {escape(o['sprint_line'] or 'Không có sprint active')}
-      </span>
-    </div>
-  </div>
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #dadce0;background-color:#ffffff;">
+<tr><td style="padding:18px;">
 
-  <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:#5f6368;text-transform:uppercase;margin:4px 0 8px 0;">
-    KPI Snapshot
-  </div>
-  <table width="100%" cellspacing="6" cellpadding="0" style="margin-bottom:8px;">
-    <tr>
-      {kpi_cell("Open", o["open_count"], "#1a73e8")}
-      {kpi_cell("Done", o["done_count"], "#188038")}
-      {kpi_cell("Risky", o["risky_count"], "#e37400")}
-      {kpi_cell("Blocked", o["blocked_count"], "#5f6368")}
-      {kpi_cell("HIGH", o["high_count"], "#d93025")}
-      {kpi_cell("MED", o["med_count"], "#e37400")}
-    </tr>
-  </table>
-  <p class="muted">Raised 24h: {o["raised_24h"]} · New 24h: {o["new_24h"]} (critical {o["new_critical"]})</p>
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e8eaed;background-color:#e8f7ff;margin-bottom:14px;">
+<tr><td style="padding:16px;">
+  <p style="margin:0;font-size:11px;font-weight:bold;letter-spacing:0.12em;color:#1a73e8;">DAILY PROJECT HEALTH</p>
+  <p style="margin:6px 0 4px 0;font-size:20px;font-weight:bold;color:#202124;">{escape(snap.project)} · {escape(o['name'])}</p>
+  <p class="muted" style="margin:0;">{escape(snap.day_label)} · TZ {escape(snap.tz)} · Generated {escape(snap.generated_at)}</p>
+  {status_row}
+</td></tr></table>
 
-  {section(1, "Overview", "overview", overview_body)}
-  {section(2, "Today’s progress", "progress", progress_body)}
-  {section(3, "Risk alerts", "risk", risk_body)}
-  {section(4, "Bottleneck analysis", "bottleneck", bottleneck_body)}
-  {section(5, "Dependency impact", "dependency", dependency_body)}
-  {section(6, "Resource allocation", "resource", resource_body)}
-  {section(7, "Action recommendations", "actions", actions_body)}
-</div>
+<p style="margin:0 0 6px 0;font-size:11px;font-weight:bold;letter-spacing:0.08em;color:#5f6368;">KPI SNAPSHOT</p>
+<table width="100%" cellspacing="6" cellpadding="0" border="0" style="margin-bottom:4px;">
+  <tr>
+    {kpi_cell("Open", o["open_count"], "#1a73e8")}
+    {kpi_cell("Done", o["done_count"], "#188038")}
+    {kpi_cell("Risky", o["risky_count"], "#e37400")}
+    {kpi_cell("Blocked", o["blocked_count"], "#5f6368")}
+    {kpi_cell("HIGH", o["high_count"], "#d93025")}
+    {kpi_cell("MED", o["med_count"], "#e37400")}
+  </tr>
+</table>
+<p class="muted">Raised 24h: {o["raised_24h"]} · New 24h: {o["new_24h"]} (critical {o["new_critical"]})</p>
+
+{section(1, "Overview", "overview", overview_body)}
+{section(2, "Today’s progress", "progress", progress_body)}
+{section(3, "Risk alerts", "risk", risk_body)}
+{section(4, "Bottleneck analysis", "bottleneck", bottleneck_body)}
+{section(5, "Dependency impact", "dependency", dependency_body)}
+{section(6, "Resource allocation", "resource", resource_body)}
+{section(7, "Action recommendations", "actions", actions_body)}
+
+</td></tr></table>
 </body></html>
 """
 

@@ -35,6 +35,7 @@ packages = ["erw"]
 [tool.hatch.build.targets.wheel.force-include]
 "erw/assets/fonts/DejaVuSans.ttf" = "erw/assets/fonts/DejaVuSans.ttf"
 "erw/assets/fonts/DejaVuSans-Bold.ttf" = "erw/assets/fonts/DejaVuSans-Bold.ttf"
+"erw/assets/badges" = "erw/assets/badges"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
