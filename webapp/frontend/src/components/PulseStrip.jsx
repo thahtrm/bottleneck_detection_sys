@@ -12,10 +12,30 @@ function sprintRemaining(sprint) {
   return `còn ${sprint.days_left} ngày`;
 }
 
-function SprintProgress({ sprint, progress }) {
+function SprintProgress({ sprint, progress, compact = false }) {
   const unit = progress.unit === 'points' ? 'điểm' : 'việc';
   const remaining = sprintRemaining(sprint);
   const expected = progress.expected_pct == null ? null : percent(progress.expected_pct);
+  if (compact) {
+    const label = `${sprint.name}${remaining ? ` · ${remaining}` : ''} · Xong ${progress.done}/${progress.total} ${unit} (${percent(progress.done_pct)}%)${expected != null ? ` · kỳ vọng ${expected}%` : ''}`;
+    return (
+      <Tooltip label={label} withArrow multiline maw={280}>
+        <Group gap={6} wrap="nowrap" style={{ flex: '0 1 160px', minWidth: 120 }}>
+          <Progress
+            value={percent(progress.done_pct)}
+            size="sm"
+            radius="sm"
+            color="blue"
+            style={{ flex: 1, minWidth: 64 }}
+            aria-label="Tiến độ sprint"
+          />
+          <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
+            {percent(progress.done_pct)}%
+          </Text>
+        </Group>
+      </Tooltip>
+    );
+  }
   return (
     <Stack gap={4} style={{ flex: '1 1 320px', minWidth: 240 }}>
       <Group justify="space-between" gap="xs">
@@ -61,36 +81,56 @@ export default function PulseStrip({
       label: s.state === 'active' ? `${s.name} (đang chạy)` : s.name,
     })),
   ];
-  const body = (
-    <Stack gap={embedded ? 'xs' : 'sm'}>
-      <Group justify="space-between" align="center" gap="md" wrap="wrap">
-        <Group gap="xs" wrap="wrap">
-          {CHIPS.map((chip) => (
-            <Chip
-              key={chip.id}
-              size="sm"
-              variant="outline"
-              checked={chips.includes(chip.id)}
-              onChange={() => onToggleChip(chip.id)}
-            >
-              {chip.label} · {counts[chip.id]}
-            </Chip>
-          ))}
-        </Group>
-        {board.sprints.length > 0 && (
-          <Group gap="md" wrap="nowrap" style={{ flex: '1 1 480px', justifyContent: 'flex-end' }}>
-            {board.sprint && board.progress && <SprintProgress sprint={board.sprint} progress={board.progress} />}
-            <Select
-              size="xs"
-              w={190}
-              data={sprintOptions}
-              value={sprintId == null ? '' : String(sprintId)}
-              onChange={(value) => onSprintChange(value ? Number(value) : null)}
-              allowDeselect={false}
-              aria-label="Lọc theo sprint"
-            />
-          </Group>
+
+  const chipRow = (
+    <Group gap={6} wrap="wrap">
+      {CHIPS.map((chip) => (
+        <Chip
+          key={chip.id}
+          size={embedded ? 'xs' : 'sm'}
+          variant="outline"
+          checked={chips.includes(chip.id)}
+          onChange={() => onToggleChip(chip.id)}
+        >
+          {chip.label} · {counts[chip.id]}
+        </Chip>
+      ))}
+    </Group>
+  );
+
+  const sprintControls =
+    board.sprints.length > 0 ? (
+      <Group gap="xs" wrap="nowrap" style={{ flex: embedded ? '0 1 auto' : '1 1 480px', justifyContent: 'flex-end' }}>
+        {board.sprint && board.progress && (
+          <SprintProgress sprint={board.sprint} progress={board.progress} compact={embedded} />
         )}
+        <Select
+          size="xs"
+          w={embedded ? 168 : 190}
+          data={sprintOptions}
+          value={sprintId == null ? '' : String(sprintId)}
+          onChange={(value) => onSprintChange(value ? Number(value) : null)}
+          allowDeselect={false}
+          aria-label="Lọc theo sprint"
+        />
+      </Group>
+    ) : null;
+
+  // Embedded toolbar owns truncated alert (keeps chips+sprint on one row).
+  if (embedded) {
+    return (
+      <Group gap="sm" align="center" wrap="wrap" style={{ flex: '1 1 auto', minWidth: 0 }}>
+        {chipRow}
+        {sprintControls}
+      </Group>
+    );
+  }
+
+  return (
+    <Stack gap="sm">
+      <Group justify="space-between" align="center" gap="md" wrap="wrap">
+        {chipRow}
+        {sprintControls}
       </Group>
       {board.truncated && (
         <Alert color="gray" variant="light" icon={<IconAlertCircle size={16} />} py={6}>
@@ -101,6 +141,4 @@ export default function PulseStrip({
       )}
     </Stack>
   );
-
-  return body;
 }

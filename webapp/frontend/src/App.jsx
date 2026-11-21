@@ -128,6 +128,7 @@ function AppContent() {
   };
 
   const showBubble = bubbleEnabled && (view === 'board' || view === 'list') && canUseChat;
+  const boardLike = view === 'board' || view === 'list';
   const panelOpen =
     Boolean(state.issue) &&
     view !== 'settings' &&
@@ -145,6 +146,17 @@ function AppContent() {
       }}
       aside={{ width: 440, breakpoint: 'sm', collapsed: { desktop: !panelOpen, mobile: !panelOpen } }}
       padding="md"
+      styles={{
+        main: boardLike
+          ? {
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              height: 'calc(100dvh - var(--app-shell-header-offset, 60px))',
+              boxSizing: 'border-box',
+            }
+          : undefined,
+      }}
     >
       <AppShell.Header>
         <Header
@@ -224,8 +236,8 @@ function AppContent() {
             onOpenSettings={() => patch({ view: 'settings' })}
           />
         )}
-        {(view === 'board' || view === 'list') && (
-          <Box style={{ minWidth: 0 }}>
+        {boardLike && (
+          <Box style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <BoardView
               state={state}
               patch={patch}

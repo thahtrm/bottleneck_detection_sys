@@ -14,10 +14,10 @@ const GROUP_OPTIONS = Object.entries(GROUPINGS).map(([value, grouping]) => ({ va
 function BoardSkeleton() {
   return (
     <Stack gap="md" className={`erw-board-scope ${classes.scope}`}>
-      <Skeleton height={56} radius="md" />
-      <Group gap="sm" align="flex-start" wrap="nowrap">
+      <Skeleton height={40} radius="md" />
+      <Group gap="sm" align="flex-start" wrap="nowrap" style={{ flex: 1, minHeight: 0 }}>
         {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} height={420} width={280} radius="md" />
+          <Skeleton key={i} height="100%" width={280} radius="md" />
         ))}
       </Group>
     </Stack>
@@ -54,12 +54,13 @@ export default function BoardView({ state, patch, onMoveStatus, canMoveStatus, o
   const high = columns.reduce((sum, col) => sum + col.highCount, 0);
   const toggleChip = (id) =>
     patch({ chips: state.chips.includes(id) ? state.chips.filter((c) => c !== id) : [...state.chips, id] });
-  const Renderer = state.view === 'list' ? IssueList : RiskBoard;
+  const isList = state.view === 'list';
+  const Renderer = isList ? IssueList : RiskBoard;
 
   return (
-    <Stack gap="sm" className={`erw-board-scope ${classes.scope}`}>
+    <div className={`erw-board-scope ${classes.scope}`}>
       <div className={classes.toolbar}>
-        <Stack gap="sm">
+        <div className={classes.toolbarRow}>
           <PulseStrip
             board={board}
             counts={counts}
@@ -69,12 +70,12 @@ export default function BoardView({ state, patch, onMoveStatus, canMoveStatus, o
             onSprintChange={(sprint) => patch({ sprint })}
             embedded
           />
-          <Group justify="space-between" align="center" wrap="wrap">
-            <Group gap="sm">
+          <Group gap="sm" align="center" wrap="nowrap" className={classes.toolbarEnd}>
+            <Group gap={6} wrap="nowrap">
               <Text size="sm" className={classes.toolbarMeta}>
                 {state.chips.length > 0 ? (
                   <>
-                    Đang lọc <strong>{shown}</strong>/{board.cards.length} việc
+                    Đang lọc <strong>{shown}</strong>/{board.cards.length}
                   </>
                 ) : (
                   <>
@@ -94,8 +95,8 @@ export default function BoardView({ state, patch, onMoveStatus, canMoveStatus, o
                 </Button>
               )}
             </Group>
-            <Group gap="xs">
-              <Text size="xs" fw={600} c="dark.4">
+            <Group gap={6} wrap="nowrap">
+              <Text size="xs" fw={600} className={classes.toolbarLabel}>
                 Nhóm theo
               </Text>
               <SegmentedControl
@@ -106,16 +107,25 @@ export default function BoardView({ state, patch, onMoveStatus, canMoveStatus, o
               />
             </Group>
           </Group>
-        </Stack>
+        </div>
+        {board.truncated && (
+          <Alert color="gray" variant="light" icon={<IconAlertCircle size={16} />} py={6} mt={6}>
+            <Text size="xs">
+              Đang hiển thị {board.cards.length}/{board.total} việc. Chọn dự án, sprint hoặc tìm kiếm để thu hẹp.
+            </Text>
+          </Alert>
+        )}
       </div>
-      <Renderer
-        columns={columns}
-        ctx={ctx}
-        selectedKey={state.issue}
-        onSelect={(issue) => (onSelectIssue ? onSelectIssue(issue) : patch({ issue }))}
-        onMoveStatus={onMoveStatus}
-        canMoveStatus={canMoveStatus}
-      />
-    </Stack>
+      <div className={isList ? classes.listPane : classes.boardPane}>
+        <Renderer
+          columns={columns}
+          ctx={ctx}
+          selectedKey={state.issue}
+          onSelect={(issue) => (onSelectIssue ? onSelectIssue(issue) : patch({ issue }))}
+          onMoveStatus={onMoveStatus}
+          canMoveStatus={canMoveStatus}
+        />
+      </div>
+    </div>
   );
 }
