@@ -1,12 +1,12 @@
 const DAY_MS = 86_400_000;
 
 export const LEVELS = {
-  HIGH: { label: 'Cao', color: 'red', rank: 3 },
-  MED: { label: 'TB', color: 'orange', rank: 2 },
-  LOW: { label: 'Thấp', color: 'green', rank: 1 },
+  HIGH: { label: 'Cao', color: 'red', token: 'high', rank: 3 },
+  MED: { label: 'TB', color: 'orange', token: 'med', rank: 2 },
+  LOW: { label: 'Thấp', color: 'green', token: 'low', rank: 1 },
 };
-const UNSCORED = { label: 'Chưa đánh giá', color: 'gray', rank: 0 };
-const DONE = { label: 'Đã xong', color: 'gray', rank: 0 };
+const UNSCORED = { label: 'Chưa đánh giá', color: 'gray', token: 'none', rank: 0 };
+const DONE = { label: 'Đã xong', color: 'gray', token: 'none', rank: 0 };
 
 const DEADLINE_TYPES = {
   sprint: 'Sprint',
@@ -184,12 +184,14 @@ function riskText(card) {
 }
 
 export function describeCard(card, ctx) {
-  const { label, color } = levelOf(card);
+  const { label, color, token } = levelOf(card);
+  const overdue = isOverdue(card, ctx);
   return {
-    level: { label, color },
+    level: { label, color, token },
     riskText: riskText(card),
     deadlineText: deadlineText(card, ctx),
     deadlineTitle: card.deadline?.label ?? null,
+    deadlineOverdue: overdue,
     assigneeName: card.assignee?.name ?? 'Chưa giao',
     initials: card.assignee ? initials(card.assignee.name) : '–',
   };

@@ -82,20 +82,20 @@ export default function BoardView({ state, patch, onMoveStatus, canMoveStatus, o
                   </>
                 )}
                 {high > 0 && (
-                  <Text span size="sm" c="red.8" fw={600}>
+                  <Text span size="sm" className={classes.toolbarHigh}>
                     {' · '}
                     {high} Cao
                   </Text>
                 )}
               </Text>
               {state.chips.length > 0 && (
-                <Button variant="subtle" size="compact-xs" color="gray" onClick={() => patch({ chips: [] })}>
+                <Button variant="subtle" size="compact-xs" color="dark" onClick={() => patch({ chips: [] })}>
                   Bỏ lọc
                 </Button>
               )}
             </Group>
             <Group gap="xs">
-              <Text size="xs" c="dimmed">
+              <Text size="xs" fw={600} c="dark.4">
                 Nhóm theo
               </Text>
               <SegmentedControl

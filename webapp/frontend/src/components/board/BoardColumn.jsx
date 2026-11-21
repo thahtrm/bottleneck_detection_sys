@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Badge, Button, Text } from '@mantine/core';
+import { Button } from '@mantine/core';
 import IssueCard from './IssueCard';
 import classes from './board.module.css';
 
@@ -12,17 +12,13 @@ export default function BoardColumn({ column, ctx, selectedKey, onSelect, onMove
   return (
     <section className={classes.column} aria-label={`${column.title}: ${column.count} việc`}>
       <header className={classes.columnHeader}>
-        <Text fw={700} size="sm" truncate style={{ flex: 1 }} title={column.title}>
+        <h3 className={classes.columnTitle} title={column.title}>
           {column.title}
-        </Text>
-        {column.highCount > 0 && (
-          <Text size="xs" fw={600} c="red.8">
-            {column.highCount} Cao
-          </Text>
-        )}
-        <Badge variant="light" color="gray" size="sm">
+        </h3>
+        {column.highCount > 0 && <span className={classes.columnHigh}>{column.highCount} Cao</span>}
+        <span className={`${classes.columnCount}${column.highCount > 0 ? ` ${classes.columnCountHigh}` : ''}`}>
           {column.count}
-        </Badge>
+        </span>
       </header>
       <div className={classes.columnBody}>
         {shown.map((card) => (
@@ -35,13 +31,9 @@ export default function BoardColumn({ column, ctx, selectedKey, onSelect, onMove
             onMoveStatus={canMoveStatus(card) ? onMoveStatus : undefined}
           />
         ))}
-        {column.count === 0 && (
-          <Text size="xs" c="dimmed" ta="center" py="md">
-            Không có việc
-          </Text>
-        )}
+        {column.count === 0 && <p className={classes.emptyHint}>Không có việc</p>}
         {hidden > 0 && (
-          <Button variant="subtle" color="gray" size="xs" onClick={() => setExpanded(true)}>
+          <Button variant="subtle" color="dark" size="xs" onClick={() => setExpanded(true)}>
             + {hidden} việc nữa
           </Button>
         )}

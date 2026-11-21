@@ -1,7 +1,16 @@
 import React from 'react';
-import { ActionIcon, Avatar, Badge, Box, Menu, Tooltip } from '@mantine/core';
-import { IconArrowsExchange, IconDots, IconExternalLink, IconLock } from '@tabler/icons-react';
+import { ActionIcon, Avatar, Box, Menu, Tooltip } from '@mantine/core';
+import {
+  IconArrowsExchange,
+  IconCalendarDue,
+  IconCircleDot,
+  IconDots,
+  IconExternalLink,
+  IconLock,
+  IconStarFilled,
+} from '@tabler/icons-react';
 import { useJiraLinks } from '../JiraLinks';
+import classes from './board.module.css';
 
 export function selectableProps(key, onSelect) {
   return {
@@ -22,24 +31,45 @@ export function CardMarkers({ card }) {
     <>
       {card.is_critical && (
         <Tooltip label="Việc quan trọng (top mô hình)" withArrow>
-          <Badge size="xs" color="gray" variant="light" radius="sm">
-            ★ Quan trọng
-          </Badge>
+          <span className={classes.markerCritical} aria-label="Quan trọng">
+            <IconStarFilled size={10} stroke={1.75} />
+            Quan trọng
+          </span>
         </Tooltip>
       )}
       {card.blocked && (
         <Tooltip label="Đang bị chặn" withArrow>
-          <IconLock size={14} color="var(--mantine-color-gray-6)" aria-label="Đang bị chặn" />
+          <IconLock size={14} className={classes.markerBlocked} aria-label="Đang bị chặn" />
         </Tooltip>
       )}
     </>
   );
 }
 
+export function DeadlineField({ text, title, overdue = false, className = classes.field }) {
+  if (!text) return null;
+  return (
+    <span className={`${className}${overdue ? ` ${classes.fieldOverdue}` : ''}`} title={title ?? undefined}>
+      <IconCalendarDue size={13} stroke={1.9} className={classes.fieldIcon} aria-hidden />
+      <span>{text}</span>
+    </span>
+  );
+}
+
+export function StatusField({ status, className = classes.field }) {
+  if (!status) return null;
+  return (
+    <span className={className} title={status}>
+      <IconCircleDot size={13} stroke={1.9} className={classes.fieldIcon} aria-hidden />
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</span>
+    </span>
+  );
+}
+
 export function AssigneeAvatar({ facts }) {
   return (
     <Tooltip label={facts.assigneeName} withArrow>
-      <Avatar size={22} radius="xl" color="gray" variant="light">
+      <Avatar size={24} radius="xl" className={classes.assigneeAvatar} color="blue" variant="light">
         {facts.initials}
       </Avatar>
     </Tooltip>
