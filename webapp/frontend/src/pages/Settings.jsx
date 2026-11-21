@@ -35,12 +35,14 @@ import {
   IconServer,
   IconSettings,
   IconUser,
+  IconUsers,
   IconWebhook,
 } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import { OpenProjectOnJira } from '../components/JiraLinks';
 import MemoryPrefsSection from '../components/settings/MemoryPrefsSection';
+import ProjectMembersSection from '../components/settings/ProjectMembersSection';
 import ReportScheduleSection from '../components/settings/ReportScheduleSection';
 import { useAuth } from '../context/AuthContext';
 import { useBubblePref } from '../hooks/useBubblePref';
@@ -100,6 +102,7 @@ export default function Settings({
   project = '',
   projects: projectsProp,
   onOpenChat,
+  onOpenUsers,
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -134,6 +137,7 @@ export default function Settings({
   const isPmSomewhere = isAdmin || projects.some((item) => item.role === 'pm');
   const canChatSettings = isPmSomewhere;
   const canEditProjectMemory = Boolean(project) && (isAdmin || projectRole === 'pm');
+  const canManageMembers = Boolean(project) && (isAdmin || projectRole === 'pm');
 
   const systemStatus = useQuery({
     queryKey: ['chat-system-status'],
@@ -311,7 +315,17 @@ export default function Settings({
           </Group>
         </Group>
 
-        <SettingsCard title="Vai trò & dự án" icon={<IconUser size={22} color="var(--color-secondary)" />}>
+        <SettingsCard
+          title="Vai trò & dự án"
+          icon={<IconUser size={22} color="var(--color-secondary)" />}
+          right={
+            isAdmin && onOpenUsers ? (
+              <Button className="erw-settings-btn-secondary" size="compact-sm" onClick={onOpenUsers}>
+                Người dùng hệ thống
+              </Button>
+            ) : null
+          }
+        >
           {isLoadingProjects ? (
             <Center py="md">
               <Loader size="sm" type="dots" />
@@ -362,6 +376,10 @@ export default function Settings({
               </Table>
             </Table.ScrollContainer>
           )}
+        </SettingsCard>
+
+        <SettingsCard title="Thành viên dự án" icon={<IconUsers size={22} color="var(--color-secondary)" />}>
+          <ProjectMembersSection project={project} canManage={canManageMembers} />
         </SettingsCard>
 
         {canChatSettings && (

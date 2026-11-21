@@ -49,7 +49,11 @@ def login(
         select(User).where(func.lower(User.email) == email.lower())
     ).scalar_one_or_none()
 
-    if user is None or not verify_password(req.password, user.password_hash):
+    if (
+        user is None
+        or not getattr(user, "is_active", True)
+        or not verify_password(req.password, user.password_hash)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

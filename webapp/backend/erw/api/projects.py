@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from erw.auth import get_session, get_user_project_role, require_admin, require_authenticated_user
 from erw.models import Issue, Project, ProjectMember, RiskState, User
 from erw.settings import Settings, get_settings
+
+MemberRole = Literal["pm", "viewer"]
 
 
 class ProjectStats(BaseModel):
@@ -137,6 +139,175 @@ def toggle_tracking(
         status_map=p.status_map or {},
         thresholds=p.thresholds or {},
     )
+
+
+class ProjectMemberItem(BaseModel):
+    user_id: int
+    email: str
+    name: str
+    role: str
+    is_active: bool
+
+
+class ProjectMemberCreate(BaseModel):
+    email: str
+    role: MemberRole = "viewer"
+
+
+class ProjectMemberUpdate(BaseModel):
+    role: MemberRole
+
+
+def _ensure_project(session: Session, key: str) -> Project:
+    project = session.get(Project, key)
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    return project
+
+
+def _require_project_access(session: Session, user: User, key: str) -> str:
+    role = get_user_project_role(session, user, key)
+    if user.is_admin:
+        return "admin"
+    if role is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied for project")
+    return role
+
+
+def _require_member_manager(session: Session, user: User, key: str) -> None:
+    role = _require_project_access(session, user, key)
+    if user.is_admin or role == "pm":
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PM role required for project")
+
+
+def _count_pms(session: Session, project_key: str) -> int:
+    return int(
+        session.scalar(
+            select(func.count())
+            .select_from(ProjectMember)
+            .where(ProjectMember.project_key == project_key, ProjectMember.role == "pm")
+        )
+        or 0
+    )
+
+
+def _serialize_member(member: ProjectMember, user: User) -> ProjectMemberItem:
+    return ProjectMemberItem(
+        user_id=user.id,
+        email=user.email,
+        name=user.name,
+        role=member.role,
+        is_active=bool(getattr(user, "is_active", True)),
+    )
+
+
+def _guard_last_pm(session: Session, project_key: str, member: ProjectMember, *, removing: bool, new_role: str | None) -> None:
+    if member.role != "pm":
+        return
+    demoting = new_role is not None and new_role != "pm"
+    if not removing and not demoting:
+        return
+    if _count_pms(session, project_key) <= 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove or demote the last PM of this project",
+        )
+
+
+@_projects_sub.get("/{key}/members", response_model=list[ProjectMemberItem])
+@_projects_sub.get("/{key}/members/", response_model=list[ProjectMemberItem], include_in_schema=False)
+def list_members(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> list[ProjectMemberItem]:
+    _ensure_project(session, key)
+    _require_project_access(session, user, key)
+    rows = session.execute(
+        select(ProjectMember, User)
+        .join(User, User.id == ProjectMember.user_id)
+        .where(ProjectMember.project_key == key)
+        .order_by(func.lower(User.email))
+    ).all()
+    return [_serialize_member(member, member_user) for member, member_user in rows]
+
+
+@_projects_sub.post("/{key}/members", response_model=ProjectMemberItem, status_code=status.HTTP_201_CREATED)
+@_projects_sub.post(
+    "/{key}/members/",
+    response_model=ProjectMemberItem,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
+def add_member(
+    key: str,
+    body: ProjectMemberCreate,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> ProjectMemberItem:
+    _ensure_project(session, key)
+    _require_member_manager(session, user, key)
+    email = body.email.strip()
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required")
+    target = session.execute(
+        select(User).where(func.lower(User.email) == email.lower())
+    ).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if not getattr(target, "is_active", True):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is disabled")
+    existing = session.get(ProjectMember, (key, target.id))
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User is already a member")
+    member = ProjectMember(project_key=key, user_id=target.id, role=body.role)
+    session.add(member)
+    session.commit()
+    session.refresh(member)
+    return _serialize_member(member, target)
+
+
+@_projects_sub.patch("/{key}/members/{user_id}", response_model=ProjectMemberItem)
+@_projects_sub.patch("/{key}/members/{user_id}/", response_model=ProjectMemberItem, include_in_schema=False)
+def update_member(
+    key: str,
+    user_id: int,
+    body: ProjectMemberUpdate,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> ProjectMemberItem:
+    _ensure_project(session, key)
+    _require_member_manager(session, user, key)
+    member = session.get(ProjectMember, (key, user_id))
+    if member is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+    target = session.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    _guard_last_pm(session, key, member, removing=False, new_role=body.role)
+    member.role = body.role
+    session.commit()
+    session.refresh(member)
+    return _serialize_member(member, target)
+
+
+@_projects_sub.delete("/{key}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@_projects_sub.delete("/{key}/members/{user_id}/", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
+def remove_member(
+    key: str,
+    user_id: int,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> None:
+    _ensure_project(session, key)
+    _require_member_manager(session, user, key)
+    member = session.get(ProjectMember, (key, user_id))
+    if member is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found")
+    _guard_last_pm(session, key, member, removing=True, new_role=None)
+    session.delete(member)
+    session.commit()
 
 
 router.include_router(_projects_sub)

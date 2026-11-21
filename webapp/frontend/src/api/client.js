@@ -349,3 +349,57 @@ export async function getChatSystemStatus() {
   return await apiFetch('/api/chat/system-status');
 }
 
+/** Admin: list app users (optional `q` search). */
+export async function listAdminUsers(q = '') {
+  const query = new URLSearchParams();
+  if (q) query.set('q', q);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return await apiFetch(`/api/admin/users${suffix}`);
+}
+
+/** Admin: create user; response includes one-time `generated_password`. */
+export async function createAdminUser({ email, name, is_admin = false }) {
+  return await apiFetch('/api/admin/users', {
+    method: 'POST',
+    body: { email, name, is_admin },
+  });
+}
+
+/** Admin: patch user; pass `reset_password: true` for one-time generated password. */
+export async function patchAdminUser(userId, patch) {
+  return await apiFetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'PATCH',
+    body: patch,
+  });
+}
+
+export async function listProjectMembers(projectKey) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/members`);
+}
+
+export async function addProjectMember(projectKey, { email, role = 'viewer' }) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/members`, {
+    method: 'POST',
+    body: { email, role },
+  });
+}
+
+export async function patchProjectMember(projectKey, userId, { role }) {
+  return await apiFetch(
+    `/api/projects/${encodeURIComponent(projectKey)}/members/${encodeURIComponent(userId)}`,
+    {
+      method: 'PATCH',
+      body: { role },
+    },
+  );
+}
+
+export async function removeProjectMember(projectKey, userId) {
+  return await apiFetch(
+    `/api/projects/${encodeURIComponent(projectKey)}/members/${encodeURIComponent(userId)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+}
+

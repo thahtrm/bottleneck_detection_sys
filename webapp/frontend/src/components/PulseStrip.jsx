@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Box, Chip, Group, Paper, Progress, Select, Stack, Text, Tooltip } from '@mantine/core';
+import { Alert, Box, Chip, Group, Progress, Select, Stack, Text, Tooltip } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { CHIPS } from '../dashboard/boardModel.js';
 
@@ -45,7 +45,15 @@ function SprintProgress({ sprint, progress }) {
   );
 }
 
-export default function PulseStrip({ board, counts, chips, onToggleChip, sprintId, onSprintChange }) {
+export default function PulseStrip({
+  board,
+  counts,
+  chips,
+  onToggleChip,
+  sprintId,
+  onSprintChange,
+  embedded = false,
+}) {
   const sprintOptions = [
     { value: '', label: 'Tất cả sprint' },
     ...board.sprints.map((s) => ({
@@ -53,46 +61,46 @@ export default function PulseStrip({ board, counts, chips, onToggleChip, sprintI
       label: s.state === 'active' ? `${s.name} (đang chạy)` : s.name,
     })),
   ];
-  return (
-    <Paper withBorder radius="md" p="sm">
-      <Stack gap="sm">
-        <Group justify="space-between" align="center" gap="md" wrap="wrap">
-          <Group gap="xs" wrap="wrap">
-            {CHIPS.map((chip) => (
-              <Chip
-                key={chip.id}
-                size="sm"
-                variant="outline"
-                checked={chips.includes(chip.id)}
-                onChange={() => onToggleChip(chip.id)}
-              >
-                {chip.label} · {counts[chip.id]}
-              </Chip>
-            ))}
-          </Group>
-          {board.sprints.length > 0 && (
-            <Group gap="md" wrap="nowrap" style={{ flex: '1 1 480px', justifyContent: 'flex-end' }}>
-              {board.sprint && board.progress && <SprintProgress sprint={board.sprint} progress={board.progress} />}
-              <Select
-                size="xs"
-                w={190}
-                data={sprintOptions}
-                value={sprintId == null ? '' : String(sprintId)}
-                onChange={(value) => onSprintChange(value ? Number(value) : null)}
-                allowDeselect={false}
-                aria-label="Lọc theo sprint"
-              />
-            </Group>
-          )}
+  const body = (
+    <Stack gap={embedded ? 'xs' : 'sm'}>
+      <Group justify="space-between" align="center" gap="md" wrap="wrap">
+        <Group gap="xs" wrap="wrap">
+          {CHIPS.map((chip) => (
+            <Chip
+              key={chip.id}
+              size="sm"
+              variant="outline"
+              checked={chips.includes(chip.id)}
+              onChange={() => onToggleChip(chip.id)}
+            >
+              {chip.label} · {counts[chip.id]}
+            </Chip>
+          ))}
         </Group>
-        {board.truncated && (
-          <Alert color="gray" variant="light" icon={<IconAlertCircle size={16} />} py={6}>
-            <Text size="xs">
-              Đang hiển thị {board.cards.length}/{board.total} việc. Chọn dự án, sprint hoặc tìm kiếm để thu hẹp.
-            </Text>
-          </Alert>
+        {board.sprints.length > 0 && (
+          <Group gap="md" wrap="nowrap" style={{ flex: '1 1 480px', justifyContent: 'flex-end' }}>
+            {board.sprint && board.progress && <SprintProgress sprint={board.sprint} progress={board.progress} />}
+            <Select
+              size="xs"
+              w={190}
+              data={sprintOptions}
+              value={sprintId == null ? '' : String(sprintId)}
+              onChange={(value) => onSprintChange(value ? Number(value) : null)}
+              allowDeselect={false}
+              aria-label="Lọc theo sprint"
+            />
+          </Group>
         )}
-      </Stack>
-    </Paper>
+      </Group>
+      {board.truncated && (
+        <Alert color="gray" variant="light" icon={<IconAlertCircle size={16} />} py={6}>
+          <Text size="xs">
+            Đang hiển thị {board.cards.length}/{board.total} việc. Chọn dự án, sprint hoặc tìm kiếm để thu hẹp.
+          </Text>
+        </Alert>
+      )}
+    </Stack>
   );
+
+  return body;
 }

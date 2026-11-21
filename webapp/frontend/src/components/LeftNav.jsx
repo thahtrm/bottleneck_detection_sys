@@ -8,6 +8,7 @@ import {
   IconList,
   IconMessageCircle,
   IconSettings,
+  IconUsers,
 } from '@tabler/icons-react';
 import '../styles/kaggleTokens.css';
 
@@ -16,11 +17,16 @@ const NAV_META = [
   { value: 'list', label: 'Danh sách', Icon: IconList },
   { value: 'graph', label: 'Đồ thị', Icon: IconAffiliate },
   { value: 'chat', label: 'Chat', Icon: IconMessageCircle, chatOnly: true },
+  { value: 'users', label: 'Người dùng', Icon: IconUsers, adminOnly: true },
   { value: 'settings', label: 'Cài đặt', Icon: IconSettings },
 ];
 
-export function buildViewNavItems({ showChatNav }) {
-  return NAV_META.filter((item) => !item.chatOnly || showChatNav);
+export function buildViewNavItems({ showChatNav, showUsersNav }) {
+  return NAV_META.filter((item) => {
+    if (item.chatOnly && !showChatNav) return false;
+    if (item.adminOnly && !showUsersNav) return false;
+    return true;
+  });
 }
 
 /**
@@ -32,11 +38,12 @@ export default function LeftNav({
   view,
   onViewChange,
   showChatNav = false,
+  showUsersNav = false,
   collapsed = false,
   onToggleCollapsed,
   showCollapseToggle = false,
 }) {
-  const items = buildViewNavItems({ showChatNav });
+  const items = buildViewNavItems({ showChatNav, showUsersNav });
   const active = items.some((item) => item.value === view) ? view : 'board';
   const scopeClass = collapsed ? 'erw-nav-scope erw-nav-collapsed' : 'erw-nav-scope';
 

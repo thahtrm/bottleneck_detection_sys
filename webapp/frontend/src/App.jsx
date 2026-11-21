@@ -9,6 +9,7 @@ import { useBubblePref } from './hooks/useBubblePref';
 import { useNavCollapsed } from './hooks/useNavCollapsed';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
+import UsersAdmin from './pages/UsersAdmin';
 import Header from './components/Header';
 import LeftNav from './components/LeftNav';
 import BoardView from './components/board/BoardView';
@@ -100,9 +101,10 @@ function AppContent() {
   const canChatOnSelected =
     Boolean(state.project) && (user.is_admin || selectedProjectRole === 'pm');
 
-  // Settings open to all authenticated; chat nav for PM/Admin only.
+  // Settings open to all authenticated; chat nav for PM/Admin only; users nav admin-only.
   let view = state.view;
   if (view === 'chat' && !canUseChat) view = 'board';
+  if (view === 'users' && !user.is_admin) view = 'board';
 
   const selectIssue = (issue) => {
     setSuggestionKey(null);
@@ -124,7 +126,8 @@ function AppContent() {
   };
 
   const showBubble = bubbleEnabled && (view === 'board' || view === 'list') && canUseChat;
-  const panelOpen = Boolean(state.issue) && view !== 'settings' && view !== 'chat';
+  const panelOpen =
+    Boolean(state.issue) && view !== 'settings' && view !== 'chat' && view !== 'users';
 
   return (
     <AppShell
@@ -159,6 +162,7 @@ function AppContent() {
             setMobileNavOpened(false);
           }}
           showChatNav={canUseChat}
+          showUsersNav={Boolean(user.is_admin)}
           collapsed={railCollapsed}
           onToggleCollapsed={setNavCollapsed}
           showCollapseToggle={!isMobileNav}
@@ -188,8 +192,10 @@ function AppContent() {
             projects={projects}
             onBackToDashboard={() => patch({ view: 'board' })}
             onOpenChat={() => patch({ view: 'chat' })}
+            onOpenUsers={user.is_admin ? () => patch({ view: 'users' }) : undefined}
           />
         )}
+        {view === 'users' && <UsersAdmin />}
         {view === 'graph' && (
           <NetworkGraph selectedProject={state.project} onSelectIssue={selectIssue} selectedIssueKey={state.issue} />
         )}

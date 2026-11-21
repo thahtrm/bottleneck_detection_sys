@@ -41,6 +41,7 @@ def _upsert_user(
             name=name,
             password_hash=hash_password(password),
             is_admin=is_admin,
+            is_active=True,
             created_at=now,
         )
         session.add(user)
@@ -48,6 +49,7 @@ def _upsert_user(
     else:
         user.name = name
         user.password_hash = hash_password(password)
+        user.is_active = True
         user.is_admin = is_admin
         session.flush()
     return user

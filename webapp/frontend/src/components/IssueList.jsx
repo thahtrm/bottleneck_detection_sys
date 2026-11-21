@@ -1,8 +1,48 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Group, Table, Text } from '@mantine/core';
-import { describeCard } from '../dashboard/boardModel.js';
+import { IconChevronDown, IconChevronUp, IconSelector } from '@tabler/icons-react';
+import { LEVELS, describeCard, isDone } from '../dashboard/boardModel.js';
 import { AssigneeAvatar, CardMarkers, CardMenu, selectableProps } from './board/cardParts';
 import classes from './board/board.module.css';
+
+const UNSCORED_RANK = 0;
+
+function riskRank(card) {
+  if (isDone(card)) return -1;
+  return LEVELS[card.level]?.rank ?? UNSCORED_RANK;
+}
+
+function deadlineMs(card) {
+  if (!card.deadline?.at) return Number.POSITIVE_INFINITY;
+  const value = Date.parse(card.deadline.at);
+  return Number.isNaN(value) ? Number.POSITIVE_INFINITY : value;
+}
+
+function compareCards(a, b, sortKey, direction) {
+  const dir = direction === 'desc' ? -1 : 1;
+  let cmp = 0;
+  if (sortKey === 'risk') cmp = riskRank(a) - riskRank(b);
+  else if (sortKey === 'deadline') cmp = deadlineMs(a) - deadlineMs(b);
+  else cmp = a.key.localeCompare(b.key, undefined, { numeric: true });
+  if (cmp !== 0) return cmp * dir;
+  return a.key.localeCompare(b.key, undefined, { numeric: true });
+}
+
+function SortHeader({ label, sortKey, activeKey, direction, onSort }) {
+  const active = activeKey === sortKey;
+  const Icon = !active ? IconSelector : direction === 'asc' ? IconChevronUp : IconChevronDown;
+  return (
+    <button
+      type="button"
+      className={classes.sortButton}
+      onClick={() => onSort(sortKey)}
+      aria-label={`Sắp xếp theo ${label}`}
+    >
+      {label}
+      <Icon size={14} stroke={1.75} />
+    </button>
+  );
+}
 
 function IssueRow({ card, ctx, selected, onSelect, onMoveStatus }) {
   const facts = describeCard(card, ctx);
@@ -59,51 +99,80 @@ function IssueRow({ card, ctx, selected, onSelect, onMoveStatus }) {
 }
 
 export default function IssueList({ columns, ctx, selectedKey, onSelect, onMoveStatus, canMoveStatus }) {
+  const [sortKey, setSortKey] = useState('risk');
+  const [direction, setDirection] = useState('desc');
+
+  const onSort = (nextKey) => {
+    if (sortKey === nextKey) {
+      setDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(nextKey);
+    setDirection(nextKey === 'key' ? 'asc' : 'desc');
+  };
+
+  const sortedColumns = useMemo(
+    () =>
+      columns.map((column) => ({
+        ...column,
+        cards: [...column.cards].sort((a, b) => compareCards(a, b, sortKey, direction)),
+      })),
+    [columns, sortKey, direction],
+  );
+
   return (
-    <Table.ScrollContainer minWidth={760}>
-      <Table verticalSpacing={6} stickyHeader withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th w={190}>Rủi ro</Table.Th>
-            <Table.Th>Công việc</Table.Th>
-            <Table.Th w={130}>Trạng thái</Table.Th>
-            <Table.Th w={120}>Hạn</Table.Th>
-            <Table.Th w={170}>Phụ trách</Table.Th>
-            <Table.Th w={40} />
-          </Table.Tr>
-        </Table.Thead>
-        {columns.map((column) => (
-          <Table.Tbody key={column.id}>
-            <Table.Tr className={classes.groupRow}>
-              <Table.Td colSpan={6}>
-                <Group gap="sm">
-                  <Text size="sm" fw={700}>
-                    {column.title}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {column.count} việc
-                  </Text>
-                  {column.highCount > 0 && (
-                    <Text size="xs" fw={600} c="red.8">
-                      {column.highCount} Cao
-                    </Text>
-                  )}
-                </Group>
-              </Table.Td>
+    <div className={classes.tableWrap}>
+      <Table.ScrollContainer minWidth={760}>
+        <Table verticalSpacing={6} stickyHeader withTableBorder>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th w={190}>
+                <SortHeader label="Rủi ro" sortKey="risk" activeKey={sortKey} direction={direction} onSort={onSort} />
+              </Table.Th>
+              <Table.Th>
+                <SortHeader label="Key" sortKey="key" activeKey={sortKey} direction={direction} onSort={onSort} />
+              </Table.Th>
+              <Table.Th w={130}>Trạng thái</Table.Th>
+              <Table.Th w={120}>
+                <SortHeader label="Hạn" sortKey="deadline" activeKey={sortKey} direction={direction} onSort={onSort} />
+              </Table.Th>
+              <Table.Th w={170}>Phụ trách</Table.Th>
+              <Table.Th w={40} />
             </Table.Tr>
-            {column.cards.map((card) => (
-              <IssueRow
-                key={card.key}
-                card={card}
-                ctx={ctx}
-                selected={card.key === selectedKey}
-                onSelect={onSelect}
-                onMoveStatus={canMoveStatus(card) ? onMoveStatus : undefined}
-              />
-            ))}
-          </Table.Tbody>
-        ))}
-      </Table>
-    </Table.ScrollContainer>
+          </Table.Thead>
+          {sortedColumns.map((column) => (
+            <Table.Tbody key={column.id}>
+              <Table.Tr className={classes.groupRow}>
+                <Table.Td colSpan={6}>
+                  <Group gap="sm">
+                    <Text size="sm" fw={700}>
+                      {column.title}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {column.count} việc
+                    </Text>
+                    {column.highCount > 0 && (
+                      <Text size="xs" fw={600} c="red.8">
+                        {column.highCount} Cao
+                      </Text>
+                    )}
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+              {column.cards.map((card) => (
+                <IssueRow
+                  key={card.key}
+                  card={card}
+                  ctx={ctx}
+                  selected={card.key === selectedKey}
+                  onSelect={onSelect}
+                  onMoveStatus={canMoveStatus(card) ? onMoveStatus : undefined}
+                />
+              ))}
+            </Table.Tbody>
+          ))}
+        </Table>
+      </Table.ScrollContainer>
+    </div>
   );
 }

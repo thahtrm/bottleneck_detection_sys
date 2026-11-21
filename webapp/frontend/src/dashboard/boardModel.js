@@ -18,7 +18,7 @@ const DEADLINE_TYPES = {
 
 export const isDone = (card) => card.triage === 'done';
 
-const levelOf = (card) => (isDone(card) ? DONE : LEVELS[card.level] ?? UNSCORED);
+export const levelOf = (card) => (isDone(card) ? DONE : LEVELS[card.level] ?? UNSCORED);
 
 const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 

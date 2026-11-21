@@ -6,16 +6,18 @@ import { useBoardIssues } from '../../dashboard/useBoardIssues.js';
 import PulseStrip from '../PulseStrip';
 import IssueList from '../IssueList';
 import RiskBoard from './RiskBoard';
+import classes from './board.module.css';
+import '../../styles/kaggleTokens.css';
 
 const GROUP_OPTIONS = Object.entries(GROUPINGS).map(([value, grouping]) => ({ value, label: grouping.label }));
 
 function BoardSkeleton() {
   return (
-    <Stack gap="md">
+    <Stack gap="md" className={`erw-board-scope ${classes.scope}`}>
       <Skeleton height={56} radius="md" />
       <Group gap="sm" align="flex-start" wrap="nowrap">
         {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} height={420} width={290} radius="md" />
+          <Skeleton key={i} height={420} width={280} radius="md" />
         ))}
       </Group>
     </Stack>
@@ -55,52 +57,57 @@ export default function BoardView({ state, patch, onMoveStatus, canMoveStatus, o
   const Renderer = state.view === 'list' ? IssueList : RiskBoard;
 
   return (
-    <Stack gap="sm">
-      <PulseStrip
-        board={board}
-        counts={counts}
-        chips={state.chips}
-        onToggleChip={toggleChip}
-        sprintId={state.sprint}
-        onSprintChange={(sprint) => patch({ sprint })}
-      />
-      <Group justify="space-between" align="center" wrap="wrap">
-        <Group gap="sm">
-          <Text size="sm">
-            {state.chips.length > 0 ? (
-              <>
-                Đang lọc <strong>{shown}</strong>/{board.cards.length} việc
-              </>
-            ) : (
-              <>
-                <strong>{shown}</strong> việc
-              </>
-            )}
-            {high > 0 && (
-              <Text span size="sm" c="red.8" fw={600}>
-                {' · '}
-                {high} Cao
-              </Text>
-            )}
-          </Text>
-          {state.chips.length > 0 && (
-            <Button variant="subtle" size="compact-xs" color="gray" onClick={() => patch({ chips: [] })}>
-              Bỏ lọc
-            </Button>
-          )}
-        </Group>
-        <Group gap="xs">
-          <Text size="xs" c="dimmed">
-            Nhóm theo
-          </Text>
-          <SegmentedControl
-            size="xs"
-            data={GROUP_OPTIONS}
-            value={state.group}
-            onChange={(group) => patch({ group })}
+    <Stack gap="sm" className={`erw-board-scope ${classes.scope}`}>
+      <div className={classes.toolbar}>
+        <Stack gap="sm">
+          <PulseStrip
+            board={board}
+            counts={counts}
+            chips={state.chips}
+            onToggleChip={toggleChip}
+            sprintId={state.sprint}
+            onSprintChange={(sprint) => patch({ sprint })}
+            embedded
           />
-        </Group>
-      </Group>
+          <Group justify="space-between" align="center" wrap="wrap">
+            <Group gap="sm">
+              <Text size="sm" className={classes.toolbarMeta}>
+                {state.chips.length > 0 ? (
+                  <>
+                    Đang lọc <strong>{shown}</strong>/{board.cards.length} việc
+                  </>
+                ) : (
+                  <>
+                    <strong>{shown}</strong> việc
+                  </>
+                )}
+                {high > 0 && (
+                  <Text span size="sm" c="red.8" fw={600}>
+                    {' · '}
+                    {high} Cao
+                  </Text>
+                )}
+              </Text>
+              {state.chips.length > 0 && (
+                <Button variant="subtle" size="compact-xs" color="gray" onClick={() => patch({ chips: [] })}>
+                  Bỏ lọc
+                </Button>
+              )}
+            </Group>
+            <Group gap="xs">
+              <Text size="xs" c="dimmed">
+                Nhóm theo
+              </Text>
+              <SegmentedControl
+                size="xs"
+                data={GROUP_OPTIONS}
+                value={state.group}
+                onChange={(group) => patch({ group })}
+              />
+            </Group>
+          </Group>
+        </Stack>
+      </div>
       <Renderer
         columns={columns}
         ctx={ctx}

@@ -1,20 +1,57 @@
+.scope {
+  --color-primary: #20beff;
+  --color-secondary: #1a73e8;
+  --color-tertiary: #fdd835;
+  --color-neutral: #202124;
+  --color-surface: #ffffff;
+  --color-surface-container: #f8f9fa;
+  --color-outline: #bdc1c6;
+  --color-error: #d93025;
+  --color-on-primary: #ffffff;
+  --color-on-surface: #202124;
+  --color-risk-high: #d93025;
+  --color-risk-med: #e37400;
+  --color-risk-low: #188038;
+  --color-risk-none: #5f6368;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-full: 9999px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  font-family: Inter, sans-serif;
+  color: var(--color-on-surface);
+}
+
+.toolbar {
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.toolbarMeta {
+  font-size: 12px;
+  color: #5f6368;
+}
+
 .board {
   display: flex;
-  gap: var(--mantine-spacing-sm);
+  gap: var(--space-sm);
   align-items: flex-start;
   overflow-x: auto;
-  padding-bottom: var(--mantine-spacing-xs);
+  padding-bottom: var(--space-xs);
 }
 
 .column {
-  flex: 0 0 290px;
+  flex: 0 0 280px;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 250px);
+  max-height: calc(100vh - 230px);
   min-height: 160px;
-  background: var(--mantine-color-gray-0);
-  border: 1px solid var(--mantine-color-gray-3);
-  border-radius: var(--mantine-radius-md);
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-md);
 }
 
 .columnHeader {
@@ -22,14 +59,15 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--mantine-color-gray-3);
+  border-bottom: 1px solid var(--color-outline);
+  font-family: Inter, sans-serif;
 }
 
 .columnBody {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
   overflow-y: auto;
 }
 
@@ -38,27 +76,27 @@
   flex-direction: column;
   gap: 4px;
   padding: 8px 10px 8px 12px;
-  background: var(--mantine-color-white);
-  border: 1px solid var(--mantine-color-gray-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline);
   border-left: 4px solid var(--stripe);
-  border-radius: var(--mantine-radius-sm);
+  border-radius: var(--radius-md);
   cursor: pointer;
   outline: none;
-  transition: box-shadow 120ms ease, border-color 120ms ease;
+  transition: box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1), border-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card:hover {
-  box-shadow: var(--mantine-shadow-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 .card:focus-visible {
-  box-shadow: 0 0 0 2px var(--mantine-color-blue-5);
+  box-shadow: 0 0 0 2px var(--color-secondary);
 }
 
 .card[data-selected] {
-  border-color: var(--mantine-color-blue-5);
+  border-color: var(--color-secondary);
   border-left-color: var(--stripe);
-  background: var(--mantine-color-blue-0);
+  background: var(--color-surface-container);
 }
 
 .row {
@@ -67,12 +105,12 @@
 }
 
 .row:focus-visible {
-  outline: 2px solid var(--mantine-color-blue-5);
+  outline: 2px solid var(--color-secondary);
   outline-offset: -2px;
 }
 
 .row[data-selected] {
-  background: var(--mantine-color-blue-0);
+  background: var(--color-surface-container);
 }
 
 .riskCell {
@@ -81,5 +119,44 @@
 }
 
 .groupRow {
-  background: var(--mantine-color-gray-1);
+  background: var(--color-surface-container);
+}
+
+.groupRow td {
+  border-bottom: 1px solid var(--color-outline);
+}
+
+.sortButton {
+  appearance: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-neutral);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sortButton:hover {
+  color: var(--color-secondary);
+}
+
+.tableWrap :global(.mantine-Table-table) {
+  border-color: var(--color-outline);
+}
+
+.tableWrap :global(thead th) {
+  background: var(--color-surface);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #5f6368;
 }

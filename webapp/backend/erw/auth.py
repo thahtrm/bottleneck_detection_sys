@@ -96,6 +96,11 @@ def require_authenticated_user(user: User | None = Depends(get_current_user)) ->
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
+    if not getattr(user, "is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
     return user
 
 

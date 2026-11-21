@@ -65,9 +65,17 @@ def make_engine(url: str) -> Engine:
 
 
 def init_db(engine: Engine) -> None:
+    from sqlalchemy import inspect, text
+
     from erw.models import Base
 
     Base.metadata.create_all(engine)
+    # Lightweight SQLite column add for existing demos (no Alembic in this app).
+    if engine.dialect.name == "sqlite":
+        cols = {c["name"] for c in inspect(engine).get_columns("users")}
+        if "is_active" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"))
 
 
 def utcnow() -> datetime:
