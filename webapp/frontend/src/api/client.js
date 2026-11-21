@@ -302,17 +302,19 @@ export async function deleteChatMemory(project, memoryId) {
   });
 }
 
-/** List non-hidden report file artifacts for current user + project. */
+/** List non-hidden health report artifacts for project members. */
 export async function getChatReports(project) {
   const query = new URLSearchParams({ project });
   return await apiFetch(`/api/chat/reports?${query.toString()}`);
 }
 
-/** Stream markdown report from disk. */
-export async function downloadChatReport(reportId) {
-  const response = await fetch(`/api/chat/reports/${encodeURIComponent(reportId)}/download`, {
-    credentials: 'include',
-  });
+/** Stream report from disk (`format`: md | pdf). */
+export async function downloadChatReport(reportId, format = 'md') {
+  const query = new URLSearchParams({ format });
+  const response = await fetch(
+    `/api/chat/reports/${encodeURIComponent(reportId)}/download?${query.toString()}`,
+    { credentials: 'include' },
+  );
   if (!response.ok) {
     const error = new Error(`Tải báo cáo thất bại (${response.status})`);
     error.status = response.status;
@@ -321,8 +323,18 @@ export async function downloadChatReport(reportId) {
   const blob = await response.blob();
   const disposition = response.headers.get('content-disposition') || '';
   const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^\";]+)"?/i);
-  const filename = match?.[1] ? decodeURIComponent(match[1]) : `report-${reportId}.md`;
+  const fallbackExt = format === 'pdf' ? 'pdf' : 'md';
+  const filename = match?.[1]
+    ? decodeURIComponent(match[1])
+    : `report-${reportId}.${fallbackExt}`;
   return { blob, filename };
+}
+
+/** On-demand Daily Project Health Report (PM/Admin). */
+export async function generateHealthReport(project) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(project)}/health-report`, {
+    method: 'POST',
+  });
 }
 
 /** Soft-hide report from file manager (timeline message kept). */

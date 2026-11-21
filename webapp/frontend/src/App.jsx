@@ -10,6 +10,7 @@ import { useNavCollapsed } from './hooks/useNavCollapsed';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
 import ProjectSettings from './pages/ProjectSettings';
+import Reports from './pages/Reports';
 import UsersAdmin from './pages/UsersAdmin';
 import Header from './components/Header';
 import LeftNav from './components/LeftNav';
@@ -101,11 +102,20 @@ function AppContent() {
   // API require_chat_access: admin or PM on the selected project (not merely "is PM somewhere").
   const canChatOnSelected =
     Boolean(state.project) && (user.is_admin || selectedProjectRole === 'pm');
+  // §8.1 A+B / §8.4 A: Báo cáo nav for members who can read project reports.
+  const canReadReportsOnSelected =
+    Boolean(state.project) &&
+    (user.is_admin || selectedProjectRole === 'pm' || selectedProjectRole === 'viewer');
+  const showReportsNav =
+    Boolean(state.project) &&
+    (user.is_admin ||
+      projects.some((item) => item.key === state.project && (item.role === 'pm' || item.role === 'viewer')));
 
   // Settings open to all authenticated; chat nav for PM/Admin only; users nav admin-only.
   // Project-settings stays selectable without project (empty state); nav item requires project.
   let view = state.view;
   if (view === 'chat' && !canUseChat) view = 'board';
+  if (view === 'reports' && !canReadReportsOnSelected) view = 'board';
   if (view === 'users' && !user.is_admin) view = 'board';
 
   const selectIssue = (issue) => {
@@ -133,6 +143,7 @@ function AppContent() {
     view !== 'settings' &&
     view !== 'project-settings' &&
     view !== 'chat' &&
+    view !== 'reports' &&
     view !== 'users';
 
   return (
@@ -170,6 +181,7 @@ function AppContent() {
           showChatNav={canUseChat}
           showUsersNav={Boolean(user.is_admin)}
           showProjectSettingsNav={Boolean(state.project)}
+          showReportsNav={showReportsNav}
           collapsed={railCollapsed}
           onToggleCollapsed={setNavCollapsed}
           showCollapseToggle={!isMobileNav}
@@ -199,6 +211,9 @@ function AppContent() {
             projects={projects}
             onBackToDashboard={() => patch({ view: 'board' })}
             onOpenChat={() => patch({ view: 'chat' })}
+            onOpenReports={
+              state.project ? () => patch({ view: 'reports' }) : undefined
+            }
             onOpenUsers={user.is_admin ? () => patch({ view: 'users' }) : undefined}
             onOpenProjectSettings={
               state.project ? () => patch({ view: 'project-settings' }) : undefined
@@ -210,6 +225,17 @@ function AppContent() {
             project={state.project}
             projects={projects}
             onOpenSystemSettings={() => patch({ view: 'settings' })}
+            onOpenReports={() => patch({ view: 'reports' })}
+            onOpenChat={canUseChat ? () => patch({ view: 'chat' }) : undefined}
+          />
+        )}
+        {view === 'reports' && (
+          <Reports
+            project={state.project}
+            projects={projects}
+            onOpenChat={canUseChat ? () => patch({ view: 'chat' }) : undefined}
+            onOpenProjectSettings={() => patch({ view: 'project-settings' })}
+            onOpenScheduleSettings={() => patch({ view: 'settings' })}
           />
         )}
         {view === 'users' && <UsersAdmin />}

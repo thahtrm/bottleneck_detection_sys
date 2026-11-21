@@ -3,6 +3,7 @@ import { ActionIcon, Stack, Tooltip } from '@mantine/core';
 import {
   IconAdjustments,
   IconAffiliate,
+  IconFileReport,
   IconLayoutKanban,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
@@ -18,14 +19,21 @@ const NAV_META = [
   { value: 'list', label: 'Danh sách', Icon: IconList },
   { value: 'graph', label: 'Đồ thị', Icon: IconAffiliate },
   { value: 'chat', label: 'Chat', Icon: IconMessageCircle, chatOnly: true },
+  { value: 'reports', label: 'Báo cáo', Icon: IconFileReport, reportsOnly: true },
   { value: 'users', label: 'Người dùng', Icon: IconUsers, adminOnly: true },
   { value: 'project-settings', label: 'Cài đặt dự án', Icon: IconAdjustments, projectOnly: true },
   { value: 'settings', label: 'Cài đặt', Icon: IconSettings },
 ];
 
-export function buildViewNavItems({ showChatNav, showUsersNav, showProjectSettingsNav }) {
+export function buildViewNavItems({
+  showChatNav,
+  showUsersNav,
+  showProjectSettingsNav,
+  showReportsNav,
+}) {
   return NAV_META.filter((item) => {
     if (item.chatOnly && !showChatNav) return false;
+    if (item.reportsOnly && !showReportsNav) return false;
     if (item.adminOnly && !showUsersNav) return false;
     if (item.projectOnly && !showProjectSettingsNav) return false;
     return true;
@@ -43,11 +51,17 @@ export default function LeftNav({
   showChatNav = false,
   showUsersNav = false,
   showProjectSettingsNav = false,
+  showReportsNav = false,
   collapsed = false,
   onToggleCollapsed,
   showCollapseToggle = false,
 }) {
-  const items = buildViewNavItems({ showChatNav, showUsersNav, showProjectSettingsNav });
+  const items = buildViewNavItems({
+    showChatNav,
+    showUsersNav,
+    showProjectSettingsNav,
+    showReportsNav,
+  });
   const active = items.some((item) => item.value === view) ? view : 'board';
   const scopeClass = collapsed ? 'erw-nav-scope erw-nav-collapsed' : 'erw-nav-scope';
 

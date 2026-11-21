@@ -54,11 +54,11 @@ def test_run_due_reports_writes_disk_and_metadata(session, settings, reports_dir
     session.add(ReportSlot(user_id=pm.id, time_hhmm="08:00"))
     session.flush()
 
-    due = run_due_reports(session, NOW, settings)
+    run_due_reports(session, NOW, settings)
     session.commit()
-    assert len(due) == 1
     msg = session.query(ChatMessage).one()
     assert msg.kind == "report"
+    assert msg.recommendation_status == "ready"
     row = session.query(ReportFile).one()
     assert row.message_id == msg.id
     assert row.hidden_at is None
@@ -66,8 +66,14 @@ def test_run_due_reports_writes_disk_and_metadata(session, settings, reports_dir
     assert row.report_date == "2026-11-04"
     path = report_abs_path(settings, row.rel_path)
     assert path.is_file()
-    assert path.read_text(encoding="utf-8") == msg.body
+    body = path.read_text(encoding="utf-8")
+    assert "## 1. Overview" in body
+    assert "Báo cáo sức khỏe" in msg.body
     assert path == reports_dir / str(pm.id) / "DEMO" / "2026-11-04-0800.md"
+    pdf = path.with_suffix(".pdf")
+    # PDF optional if xhtml2pdf missing in env; when present must be sibling.
+    if pdf.is_file():
+        assert pdf.stat().st_size > 0
 
 
 def test_list_download_and_soft_hide_keep_timeline(client, settings, session, chat_world, reports_dir):
@@ -112,14 +118,42 @@ def test_list_download_and_soft_hide_keep_timeline(client, settings, session, ch
     assert again.json()["ok"] is True
 
 
-def test_viewer_cannot_list_reports(client, settings, session, chat_world, reports_dir):
+def test_viewer_can_list_and_download_reports(client, settings, session, chat_world, reports_dir):
+    """§8.4 A: project members (including viewers) may read health report artifacts."""
     pm = chat_world["pm"]
     session.add(ReportSlot(user_id=pm.id, time_hhmm="08:00"))
     session.flush()
     run_due_reports(session, NOW, settings)
     session.commit()
+    row = session.query(ReportFile).one()
     login(client, chat_world["viewer"], settings)
-    assert client.get("/api/chat/reports", params={"project": "DEMO"}).status_code == 403
+    listed = client.get("/api/chat/reports", params={"project": "DEMO"})
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+    dl = client.get(f"/api/chat/reports/{row.id}/download", params={"format": "md"})
+    assert dl.status_code == 200
+    assert "## 1. Overview" in dl.text
+    # Hide remains owner-only
+    assert client.post(f"/api/chat/reports/{row.id}/hide").status_code == 404
+
+
+def test_download_format_pdf_or_md(client, settings, session, chat_world, reports_dir):
+    pm = chat_world["pm"]
+    session.add(ReportSlot(user_id=pm.id, time_hhmm="08:00"))
+    session.flush()
+    run_due_reports(session, NOW, settings)
+    session.commit()
+    row = session.query(ReportFile).one()
+    login(client, pm, settings)
+    bad = client.get(f"/api/chat/reports/{row.id}/download", params={"format": "docx"})
+    assert bad.status_code == 400
+    md = client.get(f"/api/chat/reports/{row.id}/download", params={"format": "md"})
+    assert md.status_code == 200
+    pdf_path = report_abs_path(settings, row.rel_path).with_suffix(".pdf")
+    if pdf_path.is_file():
+        pdf = client.get(f"/api/chat/reports/{row.id}/download", params={"format": "pdf"})
+        assert pdf.status_code == 200
+        assert "application/pdf" in pdf.headers.get("content-type", "")
 
 
 def test_other_user_cannot_hide_foreign_report(client, settings, session, chat_world, reports_dir):

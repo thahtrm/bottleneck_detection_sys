@@ -26,6 +26,7 @@ from erw.pipeline.chat_memory import (
     update_memory,
 )
 from erw.pipeline.chat_reports import report_abs_path
+from erw.pipeline.health_report import pdf_rel_from_md
 from erw.settings import Settings, get_settings
 
 chat_router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -78,6 +79,7 @@ def _serialize_report(row: ReportFile) -> dict:
         "preview": row.preview,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "filename": Path(row.rel_path).name,
+        "owner_user_id": row.user_id,
     }
 
 
@@ -86,6 +88,24 @@ def _owned_report(session: Session, report_id: int, user: User) -> ReportFile | 
     if row is None or row.user_id != user.id:
         return None
     return row
+
+
+def _project_report(session: Session, report_id: int, user: User) -> ReportFile | None:
+    """Any project member (or admin) may read; hide stays owner-only via _owned_report."""
+    row = session.get(ReportFile, report_id)
+    if row is None:
+        return None
+    role = get_user_project_role(session, user, row.project_key)
+    if user.is_admin or role in {"pm", "viewer", "admin"}:
+        return row
+    return None
+
+
+def _require_project_member(session: Session, user: User, project: str) -> None:
+    role = get_user_project_role(session, user, project.strip())
+    if user.is_admin or role in {"pm", "viewer", "admin"}:
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project membership required")
 
 
 def _ollama_reachable(settings: Settings) -> bool:
@@ -360,11 +380,11 @@ def list_reports(
     user: User = Depends(require_authenticated_user),
     session: Session = Depends(get_session),
 ) -> list[dict]:
-    require_chat_access(session, user, project)
+    # §8.4 A: any project member (viewer/pm) or admin may list project health reports.
+    _require_project_member(session, user, project)
     rows = session.scalars(
         select(ReportFile)
         .where(
-            ReportFile.user_id == user.id,
             ReportFile.project_key == project.strip(),
             ReportFile.hidden_at.is_(None),
         )
@@ -376,24 +396,29 @@ def list_reports(
 @chat_router.get("/reports/{report_id}/download")
 def download_report(
     report_id: int,
+    format: str = "md",
     user: User = Depends(require_authenticated_user),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> FileResponse:
-    row = _owned_report(session, report_id, user)
+    row = _project_report(session, report_id, user)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
-    require_chat_access(session, user, row.project_key)
+    fmt = (format or "md").strip().lower()
+    if fmt not in {"md", "pdf"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="format must be md or pdf")
+    rel = row.rel_path if fmt == "md" else pdf_rel_from_md(row.rel_path)
     try:
-        path = report_abs_path(settings, row.rel_path)
+        path = report_abs_path(settings, rel)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found") from exc
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report file missing on disk")
+    media = "application/pdf" if fmt == "pdf" else "text/markdown; charset=utf-8"
     return FileResponse(
         path,
-        media_type="text/markdown; charset=utf-8",
-        filename=Path(row.rel_path).name,
+        media_type=media,
+        filename=Path(rel).name,
     )
 
 

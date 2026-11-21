@@ -96,6 +96,7 @@ export default function Settings({
   project = '',
   projects: projectsProp,
   onOpenChat,
+  onOpenReports,
   onOpenUsers,
   onOpenProjectSettings,
 }) {
@@ -358,7 +359,7 @@ export default function Settings({
               title="Lịch báo cáo chat"
               icon={<IconClock size={22} color="var(--color-secondary)" />}
             >
-              <ReportScheduleSection onViewReports={onOpenChat} />
+              <ReportScheduleSection onViewReports={onOpenReports || onOpenChat} />
             </SettingsCard>
 
             <SettingsCard
@@ -380,8 +381,15 @@ export default function Settings({
                   </Text>
                 )}
                 <Text className="erw-settings-meta">
-                  File báo cáo ngày quản lý trong tab Chat
-                  {onOpenChat ? (
+                  File báo cáo sức khỏe: nav Báo cáo hoặc Chat
+                  {onOpenReports ? (
+                    <>
+                      {' — '}
+                      <Button variant="subtle" size="compact-xs" className="erw-settings-link" onClick={onOpenReports}>
+                        Mở Báo cáo
+                      </Button>
+                    </>
+                  ) : onOpenChat ? (
                     <>
                       {' — '}
                       <Button variant="subtle" size="compact-xs" className="erw-settings-link" onClick={onOpenChat}>

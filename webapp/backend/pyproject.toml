@@ -20,6 +20,7 @@ dependencies = [
   "early-risk-detection",
   "pandas",
   "duckdb",
+  "xhtml2pdf",
 ]
 
 [project.optional-dependencies]

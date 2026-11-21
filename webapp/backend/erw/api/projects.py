@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -8,7 +9,9 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from erw.auth import get_session, get_user_project_role, require_admin, require_authenticated_user
+from erw.db import utcnow
 from erw.models import Issue, Project, ProjectMember, RiskState, User
+from erw.pipeline.chat_reports import persist_health_report, report_dedup_key
 from erw.settings import Settings, get_settings
 
 MemberRole = Literal["pm", "viewer"]
@@ -213,6 +216,51 @@ def _guard_last_pm(session: Session, project_key: str, member: ProjectMember, *,
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot remove or demote the last PM of this project",
         )
+
+
+@_projects_sub.post("/{key}/health-report")
+@_projects_sub.post("/{key}/health-report/", include_in_schema=False)
+def generate_health_report(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    """On-demand Daily Project Health Report (PM/Admin). Reuses ReportSlot artifact shape."""
+    _ensure_project(session, key)
+    role = get_user_project_role(session, user, key)
+    if not (user.is_admin or role == "pm"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PM role required for project")
+    now = utcnow()
+    local = now.astimezone(ZoneInfo(settings.tz))
+    hhmm = f"{local:%H:%M}"
+    local_day = local.date().isoformat()
+    slot_label = f"od-{hhmm}"
+    # On-demand dedup per user/project/day+minute; file name uses od- prefix vs schedule.
+    dedup = report_dedup_key(user.id, key, slot_label, local_day)
+    message = persist_health_report(
+        session,
+        settings,
+        user_id=user.id,
+        project=key,
+        now=now,
+        hhmm=slot_label,
+        local_day=local_day,
+        dedup=dedup,
+    )
+    session.commit()
+    if message is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Health report already generated for this slot/day",
+        )
+    return {
+        "ok": True,
+        "message_id": message.id,
+        "project": key,
+        "report_date": local_day,
+        "slot_hhmm": hhmm,
+    }
 
 
 @_projects_sub.get("/{key}/members", response_model=list[ProjectMemberItem])
