@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" role="img" aria-label="Early Risk Web">
+  <defs>
+    <linearGradient id="erwWmBg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00C8FF"/>
+      <stop offset="55%" stop-color="#1A8CFF"/>
+      <stop offset="100%" stop-color="#0B5ED7"/>
+    </linearGradient>
+    <linearGradient id="erwWmPulse" x1="18" y1="18" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#B8ECFF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Mark -->
+  <g transform="translate(0 0)">
+    <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#erwWmBg)"/>
+    <path d="M14 8c10-3 28-2 36 6-8 2-18 1-26 4-6 2-10 7-12 12 0-8 1-17 2-22z" fill="#FFFFFF" opacity="0.18"/>
+    <path d="M12 20c8 0 14 2 18 6 3.2 3.2 5.2 6.8 9 8" fill="none" stroke="#E8F8FF" stroke-width="3.2" stroke-linecap="round" opacity="0.95"/>
+    <path d="M12 32h27" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" opacity="0.92"/>
+    <path d="M12 44c8 0 14-2 18-6 3.2-3.2 5.2-6.8 9-8" fill="none" stroke="#D7F3FF" stroke-width="3.2" stroke-linecap="round" opacity="0.9"/>
+    <circle cx="22" cy="32" r="7.5" fill="url(#erwWmPulse)" opacity="0.95"/>
+    <circle cx="22" cy="32" r="11.5" fill="none" stroke="#FFE566" stroke-width="2" opacity="0.95"/>
+    <circle cx="22" cy="32" r="3.2" fill="#0B5ED7"/>
+    <circle cx="48" cy="32" r="3.4" fill="#FFE566"/>
+    <path d="M42 32h3.5" stroke="#FFE566" stroke-width="2.4" stroke-linecap="round"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g font-family="Inter, 'Segoe UI', system-ui, sans-serif" fill="#0B1F33">
+    <text x="76" y="30" font-size="22" font-weight="700" letter-spacing="-0.02em">Early Risk</text>
+    <text x="76" y="50" font-size="13" font-weight="600" letter-spacing="0.08em" fill="#1A8CFF">WEB · TGN / ERW</text>
+  </g>
+</svg>

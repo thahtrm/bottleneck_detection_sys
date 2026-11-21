@@ -2,19 +2,17 @@ import React, { useState } from 'react';
 import {
   Container,
   Paper,
-  Title,
   Text,
   TextInput,
   PasswordInput,
   Button,
   Alert,
   Stack,
-  ThemeIcon,
   Center,
-  Box,
 } from '@mantine/core';
-import { IconMail, IconLock, IconAlertCircle, IconShieldLock } from '@tabler/icons-react';
+import { IconMail, IconLock, IconAlertCircle } from '@tabler/icons-react';
 import { useAuth } from '../context/AuthContext';
+import AppLogo from '../components/brand/AppLogo';
 
 export default function Login() {
   const { login } = useAuth();
@@ -52,13 +50,8 @@ export default function Login() {
   return (
     <Center style={{ minHeight: '100vh' }} py="xl" bg="gray.0">
       <Container size={420} my={40} style={{ width: '100%' }}>
-        <Stack align="center" mb="lg" gap="xs">
-          <ThemeIcon size={56} radius="xl" color="blue" variant="light">
-            <IconShieldLock size={32} />
-          </ThemeIcon>
-          <Title order={2} ta="center" fw={700}>
-            Early Risk Web
-          </Title>
+        <Stack align="center" mb="lg" gap="sm">
+          <AppLogo variant="wordmark" size="xl" />
           <Text c="dimmed" size="sm" ta="center">
             Hệ thống phát hiện &amp; cảnh báo sớm rủi ro tiến độ dự án Jira
           </Text>

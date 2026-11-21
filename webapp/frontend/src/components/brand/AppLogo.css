@@ -1,0 +1,98 @@
+.erw-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  line-height: 1;
+  user-select: none;
+}
+
+.erw-logo__img {
+  display: block;
+  flex-shrink: 0;
+  height: auto;
+}
+
+.erw-logo--sm .erw-logo__img {
+  width: 28px;
+  height: 28px;
+}
+
+.erw-logo--md .erw-logo__img {
+  width: 36px;
+  height: 36px;
+}
+
+.erw-logo--lg .erw-logo__img {
+  width: 44px;
+  height: 44px;
+}
+
+.erw-logo--xl .erw-logo__img {
+  width: 56px;
+  height: 56px;
+}
+
+.erw-logo--wordmark.erw-logo--sm .erw-logo__img {
+  width: auto;
+  height: 28px;
+}
+
+.erw-logo--wordmark.erw-logo--md .erw-logo__img {
+  width: auto;
+  height: 36px;
+}
+
+.erw-logo--wordmark.erw-logo--lg .erw-logo__img {
+  width: auto;
+  height: 44px;
+}
+
+.erw-logo--wordmark.erw-logo--xl .erw-logo__img {
+  width: auto;
+  height: 56px;
+}
+
+.erw-logo__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.erw-logo__name {
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0b1f33;
+  white-space: nowrap;
+}
+
+.erw-logo__tag {
+  font-family: Inter, 'Segoe UI', system-ui, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1a8cff;
+}
+
+.erw-nav-brand {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0.15rem 0.35rem 0.35rem;
+  margin-bottom: 0.25rem;
+}
+
+.erw-nav-collapsed .erw-nav-brand {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.erw-nav-brand .erw-logo--sm .erw-logo__img {
+  width: 32px;
+  height: 32px;
+}

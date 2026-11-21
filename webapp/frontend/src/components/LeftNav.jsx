@@ -12,6 +12,7 @@ import {
   IconUsers,
 } from '@tabler/icons-react';
 import '../styles/kaggleTokens.css';
+import AppLogo from './brand/AppLogo';
 
 const NAV_META = [
   { value: 'board', label: 'Bảng', Icon: IconLayoutKanban },
@@ -53,6 +54,9 @@ export default function LeftNav({
 
   return (
     <nav className={scopeClass} aria-label="Điều hướng chính">
+      <div className="erw-nav-brand">
+        {collapsed ? <AppLogo variant="mark" size="sm" /> : <AppLogo variant="mark" size="sm" showTitle />}
+      </div>
       <Stack gap="xs" className="erw-nav-stack">
         {items.map(({ value, label, Icon }) => {
           const isActive = value === active;

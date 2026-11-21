@@ -1,8 +1,6 @@
 import React from 'react';
 import {
   Group,
-  Title,
-  ThemeIcon,
   Select,
   TextInput,
   ActionIcon,
@@ -13,7 +11,6 @@ import {
   Box,
 } from '@mantine/core';
 import {
-  IconShieldExclamation as IconShieldAlert,
   IconSearch,
   IconRefresh,
   IconUser,
@@ -25,6 +22,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { getAdminSettings } from '../api/client';
 import { OpenProjectIcon } from './JiraLinks';
+import AppLogo from './brand/AppLogo';
 
 /**
  * Format thời gian webhook ISO thành chuỗi hiển thị thân thiện tiếng Việt
@@ -120,16 +118,12 @@ export default function Header({
           </ActionIcon>
         </Tooltip>
 
-        <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
-          <ThemeIcon size="lg" radius="md" color="blue" variant="filled">
-            <IconShieldAlert size={22} stroke={1.5} />
-          </ThemeIcon>
-          <Box visibleFrom="xl">
-            <Title order={4} style={{ whiteSpace: 'nowrap' }}>
-              Early Risk Web
-            </Title>
-          </Box>
-        </Group>
+        <Box hiddenFrom="xl" style={{ flexShrink: 0 }}>
+          <AppLogo variant="mark" size="md" />
+        </Box>
+        <Box visibleFrom="xl" style={{ flexShrink: 0 }}>
+          <AppLogo variant="mark" size="md" showTitle />
+        </Box>
 
         <Select
           data={projectOptions}
