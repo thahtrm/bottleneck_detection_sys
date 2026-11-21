@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
@@ -31,6 +32,11 @@ _in_progress_keys: set[str] = set()
 _lock = threading.Lock()
 _engine: Any = None
 _http_client: httpx.Client | None = None
+
+
+def submit_to_llm_executor(fn: Callable[[], None]) -> None:
+    """Run work on the single existing Ollama worker thread."""
+    _llm_executor.submit(fn)
 
 
 def set_engine(engine: Any) -> None:
@@ -333,6 +339,31 @@ def call_ollama_chat(
     if isinstance(content, dict):
         return content
     return json.loads(content)
+
+
+def call_ollama_embed(
+    texts: list[str],
+    model: str,
+    base_url: str,
+    client: httpx.Client | None = None,
+) -> list[list[float]]:
+    """Embed texts via Ollama /api/embed. No local/HF fallback."""
+    if not texts:
+        return []
+    url = f"{base_url.rstrip('/')}/api/embed"
+    payload = {"model": model, "input": texts, "truncate": True}
+    c = client or _http_client
+    if c is not None:
+        resp = c.post(url, json=payload, timeout=120.0)
+    else:
+        with httpx.Client(timeout=120.0) as http_client:
+            resp = http_client.post(url, json=payload)
+    resp.raise_for_status()
+    data = resp.json()
+    embeddings = data.get("embeddings")
+    if not isinstance(embeddings, list):
+        raise ValueError("Ollama embed response missing embeddings")
+    return embeddings
 
 
 def get_cached_suggestion(

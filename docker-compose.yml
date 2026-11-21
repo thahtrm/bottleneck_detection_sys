@@ -1,0 +1,48 @@
+# Early Risk Web: app + nginx + ngrok.
+# Stop the other ngrok agent (ollama-ngrok) before `docker compose up`:
+# one authtoken and one reserved domain can only be online in one agent.
+# Stop `make run` first as well; the app container publishes APP_PORT.
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - webapp/backend/.env
+    environment:
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./webapp/backend/var:/app/webapp/backend/var
+      - ./data:/app/webapp/backend/data:ro
+      - ./bundles:/app/webapp/backend/bundles:ro
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      APP_UPSTREAM: ${APP_UPSTREAM:-app:8000}
+    volumes:
+      - ./deploy/nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: unless-stopped
+    depends_on:
+      - nginx
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command:
+      - http
+      - http://nginx:80
+      - --url
+      - ${NGROK_DOMAIN}
+    ports:
+      - "${NGROK_INSPECTOR_PORT:-4041}:4040"

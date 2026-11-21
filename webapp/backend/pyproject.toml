@@ -16,6 +16,7 @@ dependencies = [
   "httpx",
   "tenacity",
   "numpy",
+  "faiss-cpu",
   "early-risk-detection",
   "pandas",
   "duckdb",

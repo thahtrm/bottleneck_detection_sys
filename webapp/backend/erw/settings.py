@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     slack_max_per_hour: int = 20
 
     ollama_url: str = "http://localhost:11434"
+    embed_model: str = "nomic-embed-text"
+    rag_seed_dir: str = "var/rag/seed"
+    rag_index_path: str = "var/rag/faiss.index"
+    agent_max_steps: int = 4
+    agent_session_limit: int = 16
 
     base_duckdb: str = "data/jira.duckdb"
     work_duckdb: str = "var/erw_scoring.duckdb"

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Card,
   Stack,
@@ -237,11 +237,15 @@ export default function IssuePanel({
   onOpenConfirmAction,
   projects = [],
   onSelectIssue,
+  suggestionNonce = 0,
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(suggestionNonce > 0 ? 'suggestion' : 'overview');
+  useEffect(() => {
+    if (suggestionNonce > 0) setActiveTab('suggestion');
+  }, [suggestionNonce]);
   const [isDismissModalOpen, setIsDismissModalOpen] = useState(false);
   const [dismissReason, setDismissReason] = useState('');
   const [isDismissing, setIsDismissing] = useState(false);

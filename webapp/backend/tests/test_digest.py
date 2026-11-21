@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from erw.models import Issue, IssueSprint, Notification, RiskState, Sprint
 from erw.pipeline.alerts import AlertSpec, notify
-from erw.pipeline.digest import build_digest
+from erw.pipeline.digest import build_digest, collect_digest
 
 NOW = datetime(2026, 11, 4, 1, 0, tzinfo=UTC)  # 08:00 ICT
 
@@ -20,6 +20,30 @@ def add(session, n, level="HIGH", crit=None, sp=None, cat="indeterminate", creat
                           crit_score=crit, blocked=blocked,
                           deadline_label="Trễ due date", updated_at=updated or NOW, is_critical=crit is not None))
     session.flush()
+
+
+def test_collect_digest_counts_and_order(session, settings):
+    add(session, 1, level="MED", prev="LOW", updated=NOW - timedelta(hours=2), blocked=True)
+    add(session, 2, level="LOW", created=NOW - timedelta(hours=3), crit=0.9)
+    add(session, 3, level="HIGH", cat="done")
+    snap = collect_digest(session, "DEMO", NOW, settings)
+    assert snap.risky_count == 1
+    assert snap.raised_24h == 1
+    assert snap.blocked_count == 1
+    assert snap.new_24h == 1
+    assert snap.new_critical == 1
+    assert snap.day_label == "04/11"
+
+    for row in session.query(Issue).all():
+        session.delete(row)
+    for row in session.query(RiskState).all():
+        session.delete(row)
+    session.flush()
+    for n in range(1, 8):
+        add(session, n, crit=n / 10)
+    ordered = collect_digest(session, "DEMO", NOW, settings)
+    assert len(ordered.top_risky) == 5
+    assert ordered.top_risky[0].key == "DEMO-7"
 
 
 def test_digest_header_and_max_five_items(session, settings):

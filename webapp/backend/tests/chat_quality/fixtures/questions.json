@@ -1,0 +1,144 @@
+[
+  {
+    "id": "risky-priority",
+    "question": "Sáng nay mình nên xử lý gì trước?",
+    "expected_kind": "risky",
+    "expected_tool": "lookup_risky",
+    "forbid_chua_co": true,
+    "require_digest_fields": ["risky_count", "raised_24h"],
+    "require_substrings": ["nguy cơ trễ"],
+    "expect_keys_from_facts": true
+  },
+  {
+    "id": "blocked-list",
+    "question": "Issue nào đang bị block?",
+    "expected_kind": "blocked",
+    "expected_tool": "lookup_blocked",
+    "forbid_chua_co": true,
+    "require_payload_fields": {"count": "blocked_open"},
+    "require_substrings": ["bị block"],
+    "must_include_keys": ["DEMO-41"],
+    "expect_keys_from_facts": true
+  },
+  {
+    "id": "sprint-progress",
+    "question": "Tiến độ sprint thế nào?",
+    "expected_kind": "sprint",
+    "expected_tool": "lookup_sprint",
+    "forbid_chua_co": true,
+    "require_substrings": ["Sprint 24"],
+    "forbid_substrings": ["Chưa có sprint đang chạy"]
+  },
+  {
+    "id": "open-backlog",
+    "question": "Số lượng công việc còn tồn đọng hiện tại",
+    "expected_kind": "open",
+    "expected_tool": "lookup_open",
+    "forbid_chua_co": true,
+    "require_payload_fields": {"open_count": "open_count"},
+    "require_substrings": ["công việc chưa xong"],
+    "forbid_keys": ["DEMO-10", "DEMO-11"]
+  },
+  {
+    "id": "assignee-load",
+    "question": "Ai đang được giao nhiều việc chưa xong nhất?",
+    "expected_kind": "assignee",
+    "expected_tool": "lookup_assignee_load",
+    "forbid_chua_co": true,
+    "require_substrings": ["Lan", "việc"],
+    "expect_keys_from_facts": true
+  },
+  {
+    "id": "due-soon",
+    "question": "Có issue nào sắp đến hạn không?",
+    "expected_kind": "due",
+    "expected_tool": "lookup_due",
+    "forbid_chua_co": true,
+    "require_substrings": ["đến hạn"],
+    "must_include_keys": ["DEMO-6"],
+    "forbid_keys": ["DEMO-7", "DEMO-8"]
+  },
+  {
+    "id": "overdue-count",
+    "question": "Có bao nhiêu việc đang quá hạn?",
+    "expected_kind": "overdue",
+    "expected_tool": "lookup_overdue",
+    "forbid_chua_co": true,
+    "require_substrings": ["quá hạn"],
+    "must_include_keys": ["DEMO-7"],
+    "forbid_keys": ["DEMO-6", "DEMO-8"]
+  },
+  {
+    "id": "important-list",
+    "question": "Issue nào được đánh dấu quan trọng?",
+    "expected_kind": "important",
+    "expected_tool": "lookup_important",
+    "forbid_chua_co": true,
+    "require_substrings": ["quan trọng"],
+    "must_include_keys": ["DEMO-9"],
+    "forbid_keys": ["DEMO-10"]
+  },
+  {
+    "id": "issue-lookup",
+    "question": "DEMO-41 sao rồi",
+    "expected_kind": "issue",
+    "expected_tool": "lookup_issue",
+    "forbid_chua_co": true,
+    "require_substrings": ["DEMO-41", "Lan", "API"],
+    "must_include_keys": ["DEMO-41"],
+    "expect_keys_from_facts": true
+  },
+  {
+    "id": "missing-issue",
+    "question": "Xem DEMO-99",
+    "expected_kind": "issue",
+    "expected_tool": "lookup_issue",
+    "require_substrings": ["Không thấy DEMO-99"],
+    "skip_recommendation": true
+  },
+  {
+    "id": "out-of-scope-weather",
+    "question": "Thời tiết hôm nay thế nào?",
+    "expected_kind": null,
+    "expected_tool": null,
+    "expect_out_of_scope": true,
+    "forbid_board_counts": true
+  },
+  {
+    "id": "rag-risk-levels",
+    "question": "Theo tài liệu hướng dẫn, mức LOW MED HIGH trên thẻ nghĩa là gì?",
+    "expected_kind": null,
+    "expected_tool": null,
+    "rag_ok": true,
+    "forbid_board_counts": true,
+    "forbid_hallucinated_keys": true,
+    "notes": "Process/help: avoid lookup phrase collisions; RAG prose only — no board counts/keys."
+  },
+  {
+    "id": "rag-how-to-use-chat",
+    "question": "Theo hướng dẫn, panel trợ lý PM trả lời những loại câu nào?",
+    "expected_kind": null,
+    "expected_tool": null,
+    "rag_ok": true,
+    "forbid_board_counts": true,
+    "forbid_hallucinated_keys": true
+  },
+  {
+    "id": "digest-overview-risky-number",
+    "question": "Có bao nhiêu issue nguy cơ trễ?",
+    "expected_kind": "risky",
+    "expected_tool": "lookup_risky",
+    "forbid_chua_co": true,
+    "require_digest_fields": ["risky_count"],
+    "require_substrings": ["nguy cơ trễ"]
+  },
+  {
+    "id": "no-fake-keys-in-risky",
+    "question": "Ưu tiên rủi ro nào trước?",
+    "expected_kind": "risky",
+    "expected_tool": "lookup_risky",
+    "forbid_chua_co": true,
+    "forbid_hallucinated_keys": true,
+    "expect_keys_from_facts": true
+  }
+]

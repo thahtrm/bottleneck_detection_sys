@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Engine
 
 from erw import jobs
-from erw.api import actions, admin, auth, dashboard, health, issues, projects, webhooks
+from erw.api import actions, admin, auth, chat, dashboard, health, issues, projects, webhooks
 from erw.db import init_db, make_engine
 from erw.integrations import llm
 from erw.pipeline import alerts, evaluate
@@ -74,6 +74,7 @@ def create_app(
     app.include_router(issues.issues_router)
     app.include_router(actions.actions_router)
     app.include_router(dashboard.dashboard_router)
+    app.include_router(chat.chat_router)
     app.include_router(admin.admin_router)
 
     if frontend_dist is None:

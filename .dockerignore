@@ -1,0 +1,11 @@
+.git
+.venv
+.cursor
+data
+experiments
+webapp/backend/var
+webapp/frontend/node_modules
+webapp/frontend/dist
+**/__pycache__
+**/.pytest_cache
+**/*.duckdb

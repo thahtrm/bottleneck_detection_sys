@@ -12,11 +12,17 @@ def test_scheduler_registers_jobs_in_tz(settings):
     s = start_scheduler(settings)
     try:
         jobs_ = {j.id: j for j in s.get_jobs()}
-        assert set(jobs_) == {"morning_batch", "daily_digest"}
+        assert set(jobs_) == {"morning_batch", "daily_digest", "pm_chat_reports"}
         assert str(s.timezone) == "Asia/Ho_Chi_Minh"
-        for j in jobs_.values():
-            assert j.max_instances == 1 and j.coalesce is True
-            assert j.misfire_grace_time == 3 * 3600
+        for job_id in ("morning_batch", "daily_digest"):
+            job = jobs_[job_id]
+            assert job.max_instances == 1 and job.coalesce is True
+            assert job.misfire_grace_time == 3 * 3600
+        report = jobs_["pm_chat_reports"]
+        assert report.max_instances == 1 and report.coalesce is True
+        report_fields = {field.name: str(field) for field in report.trigger.fields}
+        assert report_fields["day_of_week"] == "mon-fri"
+        assert report_fields["minute"] == "*"
 
         mb_fields = {f.name: str(f) for f in jobs_["morning_batch"].trigger.fields}
         assert mb_fields["day_of_week"] == "mon-fri"

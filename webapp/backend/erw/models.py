@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from erw.db import UTCDateTime
@@ -202,3 +202,64 @@ class KV(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[str | None] = mapped_column(Text)
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    __table_args__ = (
+        Index("ix_chat_messages_user_project_created", "user_id", "project_key", "created_at"),
+        UniqueConstraint("dedup_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    project_key: Mapped[str] = mapped_column(String)
+    kind: Mapped[str] = mapped_column(String)  # user | assistant | report | urgent
+    body: Mapped[str] = mapped_column(Text)
+    recommendation_status: Mapped[str] = mapped_column(String)  # pending | ready | failed | skipped
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    dedup_key: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class ReportSlot(Base):
+    __tablename__ = "report_slots"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    time_hhmm: Mapped[str] = mapped_column(String, primary_key=True)
+
+
+class ChatMemory(Base):
+    __tablename__ = "chat_memories"
+    __table_args__ = (Index("ix_chat_memories_user_project_kind", "user_id", "project_key", "kind", "updated_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    project_key: Mapped[str] = mapped_column(String)
+    kind: Mapped[str] = mapped_column(String)  # preference | note | episode
+    text: Mapped[str] = mapped_column(Text)
+    metadata_json: Mapped[Any] = mapped_column("metadata", JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class ChatRagChunk(Base):
+    __tablename__ = "chat_rag_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    corpus: Mapped[str] = mapped_column(String, default="seed_help")
+    project_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_uri: Mapped[str] = mapped_column(String)
+    text: Mapped[str] = mapped_column(Text)
+    embedding_model: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class ChatAgentRun(Base):
+    __tablename__ = "chat_agent_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id"), index=True)
+    status: Mapped[str] = mapped_column(String)  # running | ready | failed | skipped
+    steps_json: Mapped[Any] = mapped_column(JSON, default=list)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)

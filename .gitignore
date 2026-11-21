@@ -135,7 +135,17 @@ lib/
 lib64/
 parts/
 sdist/
-var/
+# Ignore var contents but allow RAG seed prose to be committed.
+# Use var/* (not var/) so negation can re-include children.
+var/*
+!var/rag/
+var/rag/*
+!var/rag/seed/
+!var/rag/seed/**
+# Keep FAISS indexes ignored (often large).
+var/rag/*.index
+var/rag/**/*.index
+var/rag/faiss.index
 wheels/
 pip-wheel-metadata/
 share/python-wheels/

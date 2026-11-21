@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AppShell, Center, Loader, ScrollArea, Stack, Text } from '@mantine/core';
+import { AppShell, Box, Center, Group, Loader, ScrollArea, Stack, Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { getProjects } from './api/client';
@@ -11,6 +11,7 @@ import BoardView from './components/board/BoardView';
 import IssuePanel from './components/IssuePanel';
 import ActionConfirmModal from './components/ActionConfirmModal';
 import NetworkGraph from './components/NetworkGraph';
+import PmChat from './components/PmChat';
 
 const ACTION_QUERY_KEYS = [['dashboard-board'], ['dashboard-graph'], ['issue-detail'], ['issue-suggestion']];
 const REFRESH_QUERY_KEYS = [['dashboard-board'], ['dashboard-graph'], ['projects'], ['admin-settings']];
@@ -33,6 +34,8 @@ function AppContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [confirmModalData, setConfirmModalData] = useState(null);
   const [confirmModalOpened, setConfirmModalOpened] = useState(false);
+  const [suggestionKey, setSuggestionKey] = useState(null);
+  const [suggestionNonce, setSuggestionNonce] = useState(0);
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -77,7 +80,17 @@ function AppContent() {
   const view = state.view === 'settings' && !user.is_admin ? 'board' : state.view;
   const pmProjects = new Set(projects.filter((p) => p.role === 'pm').map((p) => p.key));
   const canMoveStatus = (card) => user.is_admin || pmProjects.has(card.project_key);
-  const selectIssue = (issue) => patch({ issue });
+  const selectIssue = (issue) => {
+    setSuggestionKey(null);
+    patch({ issue });
+  };
+  const openFromChat = (key) => {
+    setSuggestionKey(key);
+    setSuggestionNonce((nonce) => nonce + 1);
+    patch({ issue: key });
+  };
+  const projectRole = projects.find((item) => item.key === state.project)?.role;
+  const showChat = (view === 'board' || view === 'list') && Boolean(state.project) && (user.is_admin || projectRole === 'pm');
   const panelOpen = Boolean(state.issue) && view !== 'settings';
 
   return (
@@ -110,6 +123,7 @@ function AppContent() {
               onOpenConfirmAction={handleOpenConfirmAction}
               projects={projects}
               onSelectIssue={selectIssue}
+              suggestionNonce={suggestionKey === state.issue ? suggestionNonce : 0}
             />
           </AppShell.Section>
         </AppShell.Aside>
@@ -121,12 +135,18 @@ function AppContent() {
           <NetworkGraph selectedProject={state.project} onSelectIssue={selectIssue} selectedIssueKey={state.issue} />
         )}
         {(view === 'board' || view === 'list') && (
-          <BoardView
-            state={state}
-            patch={patch}
-            canMoveStatus={canMoveStatus}
-            onMoveStatus={(card) => handleOpenConfirmAction(moveStatusProposal(card))}
-          />
+          <Group align="flex-start" wrap="wrap" gap="md">
+            <Box style={{ flex: '1 1 480px', minWidth: 0 }}>
+              <BoardView
+                state={state}
+                patch={patch}
+                canMoveStatus={canMoveStatus}
+                onMoveStatus={(card) => handleOpenConfirmAction(moveStatusProposal(card))}
+                onSelectIssue={selectIssue}
+              />
+            </Box>
+            {showChat && <PmChat project={state.project} onOpenIssue={openFromChat} />}
+          </Group>
         )}
 
         <ActionConfirmModal

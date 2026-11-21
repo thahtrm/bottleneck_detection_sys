@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from erw.domain.types import Level
 from erw.integrations.slack import SlackSender, format_alert
 from erw.models import Issue, Notification, RiskState
+from erw.pipeline.chat_urgent import insert_urgent_messages
 from erw.pipeline.evaluate import RiskChange
 from erw.settings import Settings
 
@@ -138,7 +139,9 @@ def dispatch(
             if spec.kind == "blocked":
                 value = next((f.get("value") for f in (rs.factors or []) if f.get("id") == "blocked"), "")
                 spec = AlertSpec(spec.kind, spec.issue_key, spec.project, spec.level, f"blocked:{change.key}:{value}")
-            status = notify(session, spec, format_alert(spec, issue, rs, settings), sender, now, settings.slack_max_per_hour)
+            text = format_alert(spec, issue, rs, settings)
+            status = notify(session, spec, text, sender, now, settings.slack_max_per_hour)
+            insert_urgent_messages(session, spec, text, now)
             sent_any = sent_any or status == "sent"
         if sent_any:
             rs.last_alerted_level = change.level.name

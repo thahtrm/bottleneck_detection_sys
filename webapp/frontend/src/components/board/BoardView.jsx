@@ -22,7 +22,7 @@ function BoardSkeleton() {
   );
 }
 
-export default function BoardView({ state, patch, onMoveStatus, canMoveStatus }) {
+export default function BoardView({ state, patch, onMoveStatus, canMoveStatus, onSelectIssue }) {
   const { board, ctx, isLoading, isError, error, refetch } = useBoardIssues(state);
   const sprintMissing = error?.status === 404 && state.sprint != null;
   useEffect(() => {
@@ -105,7 +105,7 @@ export default function BoardView({ state, patch, onMoveStatus, canMoveStatus })
         columns={columns}
         ctx={ctx}
         selectedKey={state.issue}
-        onSelect={(issue) => patch({ issue })}
+        onSelect={(issue) => (onSelectIssue ? onSelectIssue(issue) : patch({ issue }))}
         onMoveStatus={onMoveStatus}
         canMoveStatus={canMoveStatus}
       />

@@ -16,6 +16,8 @@ from erw.integrations.jira import JiraClient, JiraError
 from erw.integrations.llm import generate_suggestion, get_cached_suggestion
 from erw.kv import kv_get_json, kv_set, kv_set_json
 from erw.models import Issue, Project, RiskState
+from erw.pipeline.chat_recommend import enqueue_message_recommendation
+from erw.pipeline.chat_reports import run_due_reports
 from erw.pipeline.evaluate import on_synced
 from erw.settings import Settings
 
@@ -275,6 +277,22 @@ def digest_job(now: datetime | None = None) -> None:
         log.exception("digest job failed")
 
 
+def _report_body(now: datetime) -> None:
+    with SessionLocal(bind=_engine) as session:
+        due = run_due_reports(session, now, _settings)
+        session.commit()
+    for item in due:
+        enqueue_message_recommendation(item.message_id, item.user_prompt, set(item.allowed_keys), _settings, _engine)
+
+
+def report_job(now: datetime | None = None) -> None:
+    """Each weekday minute: one pending report per PM project whose slot matches local HH:MM."""
+    try:
+        executor.submit(_report_body, now or utcnow()).result()
+    except Exception:
+        log.exception("pm report job failed")
+
+
 def start_scheduler(settings: Settings) -> BackgroundScheduler:
     tz = ZoneInfo(settings.tz)
     scheduler = BackgroundScheduler(timezone=tz)
@@ -292,5 +310,13 @@ def start_scheduler(settings: Settings) -> BackgroundScheduler:
             replace_existing=True,
             misfire_grace_time=3 * 3600,
         )
+    scheduler.add_job(
+        report_job,
+        CronTrigger(day_of_week="mon-fri", minute="*", timezone=tz),
+        id="pm_chat_reports",
+        coalesce=True,
+        max_instances=1,
+        replace_existing=True,
+    )
     scheduler.start()
     return scheduler

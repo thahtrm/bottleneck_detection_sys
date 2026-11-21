@@ -252,7 +252,53 @@ export async function toggleProjectTracking(key) {
   });
 }
 
+export async function getChatMessages(project) {
+  const query = new URLSearchParams({ project });
+  return await apiFetch(`/api/chat/messages?${query.toString()}`);
+}
 
+export async function postChatMessage(project, text) {
+  return await apiFetch('/api/chat/messages', {
+    method: 'POST',
+    body: { project, text },
+  });
+}
 
+export async function getChatSchedule() {
+  return await apiFetch('/api/chat/schedule');
+}
 
+export async function putChatSchedule(times) {
+  return await apiFetch('/api/chat/schedule', {
+    method: 'PUT',
+    body: times,
+  });
+}
+
+export async function getChatMemories(project) {
+  const query = new URLSearchParams({ project });
+  return await apiFetch(`/api/chat/memories?${query.toString()}`);
+}
+
+export async function postChatMemory(project, kind, text, metadata = {}) {
+  return await apiFetch('/api/chat/memories', {
+    method: 'POST',
+    body: { project, kind, text, metadata },
+  });
+}
+
+export async function patchChatMemory(project, memoryId, patch) {
+  const query = new URLSearchParams({ project });
+  return await apiFetch(`/api/chat/memories/${encodeURIComponent(memoryId)}?${query.toString()}`, {
+    method: 'PATCH',
+    body: patch,
+  });
+}
+
+export async function deleteChatMemory(project, memoryId) {
+  const query = new URLSearchParams({ project });
+  return await apiFetch(`/api/chat/memories/${encodeURIComponent(memoryId)}?${query.toString()}`, {
+    method: 'DELETE',
+  });
+}
 

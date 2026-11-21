@@ -1,9 +1,11 @@
 from datetime import UTC, datetime, timedelta
 
 from erw.domain.types import Level
-from erw.models import Issue, Notification, RiskState
+from erw.integrations.slack import format_alert
+from erw.models import ChatMessage, Issue, Notification, Project, ProjectMember, RiskState, User
 from erw.pipeline import evaluate
 from erw.pipeline.alerts import AlertSpec, alerts_for, dispatch, flush_pending, notify
+from erw.pipeline.chat_urgent import insert_urgent_messages
 from erw.pipeline.evaluate import RiskChange
 
 NOW = datetime(2026, 11, 4, 3, 0, tzinfo=UTC)
@@ -205,3 +207,37 @@ def test_unsent_alerts_retry_e2e(session, settings, monkeypatch):
     # Later dispatch does not resend
     dispatch(session, [], NOW + timedelta(minutes=10), settings, sender=sender)
     assert sender.calls == 1
+
+
+def test_dispatch_risk_up_writes_one_urgent_per_pm_and_posts_slack(session, settings):
+    people = []
+    for email, role in (("a@example.com", "pm"), ("b@example.com", "pm"), ("v@example.com", "viewer")):
+        user = User(email=email, name=email, password_hash="x", is_admin=False, created_at=NOW)
+        session.add(user)
+        people.append((user, role))
+    session.flush()
+    session.add(Project(key="DEMO", name="Demo"))
+    session.flush()
+    for user, role in people:
+        session.add(ProjectMember(project_key="DEMO", user_id=user.id, role=role))
+    _seed(session)
+    sender = FakeSender()
+    tuned = settings.model_copy(update={"slack_webhook_url": "https://hooks.slack.com/services/xxx"})
+    dispatch(session, [chg(prev=Level.MED)], NOW, tuned, sender=sender)
+    assert sender.calls == 1
+    rows = session.query(ChatMessage).filter_by(kind="urgent").all()
+    pm_ids = sorted(user.id for user, role in people if role == "pm")
+    assert sorted(row.user_id for row in rows) == pm_ids
+    spec = AlertSpec("risk_up", "DEMO-1", "DEMO", Level.HIGH, "risk_up:DEMO-1:HIGH")
+    expected = format_alert(spec, session.get(Issue, "DEMO-1"), session.get(RiskState, "DEMO-1"), tuned)
+    assert {row.body for row in rows} == {expected}
+    assert {row.recommendation_status for row in rows} == {"skipped"}
+    assert all(row.dedup_key == f"urgent:{row.user_id}:{spec.dedup_key}" for row in rows)
+    dispatch(session, [chg(prev=Level.MED)], NOW, tuned, sender=sender)
+    assert session.query(ChatMessage).filter_by(kind="urgent").count() == 2
+    assert sender.calls == 1
+
+
+def test_insert_urgent_ignores_digest_kind(session):
+    spec = AlertSpec("digest", None, "DEMO", None, "digest:DEMO:2026-11-04")
+    assert insert_urgent_messages(session, spec, "x", NOW) == 0
