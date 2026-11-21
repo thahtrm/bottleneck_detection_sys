@@ -18,6 +18,15 @@ async function saveDownload(reportId, format) {
   URL.revokeObjectURL(url);
 }
 
+function drawerTitle(data) {
+  if (!data) return 'Xem báo cáo';
+  const date = data.report_date || '';
+  const slot = data.slot_hhmm || '';
+  const project = data.project_key || '';
+  const bits = [project, date, slot].filter(Boolean);
+  return bits.length ? bits.join(' · ') : 'Xem báo cáo';
+}
+
 export default function ReportPreviewDrawer({
   reportId,
   opened,
@@ -36,45 +45,44 @@ export default function ReportPreviewDrawer({
       onClose={onClose}
       position="right"
       size="lg"
-      title={
-        content.data
-          ? `Báo cáo ${content.data.report_date || ''} · ${content.data.slot_hhmm || ''}`
-          : 'Xem báo cáo'
-      }
-      classNames={{ body: 'erw-report-scope' }}
+      title={drawerTitle(content.data)}
+      className="erw-report-drawer"
+      classNames={{ body: 'erw-report-scope', content: 'erw-report-drawer' }}
     >
       <Stack gap="md">
-        <Group gap="sm" wrap="wrap">
-          <Button
-            className="erw-settings-btn-secondary"
-            leftSection={<IconDownload size={14} />}
-            size="compact-sm"
-            disabled={!reportId}
-            onClick={() => saveDownload(reportId, 'md')}
-          >
-            Tải MD
-          </Button>
-          <Button
-            className="erw-settings-btn-secondary"
-            leftSection={<IconFileTypePdf size={14} />}
-            size="compact-sm"
-            disabled={!reportId}
-            onClick={() => saveDownload(reportId, 'pdf')}
-          >
-            Tải PDF
-          </Button>
-          {onAskInChat ? (
+        <div className="erw-report-toolbar">
+          <Group gap="sm" wrap="wrap">
             <Button
-              className="erw-settings-btn-primary"
-              leftSection={<IconMessageCircle size={14} />}
+              className="erw-settings-btn-secondary"
+              leftSection={<IconDownload size={14} />}
               size="compact-sm"
               disabled={!reportId}
-              onClick={() => onAskInChat(reportId, content.data)}
+              onClick={() => saveDownload(reportId, 'md')}
             >
-              Hỏi trong Chat
+              Tải MD
             </Button>
-          ) : null}
-        </Group>
+            <Button
+              className="erw-settings-btn-secondary"
+              leftSection={<IconFileTypePdf size={14} />}
+              size="compact-sm"
+              disabled={!reportId}
+              onClick={() => saveDownload(reportId, 'pdf')}
+            >
+              Tải PDF
+            </Button>
+            {onAskInChat ? (
+              <Button
+                className="erw-settings-btn-primary"
+                leftSection={<IconMessageCircle size={14} />}
+                size="compact-sm"
+                disabled={!reportId}
+                onClick={() => onAskInChat(reportId, content.data)}
+              >
+                Hỏi trong Chat
+              </Button>
+            ) : null}
+          </Group>
+        </div>
         {content.isLoading && <Loader size="sm" type="dots" />}
         {content.isError && (
           <Text className="erw-settings-error">{content.error?.message || 'Không tải được nội dung.'}</Text>

@@ -45,6 +45,7 @@ export default function ReportFileManager({
   onPreview,
   canHide = true,
   showPdfDownload = true,
+  hideHeader = false,
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -73,14 +74,16 @@ export default function ReportFileManager({
 
   return (
     <Stack gap="sm" className="pm-chat-files">
-      <Group justify="space-between" align="center">
-        <Text className="pm-chat-title">Báo cáo sức khỏe</Text>
-        {onOpenSettings && (
-          <Button variant="subtle" size="compact-sm" className="pm-chat-btn-subtle" onClick={onOpenSettings}>
-            Đổi lịch
-          </Button>
-        )}
-      </Group>
+      {!hideHeader ? (
+        <Group justify="space-between" align="center">
+          <Text className="pm-chat-title">Báo cáo sức khỏe</Text>
+          {onOpenSettings && (
+            <Button variant="subtle" size="compact-sm" className="pm-chat-btn-subtle" onClick={onOpenSettings}>
+              Đổi lịch
+            </Button>
+          )}
+        </Group>
+      ) : null}
 
       {reports.isError && (
         <Text className="pm-chat-error">{reports.error?.message || 'Không tải được danh sách báo cáo.'}</Text>
