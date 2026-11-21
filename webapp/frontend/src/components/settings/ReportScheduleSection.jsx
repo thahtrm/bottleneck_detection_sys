@@ -37,8 +37,8 @@ export default function ReportScheduleSection({ onViewReports }) {
   return (
     <Stack gap="sm">
       <Text className="erw-settings-body">
-        Báo cáo weekday theo giờ máy chủ{tz ? ` (${tz})` : ''}. Lịch dùng chung cho mọi dự án bạn là PM
-        (không theo từng project).
+        Lịch weekday theo giờ máy chủ{tz ? ` (${tz})` : ''} sinh Báo cáo sức khỏe dự án (7 mục, md+PDF) cho
+        mọi dự án bạn là PM (không theo từng project).
       </Text>
       <Group gap={6}>
         {times.map((time) => (

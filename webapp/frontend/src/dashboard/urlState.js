@@ -1,7 +1,16 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { CHIPS, GROUPINGS } from './boardModel.js';
 
-export const VIEWS = ['board', 'list', 'graph', 'chat', 'users', 'project-settings', 'settings'];
+export const VIEWS = [
+  'board',
+  'list',
+  'graph',
+  'chat',
+  'reports',
+  'users',
+  'project-settings',
+  'settings',
+];
 
 export const DEFAULT_STATE = Object.freeze({
   project: '',
@@ -11,6 +20,7 @@ export const DEFAULT_STATE = Object.freeze({
   chips: [],
   issue: null,
   sprint: null,
+  report: null,
 });
 
 export function parseDashboardState(search) {
@@ -19,6 +29,7 @@ export function parseDashboardState(search) {
   const group = params.get('group');
   const chips = new Set((params.get('chips') ?? '').split(','));
   const sprint = Number(params.get('sprint'));
+  const report = Number(params.get('report'));
   return {
     project: params.get('project') ?? DEFAULT_STATE.project,
     q: params.get('q') ?? DEFAULT_STATE.q,
@@ -27,6 +38,7 @@ export function parseDashboardState(search) {
     chips: CHIPS.map((chip) => chip.id).filter((id) => chips.has(id)),
     issue: params.get('issue') || DEFAULT_STATE.issue,
     sprint: Number.isInteger(sprint) && sprint > 0 ? sprint : DEFAULT_STATE.sprint,
+    report: Number.isInteger(report) && report > 0 ? report : DEFAULT_STATE.report,
   };
 }
 
@@ -40,6 +52,7 @@ export function serializeDashboardState(state) {
     ['chips', chips.join(',')],
     ['sprint', state.sprint != null && String(state.sprint)],
     ['issue', state.issue],
+    ['report', state.report != null && String(state.report)],
   ].filter(([, value]) => value);
   if (pairs.length === 0) return '';
   return `?${pairs.map(([key, value]) => `${key}=${encodeURIComponent(value).replace(/%2C/g, ',')}`).join('&')}`;

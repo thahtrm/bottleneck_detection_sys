@@ -11,10 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from erw.domain.types import Level
 from erw.models import ChatMessage, ProjectMember, ReportFile, ReportSlot
-from erw.pipeline.chat_lookup import blocker_keys, blocks_keys, issue_fact_line, keys_in_text
-from erw.pipeline.digest import collect_digest
+from erw.pipeline.health_report import (
+    build_health_markdown,
+    pdf_rel_from_md,
+    write_pdf_from_health,
+    write_pdf_from_markdown,
+)
 from erw.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -65,11 +68,22 @@ def write_report_file(
     hhmm: str,
     local_day: str,
     created_at: datetime,
+    snap=None,
+    narratives: dict | None = None,
 ) -> ReportFile | None:
     rel = report_rel_path(user_id, project, local_day, hhmm)
     abs_path = report_abs_path(settings, rel)
     abs_path.parent.mkdir(parents=True, exist_ok=True)
     abs_path.write_text(body, encoding="utf-8")
+    pdf_rel = pdf_rel_from_md(rel)
+    try:
+        pdf_path = report_abs_path(settings, pdf_rel)
+        if snap is not None:
+            write_pdf_from_health(snap, narratives or {}, pdf_path)
+        else:
+            write_pdf_from_markdown(body, pdf_path)
+    except Exception:
+        log.exception("pdf sibling failed for %s", rel)
     preview = body.strip().splitlines()[0] if body.strip() else ""
     if len(preview) > 160:
         preview = preview[:157] + "..."
@@ -94,44 +108,96 @@ def write_report_file(
     return row
 
 
-def _report_body(session: Session, project: str, now: datetime, settings: Settings) -> tuple[str, dict, frozenset[str]]:
-    snap = collect_digest(session, project, now, settings)
-    lines = [f"Báo cáo {snap.day_label} [{project}]."]
-    if snap.sprint_line:
-        lines.append(snap.sprint_line if snap.sprint_line.endswith(".") else f"{snap.sprint_line}.")
-    lines.append(
-        f"Nguy cơ trễ: {snap.risky_count} ({snap.raised_24h} tăng bậc 24 giờ). "
-        f"Bị block: {snap.blocked_count}. Mới 24 giờ: {snap.new_24h} ({snap.new_critical} critical)."
+def write_report_meta(settings: Settings, rel_path: str, meta: dict) -> None:
+    """Sidecar JSON next to md for chat Q&A allowlists (no invent)."""
+    meta_rel = rel_path[:-3] + ".meta.json" if rel_path.endswith(".md") else rel_path + ".meta.json"
+    path = report_abs_path(settings, meta_rel)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def persist_health_report(
+    session: Session,
+    settings: Settings,
+    *,
+    user_id: int,
+    project: str,
+    now: datetime,
+    hhmm: str,
+    local_day: str,
+    dedup: str,
+) -> ChatMessage | None:
+    """Build 7-section health report, write ChatMessage + md/pdf files. Returns message or None if dup."""
+    existing = session.scalar(select(ChatMessage.id).where(ChatMessage.dedup_key == dedup))
+    if existing is not None:
+        return None
+    body, snap, narratives = build_health_markdown(session, project, now, settings)
+    # Timeline keeps a short pointer; full content lives on disk.
+    summary_lines = [
+        f"Báo cáo sức khỏe {snap.day_label} [{project}].",
+        f"Open {snap.facts['overview']['open_count']} · Risky {snap.facts['overview']['risky_count']} · "
+        f"Blocked {snap.facts['overview']['blocked_count']}.",
+        "Chi tiết 7 mục trong file Báo cáo (md/pdf).",
+    ]
+    message = ChatMessage(
+        user_id=user_id,
+        project_key=project,
+        kind="report",
+        body="\n".join(summary_lines),
+        recommendation_status="ready",
+        created_at=now,
+        dedup_key=dedup,
     )
-    listed = []
-    for item in snap.top_risky:
-        level = Level[item.level_name].label_vi if item.level_name in Level.__members__ else item.level_name
-        line = issue_fact_line(
-            item.key,
-            item.assignee,
-            level,
-            item.deadline_label,
-            item.blocked,
-            blocks_keys(session, item.key),
-            blocker_keys(session, item.key) if item.blocked else [],
+    try:
+        with session.begin_nested():
+            session.add(message)
+            session.flush()
+    except IntegrityError:
+        return None
+    report_row = None
+    try:
+        report_row = write_report_file(
+            session,
+            settings,
+            user_id=user_id,
+            project=project,
+            message_id=message.id,
+            body=body,
+            hhmm=hhmm,
+            local_day=local_day,
+            created_at=now,
+            snap=snap,
+            narratives=narratives,
         )
-        lines.append(line)
-        listed.append({"key": item.key, "line": line})
-    facts = "\n".join(lines)
-    payload = {
-        "kind": "report",
-        "project": project,
-        "risky_count": snap.risky_count,
-        "raised_24h": snap.raised_24h,
-        "blocked_count": snap.blocked_count,
-        "new_24h": snap.new_24h,
-        "new_critical": snap.new_critical,
-        "issues": listed,
-    }
-    return facts, payload, keys_in_text(facts)
+        if report_row is not None:
+            write_report_meta(
+                settings,
+                report_row.rel_path,
+                {
+                    "report_id": report_row.id,
+                    "project": project,
+                    "report_date": local_day,
+                    "slot_hhmm": hhmm,
+                    "allowed_keys": sorted(snap.allowed_keys),
+                    "allowed_counts": snap.allowed_counts,
+                    "overview": snap.facts.get("overview", {}),
+                    "facts": snap.facts,
+                },
+            )
+            message.body = "\n".join(summary_lines) + f"\n[[report:{report_row.id}]]"
+    except OSError:
+        log.exception(
+            "failed to write health report file user=%s project=%s day=%s slot=%s",
+            user_id,
+            project,
+            local_day,
+            hhmm,
+        )
+    return message
 
 
 def run_due_reports(session: Session, now: datetime, settings: Settings) -> list[DueReport]:
+    """Weekday slots → one health report artifact per PM project (upgrade of short digest)."""
     local = now.astimezone(ZoneInfo(settings.tz))
     if local.weekday() >= 5:
         return []
@@ -145,44 +211,17 @@ def run_due_reports(session: Session, now: datetime, settings: Settings) -> list
         ).all()
         for project in projects:
             dedup = report_dedup_key(slot.user_id, project, hhmm, local_day)
-            existing = session.scalar(select(ChatMessage.id).where(ChatMessage.dedup_key == dedup))
-            if existing is not None:
-                continue
-            facts, payload, allowed = _report_body(session, project, now, settings)
-            message = ChatMessage(
+            message = persist_health_report(
+                session,
+                settings,
                 user_id=slot.user_id,
-                project_key=project,
-                kind="report",
-                body=facts,
-                recommendation_status="pending",
-                created_at=now,
-                dedup_key=dedup,
+                project=project,
+                now=now,
+                hhmm=hhmm,
+                local_day=local_day,
+                dedup=dedup,
             )
-            try:
-                with session.begin_nested():
-                    session.add(message)
-                    session.flush()
-            except IntegrityError:
+            if message is None:
                 continue
-            try:
-                write_report_file(
-                    session,
-                    settings,
-                    user_id=slot.user_id,
-                    project=project,
-                    message_id=message.id,
-                    body=facts,
-                    hhmm=hhmm,
-                    local_day=local_day,
-                    created_at=now,
-                )
-            except OSError:
-                log.exception(
-                    "failed to write report file user=%s project=%s day=%s slot=%s",
-                    slot.user_id,
-                    project,
-                    local_day,
-                    hhmm,
-                )
-            due.append(DueReport(message.id, json.dumps(payload, ensure_ascii=False), allowed))
+            # Narrative already embedded in file; no agent follow-up enqueue.
     return due

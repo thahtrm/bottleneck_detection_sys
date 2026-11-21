@@ -26,6 +26,7 @@ from erw.pipeline.chat_memory import (
     update_memory,
 )
 from erw.pipeline.chat_reports import report_abs_path
+from erw.pipeline.health_report import pdf_rel_from_md
 from erw.settings import Settings, get_settings
 
 chat_router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -35,6 +36,7 @@ router = chat_router
 class PostChatBody(BaseModel):
     project: str
     text: str
+    report_id: int | None = None
 
 
 class MemoryCreateBody(BaseModel):
@@ -78,6 +80,7 @@ def _serialize_report(row: ReportFile) -> dict:
         "preview": row.preview,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "filename": Path(row.rel_path).name,
+        "owner_user_id": row.user_id,
     }
 
 
@@ -86,6 +89,24 @@ def _owned_report(session: Session, report_id: int, user: User) -> ReportFile | 
     if row is None or row.user_id != user.id:
         return None
     return row
+
+
+def _project_report(session: Session, report_id: int, user: User) -> ReportFile | None:
+    """Any project member (or admin) may read; hide stays owner-only via _owned_report."""
+    row = session.get(ReportFile, report_id)
+    if row is None:
+        return None
+    role = get_user_project_role(session, user, row.project_key)
+    if user.is_admin or role in {"pm", "viewer", "admin"}:
+        return row
+    return None
+
+
+def _require_project_member(session: Session, user: User, project: str) -> None:
+    role = get_user_project_role(session, user, project.strip())
+    if user.is_admin or role in {"pm", "viewer", "admin"}:
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project membership required")
 
 
 def _ollama_reachable(settings: Settings) -> bool:
@@ -116,6 +137,19 @@ def require_chat_access(session: Session, user: User, project: str) -> None:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Access denied for project {project}")
 
 
+_REPORT_MARK = re.compile(r"\[\[report:(\d+)\]\]")
+
+
+def _attached_report_id(body: str) -> int | None:
+    match = _REPORT_MARK.search(body or "")
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
 def _serialize(message: ChatMessage) -> dict:
     created = message.created_at.isoformat() if message.created_at else None
     return {
@@ -125,6 +159,7 @@ def _serialize(message: ChatMessage) -> dict:
         "body": message.body,
         "recommendation_status": message.recommendation_status,
         "created_at": created,
+        "report_id": _attached_report_id(message.body),
     }
 
 
@@ -178,18 +213,25 @@ def post_message(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    text = body.text or ""
-    if not text.strip():
+    text = (body.text or "").strip()
+    if not text:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Text is required")
     project = body.project.strip()
     require_chat_access(session, user, project)
+    if body.report_id is not None:
+        row = _project_report(session, body.report_id, user)
+        if row is None or row.project_key != project:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+        marker = f"[[report:{body.report_id}]]"
+        if marker not in text:
+            text = f"{text}\n{marker}"
     app_settings = getattr(request.app.state, "settings", None) or settings
-    user_row, assistant_row = _store_pair(session, user, project, text.strip())
+    user_row, assistant_row = _store_pair(session, user, project, text)
     enqueue_agent_turn(
         message_id=assistant_row.id,
         user_id=user.id,
         project_key=project,
-        text=text.strip(),
+        text=text,
         settings=app_settings,
         engine=request.app.state.engine,
     )
@@ -360,11 +402,11 @@ def list_reports(
     user: User = Depends(require_authenticated_user),
     session: Session = Depends(get_session),
 ) -> list[dict]:
-    require_chat_access(session, user, project)
+    # §8.4 A: any project member (viewer/pm) or admin may list project health reports.
+    _require_project_member(session, user, project)
     rows = session.scalars(
         select(ReportFile)
         .where(
-            ReportFile.user_id == user.id,
             ReportFile.project_key == project.strip(),
             ReportFile.hidden_at.is_(None),
         )
@@ -373,27 +415,61 @@ def list_reports(
     return [_serialize_report(row) for row in rows]
 
 
-@chat_router.get("/reports/{report_id}/download")
-def download_report(
+@chat_router.get("/reports/{report_id}/content")
+def get_report_content(
     report_id: int,
     user: User = Depends(require_authenticated_user),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
-) -> FileResponse:
-    row = _owned_report(session, report_id, user)
+) -> dict:
+    """In-app markdown preview (§5 A) — same ACL as download."""
+    row = _project_report(session, report_id, user)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
-    require_chat_access(session, user, row.project_key)
     try:
         path = report_abs_path(settings, row.rel_path)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found") from exc
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report file missing on disk")
+    markdown = path.read_text(encoding="utf-8")
+    return {
+        "id": row.id,
+        "project_key": row.project_key,
+        "report_date": row.report_date,
+        "slot_hhmm": row.slot_hhmm,
+        "preview": row.preview,
+        "filename": Path(row.rel_path).name,
+        "markdown": markdown,
+    }
+
+
+@chat_router.get("/reports/{report_id}/download")
+def download_report(
+    report_id: int,
+    format: str = "md",
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    row = _project_report(session, report_id, user)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    fmt = (format or "md").strip().lower()
+    if fmt not in {"md", "pdf"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="format must be md or pdf")
+    rel = row.rel_path if fmt == "md" else pdf_rel_from_md(row.rel_path)
+    try:
+        path = report_abs_path(settings, rel)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found") from exc
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report file missing on disk")
+    media = "application/pdf" if fmt == "pdf" else "text/markdown; charset=utf-8"
     return FileResponse(
         path,
-        media_type="text/markdown; charset=utf-8",
-        filename=Path(row.rel_path).name,
+        media_type=media,
+        filename=Path(rel).name,
     )
 
 

@@ -1,0 +1,7 @@
+# Share main checkout SQLite + data so login matches :8000.
+services:
+  app:
+    volumes:
+      - ../../tgn/webapp/backend/var:/app/webapp/backend/var
+      - ../../tgn/data:/app/webapp/backend/data:ro
+      - ../../tgn/bundles:/app/webapp/backend/bundles:ro

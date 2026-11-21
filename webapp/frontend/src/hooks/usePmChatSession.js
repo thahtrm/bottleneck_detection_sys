@@ -4,6 +4,7 @@ import { getChatMessages, postChatMessage } from '../api/client';
 
 /** Composer drafts survive bubble ↔ tab remounts (shared thread surface). */
 const draftByProject = new Map();
+const attachByProject = new Map();
 
 /**
  * Shared PM chat thread state for bubble + Chat tab.
@@ -23,15 +24,20 @@ export function usePmChatSession(project) {
   });
 
   const send = useMutation({
-    mutationFn: (text) => postChatMessage(project, text),
+    mutationFn: ({ text, reportId }) => postChatMessage(project, text, reportId),
     onSuccess: () => {
-      if (project) draftByProject.set(project, '');
+      if (project) {
+        draftByProject.set(project, '');
+        attachByProject.set(project, null);
+      }
       bumpDraft((version) => version + 1);
       queryClient.invalidateQueries({ queryKey: ['chat-messages', project] });
+      queryClient.invalidateQueries({ queryKey: ['chat-reports', project] });
     },
   });
 
   const draft = project ? (draftByProject.get(project) ?? '') : '';
+  const attachedReport = project ? (attachByProject.get(project) ?? null) : null;
 
   const setDraft = (value) => {
     if (!project) return;
@@ -41,10 +47,16 @@ export function usePmChatSession(project) {
     bumpDraft((version) => version + 1);
   };
 
+  const setAttachedReport = (report) => {
+    if (!project) return;
+    attachByProject.set(project, report);
+    bumpDraft((version) => version + 1);
+  };
+
   const submit = () => {
     const text = draft.trim();
     if (!text || send.isPending || !project) return;
-    send.mutate(text);
+    send.mutate({ text, reportId: attachedReport?.id ?? null });
   };
 
   return {
@@ -55,6 +67,8 @@ export function usePmChatSession(project) {
     error: messages.error,
     draft,
     setDraft,
+    attachedReport,
+    setAttachedReport,
     submit,
     sendPending: send.isPending,
     sendError: send.error,

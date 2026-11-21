@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Button, Group, Stack, Text, Tooltip } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconDownload, IconEyeOff } from '@tabler/icons-react';
+import { IconDownload, IconEye, IconEyeOff, IconFileTypePdf } from '@tabler/icons-react';
 import { downloadChatReport, getChatReports, hideChatReport } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 
 function previewLine(report) {
   const raw = report.preview || report.filename || '';
@@ -26,7 +27,26 @@ function formatReportDate(value) {
   }
 }
 
-export default function ReportFileManager({ project, onOpenSettings }) {
+async function saveBlob(report, format) {
+  const { blob, filename } = await downloadChatReport(report.id, format);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename || report.filename || `report-${report.id}.${format}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export default function ReportFileManager({
+  project,
+  onOpenSettings,
+  onPreview,
+  canHide = true,
+  showPdfDownload = true,
+}) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [confirmHideId, setConfirmHideId] = useState(null);
 
@@ -38,17 +58,7 @@ export default function ReportFileManager({ project, onOpenSettings }) {
   });
 
   const download = useMutation({
-    mutationFn: async (report) => {
-      const { blob, filename } = await downloadChatReport(report.id);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = filename || report.filename || `report-${report.id}.md`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-    },
+    mutationFn: ({ report, format }) => saveBlob(report, format),
   });
 
   const hide = useMutation({
@@ -64,7 +74,7 @@ export default function ReportFileManager({ project, onOpenSettings }) {
   return (
     <Stack gap="sm" className="pm-chat-files">
       <Group justify="space-between" align="center">
-        <Text className="pm-chat-title">Báo cáo ngày</Text>
+        <Text className="pm-chat-title">Báo cáo sức khỏe</Text>
         {onOpenSettings && (
           <Button variant="subtle" size="compact-sm" className="pm-chat-btn-subtle" onClick={onOpenSettings}>
             Đổi lịch
@@ -78,7 +88,7 @@ export default function ReportFileManager({ project, onOpenSettings }) {
 
       {!reports.isLoading && items.length === 0 && !reports.isError && (
         <Text className="pm-chat-meta">
-          Chưa có báo cáo. Đặt lịch trong Cài đặt.
+          Chưa có báo cáo. PM có thể tạo on-demand hoặc đặt lịch trong Cài đặt.
           {onOpenSettings ? (
             <>
               {' '}
@@ -94,8 +104,31 @@ export default function ReportFileManager({ project, onOpenSettings }) {
         {items.map((report) => {
           const id = report.id;
           const confirming = confirmHideId === id;
+          const isOwner = report.owner_user_id == null || report.owner_user_id === user?.id;
+          const allowHide = canHide && isOwner;
+          const downloadingMd =
+            download.isPending && download.variables?.report?.id === id && download.variables?.format === 'md';
+          const downloadingPdf =
+            download.isPending && download.variables?.report?.id === id && download.variables?.format === 'pdf';
           return (
-            <div key={id} className="pm-chat-file-row">
+            <div
+              key={id}
+              className="pm-chat-file-row"
+              data-clickable={onPreview ? 'true' : undefined}
+              onClick={onPreview ? () => onPreview(report) : undefined}
+              onKeyDown={
+                onPreview
+                  ? (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        onPreview(report);
+                      }
+                    }
+                  : undefined
+              }
+              role={onPreview ? 'button' : undefined}
+              tabIndex={onPreview ? 0 : undefined}
+            >
               <Stack gap={4}>
                 <Group gap="xs" wrap="wrap">
                   <Text className="pm-chat-label">{formatReportDate(report.report_date)}</Text>
@@ -103,52 +136,81 @@ export default function ReportFileManager({ project, onOpenSettings }) {
                   <Text className="pm-chat-meta">{report.project_key || project}</Text>
                 </Group>
                 <Text className="pm-chat-body">{previewLine(report)}</Text>
-                <Group gap="xs">
-                  <Tooltip label="Tải file" withArrow>
+                <Group gap="xs" onClick={(event) => event.stopPropagation()}>
+                  {onPreview ? (
+                    <Tooltip label="Xem trong app" withArrow>
+                      <Button
+                        className="pm-chat-btn-secondary"
+                        size="compact-sm"
+                        leftSection={<IconEye size={14} />}
+                        onClick={() => onPreview(report)}
+                        style={{ height: 32, padding: '0 16px' }}
+                      >
+                        Xem
+                      </Button>
+                    </Tooltip>
+                  ) : null}
+                  <Tooltip label="Tải Markdown" withArrow>
                     <Button
                       className="pm-chat-btn-secondary"
                       size="compact-sm"
                       leftSection={<IconDownload size={14} />}
-                      loading={download.isPending && download.variables?.id === id}
-                      onClick={() => download.mutate(report)}
+                      loading={downloadingMd}
+                      onClick={() => download.mutate({ report, format: 'md' })}
                       style={{ height: 32, padding: '0 16px' }}
                     >
-                      Tải
+                      MD
                     </Button>
                   </Tooltip>
-                  {confirming ? (
-                    <Group gap={4}>
-                      <Button
-                        className="pm-chat-btn-primary"
-                        size="compact-sm"
-                        loading={hide.isPending && hide.variables === id}
-                        onClick={() => hide.mutate(id)}
-                        style={{ height: 32, padding: '0 16px' }}
-                      >
-                        Ẩn khỏi danh sách
-                      </Button>
+                  {showPdfDownload ? (
+                    <Tooltip label="Tải PDF" withArrow>
                       <Button
                         className="pm-chat-btn-secondary"
                         size="compact-sm"
-                        onClick={() => setConfirmHideId(null)}
+                        leftSection={<IconFileTypePdf size={14} />}
+                        loading={downloadingPdf}
+                        onClick={() => download.mutate({ report, format: 'pdf' })}
                         style={{ height: 32, padding: '0 16px' }}
                       >
-                        Hủy
+                        PDF
                       </Button>
-                    </Group>
-                  ) : (
-                    <Button
-                      className="pm-chat-btn-secondary"
-                      size="compact-sm"
-                      leftSection={<IconEyeOff size={14} />}
-                      onClick={() => setConfirmHideId(id)}
-                      style={{ height: 32, padding: '0 16px' }}
-                    >
-                      Ẩn
-                    </Button>
-                  )}
+                    </Tooltip>
+                  ) : null}
+                  {allowHide ? (
+                    confirming ? (
+                      <Group gap={4}>
+                        <Button
+                          className="pm-chat-btn-primary"
+                          size="compact-sm"
+                          loading={hide.isPending && hide.variables === id}
+                          onClick={() => hide.mutate(id)}
+                          style={{ height: 32, padding: '0 16px' }}
+                        >
+                          Ẩn khỏi danh sách
+                        </Button>
+                        <Button
+                          className="pm-chat-btn-secondary"
+                          size="compact-sm"
+                          onClick={() => setConfirmHideId(null)}
+                          style={{ height: 32, padding: '0 16px' }}
+                        >
+                          Hủy
+                        </Button>
+                      </Group>
+                    ) : (
+                      <Button
+                        className="pm-chat-btn-secondary"
+                        size="compact-sm"
+                        leftSection={<IconEyeOff size={14} />}
+                        onClick={() => setConfirmHideId(id)}
+                        style={{ height: 32, padding: '0 16px' }}
+                      >
+                        Ẩn
+                      </Button>
+                    )
+                  ) : null}
                 </Group>
-                {download.isError && download.variables?.id === id && (
+                {download.isError && download.variables?.report?.id === id && (
                   <Text className="pm-chat-error">{download.error?.message || 'Không tải được.'}</Text>
                 )}
                 {hide.isError && hide.variables === id && (

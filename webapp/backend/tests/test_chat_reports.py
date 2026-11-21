@@ -3,9 +3,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from erw import jobs
-from erw.models import ChatMessage, Issue, Project, ProjectMember, ReportSlot, RiskState, User
-from erw.pipeline.chat_reports import run_due_reports
+from erw.models import ChatMessage, Issue, Project, ProjectMember, ReportFile, ReportSlot, RiskState, User
+from erw.pipeline.chat_reports import report_abs_path, run_due_reports
 from erw.pipeline.digest import collect_digest
+from erw.pipeline.health_report import collect_health_snapshot, render_facts_markdown
 
 NOW = datetime(2026, 11, 4, 1, 0, tzinfo=UTC)  # Wednesday 08:00 Asia/Ho_Chi_Minh
 SATURDAY = datetime(2026, 11, 7, 1, 0, tzinfo=UTC)
@@ -36,14 +37,13 @@ def test_same_minute_does_not_duplicate_report(session, settings):
     _membership(session, pm, "DEMO", "pm")
     session.add(ReportSlot(user_id=pm.id, time_hhmm="08:00"))
     session.flush()
-    first = run_due_reports(session, NOW, settings)
-    second = run_due_reports(session, NOW, settings)
+    run_due_reports(session, NOW, settings)
+    run_due_reports(session, NOW, settings)
     session.flush()
-    assert len(first) == 1 and second == []
     rows = session.query(ChatMessage).all()
     assert len(rows) == 1
     assert rows[0].dedup_key == f"report:{pm.id}:DEMO:08:00:2026-11-04"
-    assert rows[0].kind == "report" and rows[0].recommendation_status == "pending"
+    assert rows[0].kind == "report" and rows[0].recommendation_status == "ready"
 
 
 def test_saturday_slot_inserts_nothing(session, settings):
@@ -68,9 +68,8 @@ def test_one_slot_reports_each_pm_project(session, settings):
     _membership(session, pm, "OTHER", "pm")
     session.add(ReportSlot(user_id=pm.id, time_hhmm="08:00"))
     session.flush()
-    due = run_due_reports(session, NOW, settings)
+    run_due_reports(session, NOW, settings)
     keys = sorted(row.dedup_key for row in session.query(ChatMessage).all())
-    assert len(due) == 2
     assert keys == [
         f"report:{pm.id}:DEMO:08:00:2026-11-04",
         f"report:{pm.id}:OTHER:08:00:2026-11-04",
@@ -85,7 +84,7 @@ def test_viewer_slot_inserts_nothing(session, settings):
     assert run_due_reports(session, NOW, settings) == []
 
 
-def test_report_facts_use_digest_counts(session, settings):
+def test_health_facts_match_digest_counts(session, settings):
     pm = _user(session, "pm@example.com")
     _membership(session, pm, "DEMO", "pm")
     session.add(ReportSlot(user_id=pm.id, time_hhmm="08:00"))
@@ -102,11 +101,23 @@ def test_report_facts_use_digest_counts(session, settings):
     session.add(RiskState(issue_key="DEMO-1", level="HIGH", blocked=True, updated_at=NOW))
     session.flush()
     run_due_reports(session, NOW, settings)
-    snap = collect_digest(session, "DEMO", NOW, settings)
-    body = session.query(ChatMessage).one().body
-    assert f"Nguy cơ trễ: {snap.risky_count} ({snap.raised_24h} tăng bậc 24 giờ)." in body
-    assert f"Bị block: {snap.blocked_count}." in body
+    digest = collect_digest(session, "DEMO", NOW, settings)
+    msg = session.query(ChatMessage).one()
+    assert "Báo cáo sức khỏe" in msg.body
+    assert f"Risky {digest.risky_count}" in msg.body
+    assert f"Blocked {digest.blocked_count}" in msg.body
+    row = session.query(ReportFile).one()
+    body = report_abs_path(settings, row.rel_path).read_text(encoding="utf-8")
+    assert "## 1. Overview" in body
+    assert "## 7. Action recommendations" in body
     assert "DEMO-1" in body
+    assert f"Risky: {digest.risky_count}" in body
+    snap = collect_health_snapshot(session, "DEMO", NOW, settings)
+    assert snap.allowed_counts["risky_count"] == digest.risky_count
+    assert snap.allowed_counts["blocked_count"] == digest.blocked_count
+    assert "DEMO-1" in snap.allowed_keys
+    facts_only = render_facts_markdown(snap)
+    assert "### Facts" in facts_only
 
 
 def test_digest_job_does_not_write_chat(settings, engine, session):

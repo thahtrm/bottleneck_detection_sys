@@ -10,25 +10,54 @@ const KIND_LABEL = {
   report: 'Báo cáo',
   urgent: 'Việc gấp',
 };
+const REPORT_MARK = /\[\[report:(\d+)\]\]/g;
 
-function MessageBody({ body, onOpenIssue }) {
+function splitWithReports(body) {
+  const parts = [];
+  let last = 0;
+  const text = String(body || '');
+  for (const match of text.matchAll(REPORT_MARK)) {
+    if (match.index > last) parts.push({ type: 'text', text: text.slice(last, match.index) });
+    parts.push({ type: 'report', id: Number(match[1]) });
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) parts.push({ type: 'text', text: text.slice(last) });
+  return parts.length ? parts : [{ type: 'text', text }];
+}
+
+function MessageBody({ body, onOpenIssue, onOpenReport }) {
+  const chunks = splitWithReports(body);
   return (
     <Text className="pm-chat-body" style={{ whiteSpace: 'pre-wrap' }}>
-      {splitChatText(body).map((part, index) =>
-        part.type === 'issue' ? (
-          <Button
-            key={`${part.key}-${index}`}
-            variant="subtle"
-            size="compact-xs"
-            className="pm-chat-link-btn"
-            onClick={() => onOpenIssue(part.key)}
-          >
-            {part.key}
-          </Button>
-        ) : (
-          <React.Fragment key={index}>{part.text}</React.Fragment>
-        ),
-      )}
+      {chunks.map((chunk, index) => {
+        if (chunk.type === 'report') {
+          return (
+            <button
+              key={`r-${chunk.id}-${index}`}
+              type="button"
+              className="pm-chat-report-chip"
+              onClick={() => onOpenReport?.(chunk.id)}
+            >
+              Xem báo cáo #{chunk.id}
+            </button>
+          );
+        }
+        return splitChatText(chunk.text).map((part, partIndex) =>
+          part.type === 'issue' ? (
+            <Button
+              key={`${part.key}-${index}-${partIndex}`}
+              variant="subtle"
+              size="compact-xs"
+              className="pm-chat-link-btn"
+              onClick={() => onOpenIssue(part.key)}
+            >
+              {part.key}
+            </Button>
+          ) : (
+            <React.Fragment key={`${index}-${partIndex}`}>{part.text}</React.Fragment>
+          ),
+        );
+      })}
     </Text>
   );
 }
@@ -54,6 +83,7 @@ export default function PmChatTimeline({
   isError = false,
   error = null,
   onOpenIssue,
+  onOpenReport,
   style,
 }) {
   const viewport = useRef(null);
@@ -74,10 +104,21 @@ export default function PmChatTimeline({
             )}
             <div className={`pm-chat-bubble${message.kind === 'user' ? ' pm-chat-bubble-user' : ''}`}>
               {message.body ? (
-                <MessageBody body={message.body} onOpenIssue={onOpenIssue} />
+                <MessageBody body={message.body} onOpenIssue={onOpenIssue} onOpenReport={onOpenReport} />
               ) : message.recommendation_status === 'pending' ? null : (
                 <Text className="pm-chat-meta"> </Text>
               )}
+              {message.report_id && message.kind === 'user' ? (
+                <Group gap={6} mt={6}>
+                  <button
+                    type="button"
+                    className="pm-chat-report-chip"
+                    onClick={() => onOpenReport?.(message.report_id)}
+                  >
+                    Đã đính kèm #{message.report_id}
+                  </button>
+                </Group>
+              ) : null}
               <CitationChips citations={message.citations} />
             </div>
             {message.recommendation_status === 'pending' && (

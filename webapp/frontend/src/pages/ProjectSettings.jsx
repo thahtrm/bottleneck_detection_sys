@@ -13,6 +13,7 @@ import {
 import {
   IconAlertCircle,
   IconCheck,
+  IconFileReport,
   IconFolders,
   IconMessageCircle,
   IconUsers,
@@ -23,7 +24,7 @@ import { OpenProjectOnJira } from '../components/JiraLinks';
 import MemoryPrefsSection from '../components/settings/MemoryPrefsSection';
 import ProjectMembersSection from '../components/settings/ProjectMembersSection';
 import { useAuth } from '../context/AuthContext';
-import { toggleProjectTracking } from '../api/client';
+import { generateHealthReport, toggleProjectTracking } from '../api/client';
 import '../styles/kaggleTokens.css';
 
 function SettingsCard({ title, icon, children, right }) {
@@ -45,6 +46,8 @@ export default function ProjectSettings({
   project = '',
   projects = [],
   onOpenSystemSettings,
+  onOpenReports,
+  onOpenChat,
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -53,7 +56,29 @@ export default function ProjectSettings({
   const projectRole = projectMeta?.role;
   const canManageMembers = Boolean(project) && (isAdmin || projectRole === 'pm');
   const canEditMemory = Boolean(project) && (isAdmin || projectRole === 'pm');
+  const canGenerateHealth = Boolean(project) && (isAdmin || projectRole === 'pm');
   const [toggling, setToggling] = useState(false);
+
+  const healthMut = useMutation({
+    mutationFn: () => generateHealthReport(project),
+    onSuccess: () => {
+      notifications.show({
+        title: 'Đã tạo báo cáo sức khỏe',
+        message: `Báo cáo hôm nay cho ${project} đã sẵn sàng (md/pdf).`,
+        color: 'teal',
+        icon: <IconCheck size={18} />,
+      });
+      queryClient.invalidateQueries({ queryKey: ['chat-reports', project] });
+    },
+    onError: (err) => {
+      notifications.show({
+        title: 'Không tạo được báo cáo',
+        message: err.message || 'Thử lại sau hoặc mở trang Báo cáo.',
+        color: 'red',
+        icon: <IconAlertCircle size={18} />,
+      });
+    },
+  });
 
   const trackMut = useMutation({
     mutationFn: () => toggleProjectTracking(project),
@@ -134,6 +159,39 @@ export default function ProjectSettings({
             </Button>
           ) : null}
         </Group>
+
+        <SettingsCard title="Báo cáo sức khỏe" icon={<IconFileReport size={22} color="var(--color-secondary)" />}>
+          <Stack gap="sm">
+            <Text className="erw-settings-body">
+              Báo cáo 7 mục (overview → recommendations) từ số liệu deterministic; AI chỉ viết nhận định trên
+              fact đã có. Lịch schedule reuse slot trong Cài đặt hệ thống.
+            </Text>
+            <Group gap="sm" wrap="wrap">
+              {canGenerateHealth ? (
+                <Button
+                  className="erw-settings-btn-primary"
+                  leftSection={<IconFileReport size={16} />}
+                  loading={healthMut.isPending}
+                  onClick={() => healthMut.mutate()}
+                >
+                  Tạo báo cáo sức khỏe hôm nay
+                </Button>
+              ) : (
+                <Text className="erw-settings-meta">Chỉ PM/Admin tạo on-demand; viewer vẫn đọc được file.</Text>
+              )}
+              {onOpenReports ? (
+                <Button className="erw-settings-btn-secondary" onClick={onOpenReports}>
+                  Mở Báo cáo
+                </Button>
+              ) : null}
+              {onOpenChat ? (
+                <Button className="erw-settings-btn-secondary" onClick={onOpenChat}>
+                  Xem trong Chat
+                </Button>
+              ) : null}
+            </Group>
+          </Stack>
+        </SettingsCard>
 
         <SettingsCard title="Thành viên dự án" icon={<IconUsers size={22} color="var(--color-secondary)" />}>
           <ProjectMembersSection project={project} canManage={canManageMembers} />

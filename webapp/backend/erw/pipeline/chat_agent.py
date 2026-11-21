@@ -26,9 +26,11 @@ from erw.pipeline.chat_recommend import (
 from erw.pipeline.chat_tools import (
     BOARD_TOOLS,
     FOUNDATION_TOOLS,
+    REPORT_TOOLS,
     ToolResult,
     board_tool_succeeded,
     catalog_for_pm,
+    extract_attached_report_id,
     render_facts_from_tool_results,
     run_tool,
     tool_hint,
@@ -47,7 +49,9 @@ def _agent_system(tool_hint_name: str | None) -> str:
     hint = f"Gợi ý tool (không bắt buộc): {tool_hint_name}." if tool_hint_name else "Không có gợi ý phrase."
     return (
         "Bạn là trợ lý PM Early Risk cho đúng một project. "
-        "Muốn số liệu board/sprint/risk/issue → phải gọi tool. Cấm bịa mã issue, count, deadline.\n"
+        "Muốn số liệu board/sprint/risk/issue/báo cáo sức khỏe → phải gọi tool. Cấm bịa mã issue, count, deadline.\n"
+        "Hỏi theo báo cáo đã đính kèm → get_health_report. "
+        "Tạo/cập nhật báo cáo sức khỏe → generate_health_report (artifact mới).\n"
         "RAG chỉ là hướng dẫn quy trình; nếu xung đột với tool → tin tool.\n"
         "Không hứa đã ghi Jira/Slack. Không đổi lịch báo cáo.\n"
         "Ngoài phạm vi → sẽ trả lời đúng: Chưa có trong hệ thống.\n"
@@ -55,7 +59,7 @@ def _agent_system(tool_hint_name: str | None) -> str:
         f"Tools được phép: {catalog}\n"
         "Mỗi bước trả đúng một JSON object, không markdown:\n"
         '{"tool":"<name>","args":{...}} hoặc {"done":true}\n'
-        "Khi đã đủ dữ liệu board (hoặc câu chỉ hỏi quy trình), trả {\"done\":true}."
+        "Khi đã đủ dữ liệu board/report (hoặc câu chỉ hỏi quy trình), trả {\"done\":true}."
     )
 
 
@@ -125,7 +129,7 @@ def _compose_recommendation(
     settings: Settings,
     client: httpx.Client | None,
 ) -> tuple[str, str]:
-    if any(r.ok and r.skip_recommendation for r in results if r.name in BOARD_TOOLS):
+    if any(r.ok and r.skip_recommendation for r in results if r.name in BOARD_TOOLS | REPORT_TOOLS):
         return "", "skipped"
     for result in results:
         if result.name != "get_issue_suggestion" or not result.ok:
@@ -141,7 +145,7 @@ def _compose_recommendation(
             break
     user_prompt = _issue_prompt(session, issue_key) if issue_key else None
     if user_prompt is None:
-        payload_bits = [r.payload for r in results if r.ok and r.name in BOARD_TOOLS]
+        payload_bits = [r.payload for r in results if r.ok and r.name in BOARD_TOOLS | REPORT_TOOLS]
         user_prompt = json.dumps(payload_bits, ensure_ascii=False) if payload_bits else ""
     if not user_prompt:
         return "", "skipped"
@@ -175,6 +179,7 @@ def run_agent_turn(
     session.flush()
 
     hint = tool_hint(text, project_key)
+    attached_report_id = extract_attached_report_id(text)
     memories = load_user_project_memory(session, user_id, project_key)
     session_msgs = load_session_messages(session, user_id, project_key, limit=settings.agent_session_limit)
     rag_chunks = retrieve(session, text, project_key, settings, k=4)
@@ -214,7 +219,10 @@ def run_agent_turn(
         if tool_name is None:
             # LLM failed or malformed — deterministic phrase hint once
             if hint and hint not in used_tools:
-                tool_name, args = hint, {}
+                tool_name = hint
+                args = {}
+                if hint == "get_health_report" and attached_report_id is not None:
+                    args = {"report_id": attached_report_id}
                 steps.append({"step": step_i + 1, "decision": "hint_fallback", "tool": tool_name})
             else:
                 steps.append({"step": step_i + 1, "decision": "stop", "raw": decision_raw})
@@ -228,6 +236,8 @@ def run_agent_turn(
             steps.append({"step": step_i + 1, "decision": "skip_dup", "tool": tool_name})
             done = True
             break
+        if tool_name == "get_health_report" and not args.get("report_id") and attached_report_id is not None:
+            args = {**args, "report_id": attached_report_id}
         result = run_tool(
             session,
             tool_name,
@@ -236,6 +246,7 @@ def run_agent_turn(
             moment,
             settings,
             user_text=text,
+            user_id=user_id,
         )
         results.append(result)
         used_tools.add(tool_name)
@@ -272,8 +283,20 @@ def run_agent_turn(
             done = True
 
     # If LLM never ran a tool but phrase maps to one, force that board tool
-    if not board_tool_succeeded(results) and hint and hint in BOARD_TOOLS:
-        result = run_tool(session, hint, {}, project_key, moment, settings, user_text=text)
+    if not board_tool_succeeded(results) and hint and hint in (BOARD_TOOLS | REPORT_TOOLS):
+        ensure_args: dict[str, Any] = {}
+        if hint == "get_health_report" and attached_report_id is not None:
+            ensure_args = {"report_id": attached_report_id}
+        result = run_tool(
+            session,
+            hint,
+            ensure_args,
+            project_key,
+            moment,
+            settings,
+            user_text=text,
+            user_id=user_id,
+        )
         results.append(result)
         steps.append({"step": "ensure", "tool": hint, "ok": result.ok})
         if (
@@ -294,7 +317,7 @@ def run_agent_turn(
             results.append(sug)
             steps.append({"step": "ensure", "tool": "get_issue_suggestion", "ok": sug.ok})
 
-    needs_board = hint is not None and hint in BOARD_TOOLS
+    needs_board = hint is not None and hint in (BOARD_TOOLS | REPORT_TOOLS)
     facts = render_facts_from_tool_results(results)
     allowed = union_allowed_keys(results)
     rag_only = bool(rag_chunks) and not needs_board and not board_tool_succeeded(results)
@@ -315,7 +338,7 @@ def run_agent_turn(
             status = "skipped"
         else:
             body = facts or OUT_OF_SCOPE
-            if any(r.ok and r.skip_recommendation for r in results if r.name in BOARD_TOOLS):
+            if any(r.ok and r.skip_recommendation for r in results if r.name in BOARD_TOOLS | REPORT_TOOLS):
                 status = "skipped"
             else:
                 rec_text, rec_status = _compose_recommendation(session, results, allowed, settings, client)
