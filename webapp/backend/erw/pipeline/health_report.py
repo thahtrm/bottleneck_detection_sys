@@ -42,6 +42,42 @@ SECTION_IDS = (
     "actions",
 )
 
+# xhtml2pdf only allows font files under the document base dir (/app/webapp/backend).
+_FONT_DIR = Path(__file__).resolve().parents[1] / "assets" / "fonts"
+_FONT_CANDIDATES = (
+    _FONT_DIR / "DejaVuSans.ttf",
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+)
+_FONT_BOLD_CANDIDATES = (
+    _FONT_DIR / "DejaVuSans-Bold.ttf",
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+)
+
+
+def _pdf_font_css() -> str:
+    """Embed a Unicode-capable face so Vietnamese narrative glyphs render in PDF."""
+    regular = next((p for p in _FONT_CANDIDATES if p.is_file()), None)
+    bold = next((p for p in _FONT_BOLD_CANDIDATES if p.is_file()), None)
+    if regular is None:
+        return "body { font-family: Helvetica, Arial, sans-serif; }"
+    # Prefer plain filesystem paths; file:// URIs are blocked by xhtml2pdf resource policy.
+    faces = [
+        "@font-face {"
+        "font-family: ReportSans;"
+        f"src: url('{regular}');"
+        "font-weight: normal;"
+        "}"
+    ]
+    if bold is not None:
+        faces.append(
+            "@font-face {"
+            "font-family: ReportSans;"
+            f"src: url('{bold}');"
+            "font-weight: bold;"
+            "}"
+        )
+    return "\n".join(faces) + "\nbody { font-family: ReportSans, Helvetica, Arial, sans-serif; }"
+
 
 @dataclass
 class HealthSnapshot:
@@ -264,13 +300,34 @@ def collect_health_snapshot(session: Session, project: str, now: datetime, setti
     )
 
 
+SECTION_TITLES = {
+    "overview": "1. Overview",
+    "progress": "2. Today’s progress",
+    "risk": "3. Risk alerts",
+    "bottleneck": "4. Bottleneck analysis",
+    "dependency": "5. Dependency impact",
+    "resource": "6. Resource allocation",
+    "actions": "7. Action recommendations",
+}
+
+
 def _bullets(items: list[str]) -> str:
     if not items:
         return "- (không có)\n"
     return "".join(f"- {line}\n" for line in items)
 
 
-def render_facts_markdown(snap: HealthSnapshot) -> str:
+def overall_status(snap: HealthSnapshot) -> tuple[str, str]:
+    """Return (code, label) from deterministic overview counts."""
+    o = snap.facts["overview"]
+    if int(o.get("high_count") or 0) > 0 or int(o.get("blocked_count") or 0) > 0:
+        return "AT_RISK", "At risk"
+    if int(o.get("risky_count") or 0) > 0 or int(o.get("med_count") or 0) > 0:
+        return "WATCH", "Watch"
+    return "HEALTHY", "Healthy"
+
+
+def _section_facts_blocks(snap: HealthSnapshot) -> dict[str, list[str]]:
     o = snap.facts["overview"]
     p = snap.facts["progress"]
     r = snap.facts["risk"]
@@ -278,100 +335,122 @@ def render_facts_markdown(snap: HealthSnapshot) -> str:
     d = snap.facts["dependency"]
     res = snap.facts["resource"]
     a = snap.facts["actions"]
-
-    parts: list[str] = [
-        f"# Báo cáo sức khỏe dự án — {snap.project} — {snap.day_iso}",
-        f"> TZ {snap.tz} · Generated {snap.generated_at}",
-        "",
-        "## 1. Overview",
-        "### Facts",
-        f"- Dự án: **{o['name']}** (`{o['project']}`)",
-        f"- Sprint: {o['sprint_line'] or 'Không có sprint active'}",
-        f"- Open: {o['open_count']} · Done: {o['done_count']}",
-        f"- Risk HIGH/MED: {o['high_count']}/{o['med_count']} · Risky: {o['risky_count']} "
-        f"(+{o['raised_24h']} tăng bậc 24h) · Blocked: {o['blocked_count']}",
-        f"- Mới 24h: {o['new_24h']} (critical: {o['new_critical']})",
-        "",
-        "## 2. Today’s progress",
-        "### Facts",
-        f"- Created 24h: {p['created_count']} · Resolved: {p['resolved_count']} · Updated: {p['updated_count']} · "
-        f"Status transitions: {p['transition_count']}",
-    ]
-    parts.append("Created:")
-    parts.append(
-        _bullets([f"{x['key']} — {x['summary']}" for x in p["created"]]).rstrip()
-        if p["created"]
-        else "- (không có)"
-    )
-    parts.append("Resolved:")
-    parts.append(
-        _bullets([f"{x['key']} — {x['summary']}" for x in p["resolved"]]).rstrip()
-        if p["resolved"]
-        else "- (không có)"
-    )
-    parts.append("Status transitions:")
-    parts.append(
-        _bullets([f"{x['key']}: {x['from']} → {x['to']}" for x in p["status_transitions"]]).rstrip()
-        if p["status_transitions"]
-        else "- (không có)"
-    )
-    parts.extend(["", "## 3. Risk alerts", "### Facts", f"- Risky open: {r['risky_count']} (raised 24h: {r['raised_24h']})"])
-    parts.append(
-        _bullets(
-            [
-                f"{x['key']} [{x['level']}] {x['summary']} · {x['deadline'] or 'chưa hạn'} · @{x['assignee']}"
-                + (" · blocked" if x["blocked"] else "")
-                for x in r["top"]
-            ]
-        ).rstrip()
-        if r["top"]
-        else "- (không có)"
-    )
-    parts.extend(["", "## 4. Bottleneck analysis", "### Facts", f"- Blocked open: {b['blocked_count']}"])
-    parts.append(
-        _bullets(
-            [
-                f"{x['key']} — {x['summary']} · @{x['assignee']}"
-                + (f" · blockers {', '.join(x['blockers'])}" if x["blockers"] else "")
-                for x in b["blocked"]
-            ]
-        ).rstrip()
-        if b["blocked"]
-        else "- (không có)"
-    )
-    parts.append("Top blockers by fan-out:")
-    parts.append(
-        _bullets([f"{x['key']} → {x['downstream']} downstream" for x in b["top_blockers_by_fanout"]]).rstrip()
-        if b["top_blockers_by_fanout"]
-        else "- (không có)"
-    )
-    parts.extend(["", "## 5. Dependency impact", "### Facts", f"- Links touching HIGH/blocked: {d['link_count']}"])
-    parts.append(
-        _bullets([f"{x['source']} —{x['type']}→ {x['target']}" for x in d["links"]]).rstrip()
-        if d["links"]
-        else "- (không có)"
-    )
-    parts.extend(
-        [
-            "",
-            "## 6. Resource allocation",
-            "### Facts",
+    return {
+        "overview": [
+            f"- Dự án: **{o['name']}** (`{o['project']}`)",
+            f"- Sprint: {o['sprint_line'] or 'Không có sprint active'}",
+            f"- Open: {o['open_count']} · Done: {o['done_count']}",
+            f"- Risk HIGH/MED: {o['high_count']}/{o['med_count']} · Risky: {o['risky_count']} "
+            f"(+{o['raised_24h']} tăng bậc 24h) · Blocked: {o['blocked_count']}",
+            f"- Mới 24h: {o['new_24h']} (critical: {o['new_critical']})",
+        ],
+        "progress": [
+            f"- Created 24h: {p['created_count']} · Resolved: {p['resolved_count']} · "
+            f"Updated: {p['updated_count']} · Status transitions: {p['transition_count']}",
+            "Created:",
+            _bullets([f"{x['key']} — {x['summary']}" for x in p["created"]]).rstrip()
+            if p["created"]
+            else "- (không có)",
+            "Resolved:",
+            _bullets([f"{x['key']} — {x['summary']}" for x in p["resolved"]]).rstrip()
+            if p["resolved"]
+            else "- (không có)",
+            "Status transitions:",
+            _bullets([f"{x['key']}: {x['from']} → {x['to']}" for x in p["status_transitions"]]).rstrip()
+            if p["status_transitions"]
+            else "- (không có)",
+        ],
+        "risk": [
+            f"- Risky open: {r['risky_count']} (raised 24h: {r['raised_24h']})",
+            _bullets(
+                [
+                    f"{x['key']} `[{x['level']}]` {x['summary']} · {x['deadline'] or 'chưa hạn'} · @{x['assignee']}"
+                    + (" · `BLOCKED`" if x["blocked"] else "")
+                    for x in r["top"]
+                ]
+            ).rstrip()
+            if r["top"]
+            else "- (không có)",
+        ],
+        "bottleneck": [
+            f"- Blocked open: {b['blocked_count']}",
+            _bullets(
+                [
+                    f"{x['key']} — {x['summary']} · @{x['assignee']}"
+                    + (f" · blockers {', '.join(x['blockers'])}" if x["blockers"] else "")
+                    for x in b["blocked"]
+                ]
+            ).rstrip()
+            if b["blocked"]
+            else "- (không có)",
+            "Top blockers by fan-out:",
+            _bullets([f"{x['key']} → {x['downstream']} downstream" for x in b["top_blockers_by_fanout"]]).rstrip()
+            if b["top_blockers_by_fanout"]
+            else "- (không có)",
+        ],
+        "dependency": [
+            f"- Links touching HIGH/blocked: {d['link_count']}",
+            _bullets([f"{x['source']} —{x['type']}→ {x['target']}" for x in d["links"]]).rstrip()
+            if d["links"]
+            else "- (không có)",
+        ],
+        "resource": [
             f"- Unassigned open: {res['unassigned']} · Median open/assignee: {res['median_open']}",
-        ]
-    )
-    parts.append(
-        _bullets([f"{x['name']}: {x['open_count']} việc ({', '.join(x['keys'])})" for x in res["assignees"]]).rstrip()
-        if res["assignees"]
-        else "- (không có)"
-    )
-    parts.extend(["", "## 7. Action recommendations", "### Facts (ứng viên)"])
-    parts.append(
-        _bullets([f"{x['key']} — {x['reason']}: {x['detail']}" for x in a["candidates"]]).rstrip()
-        if a["candidates"]
-        else "- (không có)"
-    )
-    parts.append("")
-    return "\n".join(parts) + "\n"
+            _bullets([f"{x['name']}: {x['open_count']} việc ({', '.join(x['keys'])})" for x in res["assignees"]]).rstrip()
+            if res["assignees"]
+            else "- (không có)",
+        ],
+        "actions": [
+            _bullets([f"{x['key']} — {x['reason']}: {x['detail']}" for x in a["candidates"]]).rstrip()
+            if a["candidates"]
+            else "- (không có)",
+        ],
+    }
+
+
+def render_facts_markdown(snap: HealthSnapshot) -> str:
+    """Facts-only markdown (tests + LLM-down path). Modern card-oriented structure."""
+    return render_health_markdown(snap, {})
+
+
+def render_health_markdown(snap: HealthSnapshot, narratives: dict[str, str] | None = None) -> str:
+    """Human-readable md: hero + KPI grid + numbered sections + AI insight callouts."""
+    narratives = narratives or {}
+    o = snap.facts["overview"]
+    status_code, status_label = overall_status(snap)
+    blocks = _section_facts_blocks(snap)
+    parts: list[str] = [
+        "# Daily Project Health Report",
+        f"## {snap.project} · {o['name']}",
+        f"> {snap.day_label} · TZ {snap.tz} · Generated {snap.generated_at}",
+        "",
+        f"**Overall status:** `{status_code}` {status_label}",
+        f"**Sprint:** {o['sprint_line'] or 'Không có sprint active'}",
+        "",
+        "### KPI Snapshot",
+        "",
+        "| Open | Done | Risky | Blocked | HIGH | MED |",
+        "| :---: | :---: | :---: | :---: | :---: | :---: |",
+        f"| {o['open_count']} | {o['done_count']} | {o['risky_count']} | {o['blocked_count']} | "
+        f"{o['high_count']} | {o['med_count']} |",
+        "",
+        f"_Raised 24h: {o['raised_24h']} · New 24h: {o['new_24h']} (critical {o['new_critical']})_",
+        "",
+        "---",
+        "",
+    ]
+    for sid in SECTION_IDS:
+        title = SECTION_TITLES[sid]
+        parts.append(f"## {title}")
+        parts.append("### Facts" + (" (ứng viên)" if sid == "actions" else ""))
+        parts.extend(blocks[sid])
+        insight = (narratives.get(sid) or "").strip()
+        if insight:
+            parts.append("")
+            parts.append("### AI Insight")
+            parts.append(f"> {insight}")
+        parts.append("")
+    return "\n".join(parts).rstrip() + "\n"
 
 
 def _strip_disallowed(text: str, allowed_keys: frozenset[str]) -> str:
@@ -417,17 +496,11 @@ def narrate_health(snap: HealthSnapshot, settings: Settings) -> dict[str, str]:
 
 
 def merge_narrative(facts_md: str, narratives: dict[str, str]) -> str:
+    """Backward-compatible: if facts_md already full template, re-render is preferred via snap."""
     if not narratives:
         return facts_md
-    mapping = {
-        "## 1. Overview": "overview",
-        "## 2. Today’s progress": "progress",
-        "## 3. Risk alerts": "risk",
-        "## 4. Bottleneck analysis": "bottleneck",
-        "## 5. Dependency impact": "dependency",
-        "## 6. Resource allocation": "resource",
-        "## 7. Action recommendations": "actions",
-    }
+    # Legacy path: append insights after each ## N. heading block.
+    mapping = {f"## {title}": sid for sid, title in SECTION_TITLES.items()}
     lines = facts_md.splitlines()
     out: list[str] = []
     i = 0
@@ -436,24 +509,284 @@ def merge_narrative(facts_md: str, narratives: dict[str, str]) -> str:
         out.append(line)
         sid = mapping.get(line.strip())
         if sid and narratives.get(sid):
-            # Insert narrative after Facts block: find next ### Facts then skip until next ## or end
             i += 1
             while i < len(lines) and not lines[i].startswith("## "):
                 out.append(lines[i])
                 i += 1
-            out.append("### Nhận định")
-            out.append(narratives[sid])
-            out.append("")
+            if not any(x.strip() == "### AI Insight" for x in out[-12:]):
+                out.append("### AI Insight")
+                out.append(f"> {narratives[sid]}")
+                out.append("")
             continue
         i += 1
     return "\n".join(out).rstrip() + "\n"
 
 
-def md_to_simple_html(md: str) -> str:
-    chunks: list[str] = ['<html><head><meta charset="utf-8"></head><body>']
+def _badge_html(code: str, label: str) -> str:
+    colors = {
+        "AT_RISK": ("#d93025", "#ffffff"),
+        "WATCH": ("#e37400", "#ffffff"),
+        "HEALTHY": ("#188038", "#ffffff"),
+        "HIGH": ("#d93025", "#ffffff"),
+        "MED": ("#e37400", "#ffffff"),
+        "LOW": ("#188038", "#ffffff"),
+        "BLOCKED": ("#5f6368", "#ffffff"),
+    }
+    bg, fg = colors.get(code, ("#1a73e8", "#ffffff"))
+    return (
+        f'<span style="display:inline-block;padding:3px 10px;border-radius:999px;'
+        f'background:{bg};color:{fg};font-size:11px;font-weight:700;'
+        f'letter-spacing:0.04em;text-transform:uppercase;">{escape(label)}</span>'
+    )
+
+
+def _level_badge(level: str) -> str:
+    return _badge_html(level, level)
+
+
+def _ul_html(items: list[str]) -> str:
+    if not items:
+        return "<p class='muted'>(không có)</p>"
+    lis = "".join(f"<li>{escape(item)}</li>" for item in items)
+    return f"<ul>{lis}</ul>"
+
+
+def render_health_html(snap: HealthSnapshot, narratives: dict[str, str] | None = None) -> str:
+    """Card + KPI grid + numbered sections for xhtml2pdf (table-based layout)."""
+    narratives = narratives or {}
+    o = snap.facts["overview"]
+    p = snap.facts["progress"]
+    r = snap.facts["risk"]
+    b = snap.facts["bottleneck"]
+    d = snap.facts["dependency"]
+    res = snap.facts["resource"]
+    a = snap.facts["actions"]
+    status_code, status_label = overall_status(snap)
+
+    def kpi_cell(label: str, value: Any, accent: str = "#1a73e8") -> str:
+        return (
+            "<td width='16%' style='border:1px solid #e8eaed;border-radius:8px;padding:12px 8px;"
+            "text-align:center;background:#ffffff;'>"
+            f"<div style='font-size:22px;font-weight:800;color:{accent};'>{escape(str(value))}</div>"
+            f"<div style='font-size:10px;font-weight:700;letter-spacing:0.06em;color:#5f6368;"
+            f"text-transform:uppercase;margin-top:4px;'>{escape(label)}</div>"
+            "</td>"
+        )
+
+    risk_rows = []
+    for item in r["top"]:
+        badges = _level_badge(item["level"])
+        if item["blocked"]:
+            badges += " " + _badge_html("BLOCKED", "Blocked")
+        risk_rows.append(
+            "<tr>"
+            f"<td style='padding:8px;border-bottom:1px solid #e8eaed;font-family:monospace;font-weight:700;'>"
+            f"{escape(item['key'])}</td>"
+            f"<td style='padding:8px;border-bottom:1px solid #e8eaed;'>{badges}</td>"
+            f"<td style='padding:8px;border-bottom:1px solid #e8eaed;'>{escape(item['summary'])}</td>"
+            f"<td style='padding:8px;border-bottom:1px solid #e8eaed;color:#5f6368;'>"
+            f"{escape(item['deadline'] or 'chưa hạn')}<br/>@{escape(item['assignee'])}</td>"
+            "</tr>"
+        )
+
+    def section(num: int, title: str, sid: str, body_html: str) -> str:
+        insight = (narratives.get(sid) or "").strip()
+        insight_html = ""
+        if insight:
+            insight_html = (
+                "<div style='margin-top:12px;padding:12px 14px;border-left:4px solid #20beff;"
+                "background:#e8f7ff;border-radius:0 8px 8px 0;'>"
+                "<div style='font-size:10px;font-weight:800;letter-spacing:0.08em;color:#1a73e8;"
+                "text-transform:uppercase;margin-bottom:6px;'>AI Insight</div>"
+                f"<div style='font-size:12px;line-height:1.45;color:#202124;'>{escape(insight)}</div>"
+                "</div>"
+            )
+        return (
+            "<div style='margin:18px 0 0 0;padding:16px;border:1px solid #e8eaed;border-radius:12px;"
+            "background:#ffffff;'>"
+            "<table width='100%'><tr>"
+            f"<td width='36' valign='top'><div style='width:28px;height:28px;border-radius:14px;"
+            f"background:#1a73e8;color:#fff;text-align:center;line-height:28px;font-weight:800;"
+            f"font-size:13px;'>{num}</div></td>"
+            f"<td valign='middle'><div style='font-size:15px;font-weight:800;color:#202124;'>"
+            f"{escape(title)}</div></td>"
+            "</tr></table>"
+            f"<div style='margin-top:10px;'>{body_html}</div>"
+            f"{insight_html}"
+            "</div>"
+        )
+
+    overview_body = (
+        f"<p><strong>Dự án:</strong> {escape(o['name'])} "
+        f"(<span style='font-family:monospace;'>{escape(o['project'])}</span>)</p>"
+        f"<p><strong>Sprint:</strong> {escape(o['sprint_line'] or 'Không có sprint active')}</p>"
+        f"<p>Open {o['open_count']} · Done {o['done_count']} · "
+        f"HIGH/MED {o['high_count']}/{o['med_count']} · "
+        f"Risky {o['risky_count']} (+{o['raised_24h']} raised 24h) · Blocked {o['blocked_count']}</p>"
+        f"<p class='muted'>Mới 24h: {o['new_24h']} (critical {o['new_critical']})</p>"
+    )
+    progress_body = (
+        f"<p>Created {p['created_count']} · Resolved {p['resolved_count']} · "
+        f"Updated {p['updated_count']} · Transitions {p['transition_count']}</p>"
+        + "<p><strong>Created</strong></p>"
+        + _ul_html([f"{x['key']} — {x['summary']}" for x in p["created"]])
+        + "<p><strong>Resolved</strong></p>"
+        + _ul_html([f"{x['key']} — {x['summary']}" for x in p["resolved"]])
+        + "<p><strong>Status transitions</strong></p>"
+        + _ul_html([f"{x['key']}: {x['from']} → {x['to']}" for x in p["status_transitions"]])
+    )
+    risk_body = (
+        f"<p>Risky open: <strong>{r['risky_count']}</strong> (raised 24h: {r['raised_24h']})</p>"
+        + (
+            "<table width='100%' cellpadding='0' cellspacing='0'>"
+            "<tr style='background:#f8f9fa;'>"
+            "<th align='left' style='padding:8px;font-size:10px;color:#5f6368;'>KEY</th>"
+            "<th align='left' style='padding:8px;font-size:10px;color:#5f6368;'>STATUS</th>"
+            "<th align='left' style='padding:8px;font-size:10px;color:#5f6368;'>SUMMARY</th>"
+            "<th align='left' style='padding:8px;font-size:10px;color:#5f6368;'>DUE / OWNER</th>"
+            "</tr>"
+            + "".join(risk_rows)
+            + "</table>"
+            if risk_rows
+            else "<p class='muted'>(không có)</p>"
+        )
+    )
+    bottleneck_body = (
+        f"<p>Blocked open: <strong>{b['blocked_count']}</strong></p>"
+        + _ul_html(
+            [
+                f"{x['key']} — {x['summary']} · @{x['assignee']}"
+                + (f" · blockers {', '.join(x['blockers'])}" if x["blockers"] else "")
+                for x in b["blocked"]
+            ]
+        )
+        + "<p><strong>Top blockers by fan-out</strong></p>"
+        + _ul_html([f"{x['key']} → {x['downstream']} downstream" for x in b["top_blockers_by_fanout"]])
+    )
+    dependency_body = (
+        f"<p>Links touching HIGH/blocked: <strong>{d['link_count']}</strong></p>"
+        + _ul_html([f"{x['source']} —{x['type']}→ {x['target']}" for x in d["links"]])
+    )
+    resource_body = (
+        f"<p>Unassigned: <strong>{res['unassigned']}</strong> · "
+        f"Median open/assignee: <strong>{res['median_open']}</strong></p>"
+        + _ul_html([f"{x['name']}: {x['open_count']} việc ({', '.join(x['keys'])})" for x in res["assignees"]])
+    )
+    actions_body = _ul_html([f"{x['key']} — {x['reason']}: {x['detail']}" for x in a["candidates"]])
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"/>
+<style>
+  @page {{ margin: 1.4cm; }}
+  {_pdf_font_css()}
+  body {{ color: #202124; font-size: 12px; }}
+  .card {{ border: 1px solid #dadce0; border-radius: 16px; padding: 20px; background: #fff; }}
+  .hero {{ background: linear-gradient(135deg, #e8f7ff 0%, #ffffff 55%, #fff8e1 100%);
+           border: 1px solid #e8eaed; border-radius: 16px; padding: 20px; margin-bottom: 16px; }}
+  .muted {{ color: #5f6368; font-size: 11px; }}
+  ul {{ margin: 6px 0 6px 18px; padding: 0; }}
+  li {{ margin: 3px 0; line-height: 1.4; }}
+  p {{ margin: 6px 0; line-height: 1.45; }}
+</style></head><body>
+<div class="card">
+  <div class="hero">
+    <div style="font-size:11px;font-weight:800;letter-spacing:0.12em;color:#1a73e8;text-transform:uppercase;">
+      Daily Project Health
+    </div>
+    <div style="font-size:22px;font-weight:800;margin:6px 0 4px 0;">{escape(snap.project)} · {escape(o['name'])}</div>
+    <div class="muted">{escape(snap.day_label)} · TZ {escape(snap.tz)} · Generated {escape(snap.generated_at)}</div>
+    <div style="margin-top:12px;">{_badge_html(status_code, status_label)}
+      <span style="margin-left:10px;color:#5f6368;font-size:12px;">
+        Sprint: {escape(o['sprint_line'] or 'Không có sprint active')}
+      </span>
+    </div>
+  </div>
+
+  <div style="font-size:11px;font-weight:800;letter-spacing:0.08em;color:#5f6368;text-transform:uppercase;margin:4px 0 8px 0;">
+    KPI Snapshot
+  </div>
+  <table width="100%" cellspacing="6" cellpadding="0" style="margin-bottom:8px;">
+    <tr>
+      {kpi_cell("Open", o["open_count"], "#1a73e8")}
+      {kpi_cell("Done", o["done_count"], "#188038")}
+      {kpi_cell("Risky", o["risky_count"], "#e37400")}
+      {kpi_cell("Blocked", o["blocked_count"], "#5f6368")}
+      {kpi_cell("HIGH", o["high_count"], "#d93025")}
+      {kpi_cell("MED", o["med_count"], "#e37400")}
+    </tr>
+  </table>
+  <p class="muted">Raised 24h: {o["raised_24h"]} · New 24h: {o["new_24h"]} (critical {o["new_critical"]})</p>
+
+  {section(1, "Overview", "overview", overview_body)}
+  {section(2, "Today’s progress", "progress", progress_body)}
+  {section(3, "Risk alerts", "risk", risk_body)}
+  {section(4, "Bottleneck analysis", "bottleneck", bottleneck_body)}
+  {section(5, "Dependency impact", "dependency", dependency_body)}
+  {section(6, "Resource allocation", "resource", resource_body)}
+  {section(7, "Action recommendations", "actions", actions_body)}
+</div>
+</body></html>
+"""
+
+
+def write_pdf_from_health(
+    snap: HealthSnapshot,
+    narratives: dict[str, str] | None,
+    path: Path,
+) -> bool:
+    if pisa is None:
+        log.warning("xhtml2pdf not installed; skip PDF")
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    html = render_health_html(snap, narratives)
+    try:
+        with path.open("wb") as handle:
+            result = pisa.CreatePDF(html, dest=handle, encoding="utf-8")
+        if result.err:
+            log.warning("PDF render errors for %s", path)
+            return False
+        return True
+    except Exception:
+        log.exception("PDF write failed for %s", path)
+        return False
+
+
+def write_pdf_from_markdown(md: str, path: Path) -> bool:
+    """Fallback when snapshot unavailable — minimal styled HTML from md markers."""
+    if pisa is None:
+        log.warning("xhtml2pdf not installed; skip PDF")
+        return False
+    # Prefer regenerating is better; keep lightweight converter for tests/old paths.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    chunks = [
+        '<html><head><meta charset="utf-8"/><style>',
+        _pdf_font_css(),
+        "body{color:#202124;font-size:12px;}"
+        "h1{color:#1a73e8;} h2{color:#202124;border-bottom:1px solid #dadce0;padding-bottom:4px;}"
+        ".insight{border-left:4px solid #20beff;background:#e8f7ff;padding:8px 12px;margin:8px 0;}"
+        "table{border-collapse:collapse;width:100%;margin:8px 0;}"
+        "th,td{border:1px solid #e8eaed;padding:8px;text-align:center;}"
+        "th{background:#f8f9fa;font-size:10px;color:#5f6368;}"
+        "</style></head><body>",
+    ]
     in_list = False
+    in_table = False
     for raw in md.splitlines():
         line = raw.rstrip()
+        if line.startswith("|") and "---" not in line:
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if not in_table:
+                chunks.append("<table>")
+                in_table = True
+                chunks.append("<tr>" + "".join(f"<th>{escape(c)}</th>" for c in cells) + "</tr>")
+            else:
+                chunks.append("<tr>" + "".join(f"<td>{escape(c)}</td>" for c in cells) + "</tr>")
+            continue
+        if in_table:
+            chunks.append("</table>")
+            in_table = False
+        if line.startswith("|") and "---" in line:
+            continue
         if line.startswith("# "):
             if in_list:
                 chunks.append("</ul>")
@@ -464,6 +797,11 @@ def md_to_simple_html(md: str) -> str:
                 chunks.append("</ul>")
                 in_list = False
             chunks.append(f"<h2>{escape(line[3:])}</h2>")
+        elif line.startswith("### AI Insight"):
+            if in_list:
+                chunks.append("</ul>")
+                in_list = False
+            chunks.append("<div class='insight'><strong>AI Insight</strong>")
         elif line.startswith("### "):
             if in_list:
                 chunks.append("</ul>")
@@ -473,7 +811,7 @@ def md_to_simple_html(md: str) -> str:
             if in_list:
                 chunks.append("</ul>")
                 in_list = False
-            chunks.append(f"<p><em>{escape(line[2:])}</em></p>")
+            chunks.append(f"<p>{escape(line[2:])}</p></div>")
         elif line.startswith("- "):
             if not in_list:
                 chunks.append("<ul>")
@@ -490,16 +828,10 @@ def md_to_simple_html(md: str) -> str:
             chunks.append(f"<p>{escape(line)}</p>")
     if in_list:
         chunks.append("</ul>")
+    if in_table:
+        chunks.append("</table>")
     chunks.append("</body></html>")
-    return "\n".join(chunks)
-
-
-def write_pdf_from_markdown(md: str, path: Path) -> bool:
-    if pisa is None:
-        log.warning("xhtml2pdf not installed; skip PDF")
-        return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    html = md_to_simple_html(md)
+    html = "\n".join(chunks)
     try:
         with path.open("wb") as handle:
             result = pisa.CreatePDF(html, dest=handle, encoding="utf-8")
@@ -518,9 +850,10 @@ def pdf_rel_from_md(rel_path: str) -> str:
     return rel_path + ".pdf"
 
 
-def build_health_markdown(session: Session, project: str, now: datetime, settings: Settings) -> tuple[str, HealthSnapshot]:
+def build_health_markdown(
+    session: Session, project: str, now: datetime, settings: Settings
+) -> tuple[str, HealthSnapshot, dict[str, str]]:
     snap = collect_health_snapshot(session, project, now, settings)
-    facts_md = render_facts_markdown(snap)
     narratives = narrate_health(snap, settings)
-    body = merge_narrative(facts_md, narratives)
-    return body, snap
+    body = render_health_markdown(snap, narratives)
+    return body, snap, narratives

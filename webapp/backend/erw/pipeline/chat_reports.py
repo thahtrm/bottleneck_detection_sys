@@ -15,6 +15,7 @@ from erw.models import ChatMessage, ProjectMember, ReportFile, ReportSlot
 from erw.pipeline.health_report import (
     build_health_markdown,
     pdf_rel_from_md,
+    write_pdf_from_health,
     write_pdf_from_markdown,
 )
 from erw.settings import Settings
@@ -67,6 +68,8 @@ def write_report_file(
     hhmm: str,
     local_day: str,
     created_at: datetime,
+    snap=None,
+    narratives: dict | None = None,
 ) -> ReportFile | None:
     rel = report_rel_path(user_id, project, local_day, hhmm)
     abs_path = report_abs_path(settings, rel)
@@ -74,7 +77,11 @@ def write_report_file(
     abs_path.write_text(body, encoding="utf-8")
     pdf_rel = pdf_rel_from_md(rel)
     try:
-        write_pdf_from_markdown(body, report_abs_path(settings, pdf_rel))
+        pdf_path = report_abs_path(settings, pdf_rel)
+        if snap is not None:
+            write_pdf_from_health(snap, narratives or {}, pdf_path)
+        else:
+            write_pdf_from_markdown(body, pdf_path)
     except Exception:
         log.exception("pdf sibling failed for %s", rel)
     preview = body.strip().splitlines()[0] if body.strip() else ""
@@ -124,7 +131,7 @@ def persist_health_report(
     existing = session.scalar(select(ChatMessage.id).where(ChatMessage.dedup_key == dedup))
     if existing is not None:
         return None
-    body, snap = build_health_markdown(session, project, now, settings)
+    body, snap, narratives = build_health_markdown(session, project, now, settings)
     # Timeline keeps a short pointer; full content lives on disk.
     summary_lines = [
         f"Báo cáo sức khỏe {snap.day_label} [{project}].",
@@ -159,6 +166,8 @@ def persist_health_report(
             hhmm=hhmm,
             local_day=local_day,
             created_at=now,
+            snap=snap,
+            narratives=narratives,
         )
         if report_row is not None:
             write_report_meta(
