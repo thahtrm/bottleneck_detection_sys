@@ -1,19 +1,25 @@
 import React, { useState } from 'react';
 import { AppShell, Box, Center, Loader, ScrollArea, Stack, Text } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { getProjects } from './api/client';
 import { useDashboardState } from './dashboard/urlState.js';
 import { useBubblePref } from './hooks/useBubblePref';
+import { useNavCollapsed } from './hooks/useNavCollapsed';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
 import Header from './components/Header';
+import LeftNav from './components/LeftNav';
 import BoardView from './components/board/BoardView';
 import IssuePanel from './components/IssuePanel';
 import ActionConfirmModal from './components/ActionConfirmModal';
 import NetworkGraph from './components/NetworkGraph';
 import PmChatBubbleShell from './components/chat/PmChatBubbleShell';
 import PmChatPage from './components/chat/PmChatPage';
+
+const NAV_EXPANDED_WIDTH = 220;
+const NAV_COLLAPSED_WIDTH = 64;
 
 const ACTION_QUERY_KEYS = [['dashboard-board'], ['dashboard-graph'], ['issue-detail'], ['issue-suggestion']];
 const REFRESH_QUERY_KEYS = [['dashboard-board'], ['dashboard-graph'], ['projects'], ['admin-settings']];
@@ -34,11 +40,17 @@ function AppContent() {
   const queryClient = useQueryClient();
   const [state, patch] = useDashboardState();
   const [bubbleEnabled] = useBubblePref(Boolean(user));
+  const [navCollapsed, setNavCollapsed] = useNavCollapsed();
+  const [mobileNavOpened, setMobileNavOpened] = useState(false);
+  const isMobileNav = useMediaQuery('(max-width: 61.99em)');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [confirmModalData, setConfirmModalData] = useState(null);
   const [confirmModalOpened, setConfirmModalOpened] = useState(false);
   const [suggestionKey, setSuggestionKey] = useState(null);
   const [suggestionNonce, setSuggestionNonce] = useState(0);
+  // Only apply desktop collapse after media query resolves (avoid flash on mobile).
+  const railCollapsed = Boolean(navCollapsed) && isMobileNav === false;
+  const navbarWidth = railCollapsed ? NAV_COLLAPSED_WIDTH : NAV_EXPANDED_WIDTH;
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
@@ -117,6 +129,11 @@ function AppContent() {
   return (
     <AppShell
       header={{ height: 60 }}
+      navbar={{
+        width: navbarWidth,
+        breakpoint: 'md',
+        collapsed: { mobile: !mobileNavOpened, desktop: false },
+      }}
       aside={{ width: 440, breakpoint: 'sm', collapsed: { desktop: !panelOpen, mobile: !panelOpen } }}
       padding="md"
     >
@@ -129,11 +146,24 @@ function AppContent() {
           onSearchChange={(q) => patch({ q })}
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
-          view={view}
-          onViewChange={(next) => patch({ view: next })}
-          showChatNav={canUseChat}
+          mobileNavOpened={mobileNavOpened}
+          onToggleMobileNav={() => setMobileNavOpened((open) => !open)}
         />
       </AppShell.Header>
+
+      <AppShell.Navbar p={0}>
+        <LeftNav
+          view={view}
+          onViewChange={(next) => {
+            patch({ view: next });
+            setMobileNavOpened(false);
+          }}
+          showChatNav={canUseChat}
+          collapsed={railCollapsed}
+          onToggleCollapsed={setNavCollapsed}
+          showCollapseToggle={!isMobileNav}
+        />
+      </AppShell.Navbar>
 
       {panelOpen && (
         <AppShell.Aside>

@@ -1,0 +1,99 @@
+import React from 'react';
+import { ActionIcon, Stack, Tooltip } from '@mantine/core';
+import {
+  IconAffiliate,
+  IconLayoutKanban,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
+  IconList,
+  IconMessageCircle,
+  IconSettings,
+} from '@tabler/icons-react';
+import '../styles/kaggleTokens.css';
+
+const NAV_META = [
+  { value: 'board', label: 'Bảng', Icon: IconLayoutKanban },
+  { value: 'list', label: 'Danh sách', Icon: IconList },
+  { value: 'graph', label: 'Đồ thị', Icon: IconAffiliate },
+  { value: 'chat', label: 'Chat', Icon: IconMessageCircle, chatOnly: true },
+  { value: 'settings', label: 'Cài đặt', Icon: IconSettings },
+];
+
+export function buildViewNavItems({ showChatNav }) {
+  return NAV_META.filter((item) => !item.chatOnly || showChatNav);
+}
+
+/**
+ * Left vertical view rail (under AppShell header).
+ * Desktop: 220px expanded / 64px collapsed with tooltips.
+ * Mobile drawer always shows labels (caller passes collapsed=false).
+ */
+export default function LeftNav({
+  view,
+  onViewChange,
+  showChatNav = false,
+  collapsed = false,
+  onToggleCollapsed,
+  showCollapseToggle = false,
+}) {
+  const items = buildViewNavItems({ showChatNav });
+  const active = items.some((item) => item.value === view) ? view : 'board';
+  const scopeClass = collapsed ? 'erw-nav-scope erw-nav-collapsed' : 'erw-nav-scope';
+
+  return (
+    <nav className={scopeClass} aria-label="Điều hướng chính">
+      <Stack gap="xs" className="erw-nav-stack">
+        {items.map(({ value, label, Icon }) => {
+          const isActive = value === active;
+          const button = (
+            <button
+              type="button"
+              className="erw-nav-item"
+              data-active={isActive ? 'true' : 'false'}
+              aria-current={isActive ? 'page' : undefined}
+              aria-label={label}
+              onClick={() => onViewChange && onViewChange(value)}
+            >
+              <Icon size={20} stroke={1.75} className="erw-nav-icon" aria-hidden />
+              <span className="erw-nav-label">{label}</span>
+            </button>
+          );
+
+          if (!collapsed) return <React.Fragment key={value}>{button}</React.Fragment>;
+
+          return (
+            <Tooltip key={value} label={label} position="right" withArrow openDelay={200}>
+              {button}
+            </Tooltip>
+          );
+        })}
+      </Stack>
+
+      {showCollapseToggle && onToggleCollapsed ? (
+        <div className="erw-nav-footer">
+          <Tooltip
+            label={collapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+            position="right"
+            withArrow
+          >
+            <ActionIcon
+              className="erw-nav-collapse-btn"
+              variant="subtle"
+              size="lg"
+              radius="xl"
+              aria-label={collapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+              aria-pressed={collapsed}
+              onClick={() => onToggleCollapsed(!collapsed)}
+            >
+              {collapsed ? (
+                <IconLayoutSidebarLeftExpand size={20} stroke={1.75} />
+              ) : (
+                <IconLayoutSidebarLeftCollapse size={20} stroke={1.75} />
+              )}
+            </ActionIcon>
+          </Tooltip>
+        </div>
+      ) : null}
+    </nav>
+  );
+}

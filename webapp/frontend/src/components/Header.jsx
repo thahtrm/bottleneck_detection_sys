@@ -4,7 +4,6 @@ import {
   Title,
   ThemeIcon,
   Select,
-  SegmentedControl,
   TextInput,
   ActionIcon,
   Tooltip,
@@ -20,23 +19,12 @@ import {
   IconUser,
   IconLogout,
   IconX,
+  IconMenu2,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { getAdminSettings } from '../api/client';
 import { OpenProjectIcon } from './JiraLinks';
-
-function buildViewOptions({ showChatNav }) {
-  // Locked IA: Bảng / Danh sách / Đồ thị / Chat / Cài đặt
-  const options = [
-    { value: 'board', label: 'Bảng' },
-    { value: 'list', label: 'Danh sách' },
-    { value: 'graph', label: 'Đồ thị' },
-  ];
-  if (showChatNav) options.push({ value: 'chat', label: 'Chat' });
-  options.push({ value: 'settings', label: 'Cài đặt' });
-  return options;
-}
 
 /**
  * Format thời gian webhook ISO thành chuỗi hiển thị thân thiện tiếng Việt
@@ -67,12 +55,10 @@ export default function Header({
   onSearchChange,
   onRefresh,
   isRefreshing = false,
-  view,
-  onViewChange,
-  showChatNav = false,
+  mobileNavOpened = false,
+  onToggleMobileNav,
 }) {
   const { user, logout } = useAuth();
-  const viewOptions = buildViewOptions({ showChatNav });
 
   // Chỉ gọi getAdminSettings nếu người dùng có quyền admin
   const { data: adminSettings } = useQuery({
@@ -113,8 +99,27 @@ export default function Header({
 
   return (
     <Group h="100%" px="md" gap="sm" justify="space-between" wrap="nowrap" style={{ minWidth: 0 }}>
-      {/* Khối bên trái: Logo + Chọn dự án. Nút xem không được co, để chữ không bị cắt. */}
+      {/* Khối bên trái: hamburger (mobile) + Logo + Chọn dự án */}
       <Group gap="sm" wrap="nowrap" style={{ flex: '1 1 auto' }}>
+        <Tooltip
+          label={mobileNavOpened ? 'Đóng menu' : 'Mở menu'}
+          withArrow
+          position="bottom"
+        >
+          <ActionIcon
+            hiddenFrom="md"
+            variant="subtle"
+            color="gray"
+            size="lg"
+            radius="md"
+            aria-label={mobileNavOpened ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'}
+            aria-expanded={mobileNavOpened}
+            onClick={onToggleMobileNav}
+          >
+            {mobileNavOpened ? <IconX size={20} stroke={1.5} /> : <IconMenu2 size={20} stroke={1.5} />}
+          </ActionIcon>
+        </Tooltip>
+
         <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
           <ThemeIcon size="lg" radius="md" color="blue" variant="filled">
             <IconShieldAlert size={22} stroke={1.5} />
@@ -140,15 +145,6 @@ export default function Header({
           aria-label="Chọn dự án theo dõi"
         />
         {selectedProject ? <OpenProjectIcon projectKey={selectedProject} /> : null}
-
-        <SegmentedControl
-          size="sm"
-          data={viewOptions}
-          value={viewOptions.some((option) => option.value === view) ? view : 'board'}
-          onChange={onViewChange}
-          aria-label="Chế độ xem"
-          style={{ flexShrink: 0 }}
-        />
       </Group>
 
       {/* Khối ở giữa: Tìm kiếm nhanh */}
@@ -178,7 +174,6 @@ export default function Header({
 
       {/* Khối bên phải: Nút Refresh + Webhook status + User Menu */}
       <Group gap="sm" wrap="nowrap" style={{ flexShrink: 0 }}>
-        {/* Nút Làm mới */}
         <Tooltip label="Làm mới dữ liệu" withArrow position="bottom">
           <ActionIcon
             variant="light"
@@ -193,7 +188,6 @@ export default function Header({
           </ActionIcon>
         </Tooltip>
 
-        {/* Webhook status badge */}
         <Tooltip label={webhookTooltip} withArrow position="bottom">
           <Badge
             variant="dot"
@@ -206,7 +200,6 @@ export default function Header({
           </Badge>
         </Tooltip>
 
-        {/* Thông tin người dùng & Đăng xuất */}
         <Group gap="xs" wrap="nowrap" ml="xs">
           <Badge color={roleColor} variant="light" size="sm" visibleFrom="lg">
             {roleLabel}
