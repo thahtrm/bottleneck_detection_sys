@@ -146,6 +146,21 @@ var/rag/*
 var/rag/*.index
 var/rag/**/*.index
 var/rag/faiss.index
+# Daily chat reports: ignore generated .md blobs; keep directory marker only.
+!var/reports/
+var/reports/*
+!var/reports/.gitkeep
+webapp/backend/var/*
+!webapp/backend/var/rag/
+webapp/backend/var/rag/*
+!webapp/backend/var/rag/seed/
+!webapp/backend/var/rag/seed/**
+webapp/backend/var/rag/*.index
+webapp/backend/var/rag/**/*.index
+webapp/backend/var/rag/faiss.index
+!webapp/backend/var/reports/
+webapp/backend/var/reports/*
+!webapp/backend/var/reports/.gitkeep
 wheels/
 pip-wheel-metadata/
 share/python-wheels/

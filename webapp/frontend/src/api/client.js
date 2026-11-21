@@ -302,3 +302,50 @@ export async function deleteChatMemory(project, memoryId) {
   });
 }
 
+/** List non-hidden report file artifacts for current user + project. */
+export async function getChatReports(project) {
+  const query = new URLSearchParams({ project });
+  return await apiFetch(`/api/chat/reports?${query.toString()}`);
+}
+
+/** Stream markdown report from disk. */
+export async function downloadChatReport(reportId) {
+  const response = await fetch(`/api/chat/reports/${encodeURIComponent(reportId)}/download`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    const error = new Error(`Tải báo cáo thất bại (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^\";]+)"?/i);
+  const filename = match?.[1] ? decodeURIComponent(match[1]) : `report-${reportId}.md`;
+  return { blob, filename };
+}
+
+/** Soft-hide report from file manager (timeline message kept). */
+export async function hideChatReport(reportId) {
+  return await apiFetch(`/api/chat/reports/${encodeURIComponent(reportId)}/hide`, {
+    method: 'POST',
+  });
+}
+
+/** User chat surface prefs — `{ bubble_enabled }` (default true). */
+export async function getChatPrefs() {
+  return await apiFetch('/api/chat/prefs');
+}
+
+export async function putChatPrefs(prefs) {
+  return await apiFetch('/api/chat/prefs', {
+    method: 'PUT',
+    body: prefs,
+  });
+}
+
+/** Read-only LLM / Ollama / RAG / Slack flags for Settings. */
+export async function getChatSystemStatus() {
+  return await apiFetch('/api/chat/system-status');
+}
+

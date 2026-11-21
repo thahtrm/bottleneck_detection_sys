@@ -1,5 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from erw import jobs
 from erw.models import ChatMessage, Issue, Project, ProjectMember, ReportSlot, RiskState, User
 from erw.pipeline.chat_reports import run_due_reports
@@ -7,6 +9,11 @@ from erw.pipeline.digest import collect_digest
 
 NOW = datetime(2026, 11, 4, 1, 0, tzinfo=UTC)  # Wednesday 08:00 Asia/Ho_Chi_Minh
 SATURDAY = datetime(2026, 11, 7, 1, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_reports_dir(tmp_path, settings):
+    settings.reports_dir = str(tmp_path / "reports")
 
 
 def _user(session, email, admin=False) -> User:

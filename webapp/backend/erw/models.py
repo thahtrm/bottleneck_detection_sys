@@ -228,6 +228,28 @@ class ReportSlot(Base):
     time_hhmm: Mapped[str] = mapped_column(String, primary_key=True)
 
 
+class ReportFile(Base):
+    """On-disk daily report artifact linked to a timeline ChatMessage(kind=report)."""
+
+    __tablename__ = "report_files"
+    __table_args__ = (
+        Index("ix_report_files_user_project_created", "user_id", "project_key", "created_at"),
+        UniqueConstraint("message_id"),
+        UniqueConstraint("user_id", "project_key", "rel_path"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    project_key: Mapped[str] = mapped_column(String)
+    message_id: Mapped[int] = mapped_column(ForeignKey("chat_messages.id"), index=True)
+    slot_hhmm: Mapped[str] = mapped_column(String)
+    report_date: Mapped[str] = mapped_column(String)  # YYYY-MM-DD local
+    rel_path: Mapped[str] = mapped_column(String)  # relative to reports_dir
+    preview: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    hidden_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
 class ChatMemory(Base):
     __tablename__ = "chat_memories"
     __table_args__ = (Index("ix_chat_memories_user_project_kind", "user_id", "project_key", "kind", "updated_at"),)

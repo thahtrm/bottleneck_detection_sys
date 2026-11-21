@@ -26,12 +26,17 @@ import { useAuth } from '../context/AuthContext';
 import { getAdminSettings } from '../api/client';
 import { OpenProjectIcon } from './JiraLinks';
 
-const VIEW_OPTIONS = [
-  { value: 'board', label: 'Bảng' },
-  { value: 'list', label: 'Danh sách' },
-  { value: 'graph', label: 'Đồ thị' },
-];
-const ADMIN_VIEW_OPTIONS = [...VIEW_OPTIONS, { value: 'settings', label: 'Quản trị' }];
+function buildViewOptions({ showChatNav }) {
+  // Locked IA: Bảng / Danh sách / Đồ thị / Chat / Cài đặt
+  const options = [
+    { value: 'board', label: 'Bảng' },
+    { value: 'list', label: 'Danh sách' },
+    { value: 'graph', label: 'Đồ thị' },
+  ];
+  if (showChatNav) options.push({ value: 'chat', label: 'Chat' });
+  options.push({ value: 'settings', label: 'Cài đặt' });
+  return options;
+}
 
 /**
  * Format thời gian webhook ISO thành chuỗi hiển thị thân thiện tiếng Việt
@@ -64,8 +69,10 @@ export default function Header({
   isRefreshing = false,
   view,
   onViewChange,
+  showChatNav = false,
 }) {
   const { user, logout } = useAuth();
+  const viewOptions = buildViewOptions({ showChatNav });
 
   // Chỉ gọi getAdminSettings nếu người dùng có quyền admin
   const { data: adminSettings } = useQuery({
@@ -136,8 +143,8 @@ export default function Header({
 
         <SegmentedControl
           size="sm"
-          data={user?.is_admin ? ADMIN_VIEW_OPTIONS : VIEW_OPTIONS}
-          value={view}
+          data={viewOptions}
+          value={viewOptions.some((option) => option.value === view) ? view : 'board'}
           onChange={onViewChange}
           aria-label="Chế độ xem"
           style={{ flexShrink: 0 }}

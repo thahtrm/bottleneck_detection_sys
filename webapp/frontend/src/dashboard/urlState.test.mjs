@@ -60,3 +60,19 @@ test('a project change can carry its own issue selection', () => {
     sprint: null,
   });
 });
+
+test('chat view is a first-class URL state', () => {
+  const state = { ...DEFAULT_STATE, project: 'DEMO', view: 'chat' };
+  const search = serializeDashboardState(state);
+  assert.equal(search, '?project=DEMO&view=chat');
+  assert.deepEqual(parseDashboardState(search), state);
+});
+
+test('issue open from chat can patch board + issue together', () => {
+  const state = { ...DEFAULT_STATE, project: 'DEMO', view: 'chat' };
+  assert.deepEqual(applyPatch(state, { view: 'board', issue: 'DEMO-9' }), {
+    ...state,
+    view: 'board',
+    issue: 'DEMO-9',
+  });
+});

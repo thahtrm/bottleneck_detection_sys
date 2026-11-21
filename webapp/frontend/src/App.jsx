@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { AppShell, Box, Center, Group, Loader, ScrollArea, Stack, Text } from '@mantine/core';
+import { AppShell, Box, Center, Loader, ScrollArea, Stack, Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { getProjects } from './api/client';
 import { useDashboardState } from './dashboard/urlState.js';
+import { useBubblePref } from './hooks/useBubblePref';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
 import Header from './components/Header';
@@ -11,7 +12,8 @@ import BoardView from './components/board/BoardView';
 import IssuePanel from './components/IssuePanel';
 import ActionConfirmModal from './components/ActionConfirmModal';
 import NetworkGraph from './components/NetworkGraph';
-import PmChat from './components/PmChat';
+import PmChatBubbleShell from './components/chat/PmChatBubbleShell';
+import PmChatPage from './components/chat/PmChatPage';
 
 const ACTION_QUERY_KEYS = [['dashboard-board'], ['dashboard-graph'], ['issue-detail'], ['issue-suggestion']];
 const REFRESH_QUERY_KEYS = [['dashboard-board'], ['dashboard-graph'], ['projects'], ['admin-settings']];
@@ -31,6 +33,7 @@ function AppContent() {
   const { user, loading } = useAuth();
   const queryClient = useQueryClient();
   const [state, patch] = useDashboardState();
+  const [bubbleEnabled] = useBubblePref(Boolean(user));
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [confirmModalData, setConfirmModalData] = useState(null);
   const [confirmModalOpened, setConfirmModalOpened] = useState(false);
@@ -77,21 +80,39 @@ function AppContent() {
     return <Login />;
   }
 
-  const view = state.view === 'settings' && !user.is_admin ? 'board' : state.view;
+  const canUseChat = user.is_admin || projects.some((item) => item.role === 'pm');
   const pmProjects = new Set(projects.filter((p) => p.role === 'pm').map((p) => p.key));
   const canMoveStatus = (card) => user.is_admin || pmProjects.has(card.project_key);
+  const selectedProjectRole = projects.find((item) => item.key === state.project)?.role;
+  // API require_chat_access: admin or PM on the selected project (not merely "is PM somewhere").
+  const canChatOnSelected =
+    Boolean(state.project) && (user.is_admin || selectedProjectRole === 'pm');
+
+  // Settings open to all authenticated; chat nav for PM/Admin only.
+  let view = state.view;
+  if (view === 'chat' && !canUseChat) view = 'board';
+
   const selectIssue = (issue) => {
     setSuggestionKey(null);
     patch({ issue });
   };
-  const openFromChat = (key) => {
+
+  /** Bubble on Board/List: open IssuePanel on current view. */
+  const openFromBubble = (key) => {
     setSuggestionKey(key);
     setSuggestionNonce((nonce) => nonce + 1);
     patch({ issue: key });
   };
-  const projectRole = projects.find((item) => item.key === state.project)?.role;
-  const showChat = (view === 'board' || view === 'list') && Boolean(state.project) && (user.is_admin || projectRole === 'pm');
-  const panelOpen = Boolean(state.issue) && view !== 'settings';
+
+  /** Chat tab: navigate Board + open IssuePanel. */
+  const openFromChatTab = (key) => {
+    setSuggestionKey(key);
+    setSuggestionNonce((nonce) => nonce + 1);
+    patch({ view: 'board', issue: key });
+  };
+
+  const showBubble = bubbleEnabled && (view === 'board' || view === 'list') && canUseChat;
+  const panelOpen = Boolean(state.issue) && view !== 'settings' && view !== 'chat';
 
   return (
     <AppShell
@@ -110,6 +131,7 @@ function AppContent() {
           isRefreshing={isRefreshing}
           view={view}
           onViewChange={(next) => patch({ view: next })}
+          showChatNav={canUseChat}
         />
       </AppShell.Header>
 
@@ -130,23 +152,45 @@ function AppContent() {
       )}
 
       <AppShell.Main>
-        {view === 'settings' && <Settings onBackToDashboard={() => patch({ view: 'board' })} />}
+        {view === 'settings' && (
+          <Settings
+            project={state.project}
+            projects={projects}
+            onBackToDashboard={() => patch({ view: 'board' })}
+            onOpenChat={() => patch({ view: 'chat' })}
+          />
+        )}
         {view === 'graph' && (
           <NetworkGraph selectedProject={state.project} onSelectIssue={selectIssue} selectedIssueKey={state.issue} />
         )}
+        {view === 'chat' && (
+          <PmChatPage
+            project={state.project}
+            canChatOnProject={canChatOnSelected}
+            onOpenIssue={openFromChatTab}
+            onOpenSettings={() => patch({ view: 'settings' })}
+          />
+        )}
         {(view === 'board' || view === 'list') && (
-          <Group align="flex-start" wrap="wrap" gap="md">
-            <Box style={{ flex: '1 1 480px', minWidth: 0 }}>
-              <BoardView
-                state={state}
-                patch={patch}
-                canMoveStatus={canMoveStatus}
-                onMoveStatus={(card) => handleOpenConfirmAction(moveStatusProposal(card))}
-                onSelectIssue={selectIssue}
-              />
-            </Box>
-            {showChat && <PmChat project={state.project} onOpenIssue={openFromChat} />}
-          </Group>
+          <Box style={{ minWidth: 0 }}>
+            <BoardView
+              state={state}
+              patch={patch}
+              canMoveStatus={canMoveStatus}
+              onMoveStatus={(card) => handleOpenConfirmAction(moveStatusProposal(card))}
+              onSelectIssue={selectIssue}
+            />
+          </Box>
+        )}
+
+        {showBubble && (
+          <PmChatBubbleShell
+            project={state.project}
+            canChatOnProject={canChatOnSelected}
+            onOpenIssue={openFromBubble}
+            onOpenSettings={() => patch({ view: 'settings' })}
+            onOpenChatTab={() => patch({ view: 'chat' })}
+          />
         )}
 
         <ActionConfirmModal

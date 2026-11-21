@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { CHIPS, GROUPINGS } from './boardModel.js';
 
-export const VIEWS = ['board', 'list', 'graph', 'settings'];
+export const VIEWS = ['board', 'list', 'graph', 'chat', 'settings'];
 
 export const DEFAULT_STATE = Object.freeze({
   project: '',

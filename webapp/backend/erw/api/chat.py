@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
+import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from erw.auth import get_session, get_user_project_role, require_authenticated_user
 from erw.db import utcnow
-from erw.models import ChatMessage, ReportSlot, User
+from erw.kv import get_kv, set_kv
+from erw.models import ChatMessage, ReportFile, ReportSlot, User
 from erw.pipeline.chat_agent import enqueue_agent_turn
 from erw.pipeline.chat_memory import (
     EDITABLE_KINDS,
@@ -21,6 +25,7 @@ from erw.pipeline.chat_memory import (
     serialize_memory,
     update_memory,
 )
+from erw.pipeline.chat_reports import report_abs_path
 from erw.settings import Settings, get_settings
 
 chat_router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -42,6 +47,64 @@ class MemoryCreateBody(BaseModel):
 class MemoryPatchBody(BaseModel):
     text: str | None = None
     metadata: dict[str, Any] | None = None
+
+
+class ChatPrefsBody(BaseModel):
+    bubble_enabled: bool | None = None
+
+
+def _bubble_pref_key(user_id: int) -> str:
+    return f"chat.bubble_enabled:{user_id}"
+
+
+def get_bubble_enabled(session: Session, user_id: int) -> bool:
+    raw = get_kv(session, _bubble_pref_key(user_id))
+    if raw is None:
+        return True
+    return raw not in {"0", "false", "False", "no", "off"}
+
+
+def set_bubble_enabled(session: Session, user_id: int, enabled: bool) -> None:
+    set_kv(session, _bubble_pref_key(user_id), "1" if enabled else "0")
+
+
+def _serialize_report(row: ReportFile) -> dict:
+    return {
+        "id": row.id,
+        "project_key": row.project_key,
+        "message_id": row.message_id,
+        "slot_hhmm": row.slot_hhmm,
+        "report_date": row.report_date,
+        "preview": row.preview,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "filename": Path(row.rel_path).name,
+    }
+
+
+def _owned_report(session: Session, report_id: int, user: User) -> ReportFile | None:
+    row = session.get(ReportFile, report_id)
+    if row is None or row.user_id != user.id:
+        return None
+    return row
+
+
+def _ollama_reachable(settings: Settings) -> bool:
+    if not settings.ollama_url:
+        return False
+    try:
+        with httpx.Client(timeout=1.5) as client:
+            resp = client.get(f"{settings.ollama_url.rstrip('/')}/api/tags")
+            return resp.status_code < 500
+    except Exception:
+        return False
+
+
+def _rag_index_present(settings: Settings) -> bool:
+    path = Path(settings.rag_index_path)
+    if path.is_file():
+        return True
+    backend = Path(__file__).resolve().parents[1].parent / "var" / "rag" / "faiss.index"
+    return backend.is_file()
 
 
 def require_chat_access(session: Session, user: User, project: str) -> None:
@@ -246,3 +309,126 @@ def put_schedule(
     except ScheduleError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.detail) from exc
     return {"times": saved}
+
+
+@chat_router.get("/prefs")
+def get_prefs(
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict:
+    return {"bubble_enabled": get_bubble_enabled(session, user.id)}
+
+
+@chat_router.put("/prefs")
+def put_prefs(
+    body: ChatPrefsBody,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict:
+    if body.bubble_enabled is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Nothing to update")
+    set_bubble_enabled(session, user.id, body.bubble_enabled)
+    session.commit()
+    return {"bubble_enabled": get_bubble_enabled(session, user.id)}
+
+
+@chat_router.get("/system-status")
+def get_system_status(
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict:
+    """Read-only Settings § LLM / Slack status for PM+admin (no secrets)."""
+    kv_llm = get_kv(session, "llm_model")
+    return {
+        "tz": settings.tz,
+        "llm_model": kv_llm if kv_llm is not None else settings.llm_model,
+        "embed_model": settings.embed_model,
+        "ollama_url_configured": bool(settings.ollama_url),
+        "ollama_reachable": _ollama_reachable(settings),
+        "rag_index_present": _rag_index_present(settings),
+        "slack_webhook_configured": bool(settings.slack_webhook_url),
+        "digest_time": settings.digest_time,
+        "slack_max_per_hour": settings.slack_max_per_hour if user.is_admin else None,
+        "bubble_enabled": get_bubble_enabled(session, user.id),
+    }
+
+
+@chat_router.get("/reports")
+def list_reports(
+    project: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> list[dict]:
+    require_chat_access(session, user, project)
+    rows = session.scalars(
+        select(ReportFile)
+        .where(
+            ReportFile.user_id == user.id,
+            ReportFile.project_key == project.strip(),
+            ReportFile.hidden_at.is_(None),
+        )
+        .order_by(ReportFile.report_date.desc(), ReportFile.slot_hhmm.desc(), ReportFile.id.desc())
+    ).all()
+    return [_serialize_report(row) for row in rows]
+
+
+@chat_router.get("/reports/{report_id}/download")
+def download_report(
+    report_id: int,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> FileResponse:
+    row = _owned_report(session, report_id, user)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    require_chat_access(session, user, row.project_key)
+    try:
+        path = report_abs_path(settings, row.rel_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found") from exc
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report file missing on disk")
+    return FileResponse(
+        path,
+        media_type="text/markdown; charset=utf-8",
+        filename=Path(row.rel_path).name,
+    )
+
+
+def _hide_report_row(session: Session, report_id: int, user: User) -> dict:
+    row = _owned_report(session, report_id, user)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    require_chat_access(session, user, row.project_key)
+    if row.hidden_at is None:
+        row.hidden_at = utcnow()
+        session.commit()
+    message = session.get(ChatMessage, row.message_id)
+    return {
+        "ok": True,
+        "id": row.id,
+        "hidden_at": row.hidden_at.isoformat() if row.hidden_at else None,
+        "message_still_present": message is not None and message.kind == "report",
+    }
+
+
+@chat_router.post("/reports/{report_id}/hide")
+def hide_report(
+    report_id: int,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict:
+    return _hide_report_row(session, report_id, user)
+
+
+@chat_router.delete("/reports/{report_id}")
+def soft_hide_report(
+    report_id: int,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Soft-hide from file manager only; does not delete the chat timeline message."""
+    return _hide_report_row(session, report_id, user)
+

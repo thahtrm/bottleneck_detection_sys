@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     embed_model: str = "nomic-embed-text"
     rag_seed_dir: str = "var/rag/seed"
     rag_index_path: str = "var/rag/faiss.index"
+    reports_dir: str = "var/reports"
     agent_max_steps: int = 4
     agent_session_limit: int = 16
 
