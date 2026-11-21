@@ -233,7 +233,14 @@ function AppContent() {
           <Reports
             project={state.project}
             projects={projects}
+            selectedReportId={state.report}
+            onSelectReport={(report) => patch({ report })}
             onOpenChat={canUseChat ? () => patch({ view: 'chat' }) : undefined}
+            onAskReportInChat={
+              canUseChat
+                ? (reportId) => patch({ view: 'chat', report: reportId })
+                : undefined
+            }
             onOpenProjectSettings={() => patch({ view: 'project-settings' })}
             onOpenScheduleSettings={() => patch({ view: 'settings' })}
           />
@@ -248,6 +255,7 @@ function AppContent() {
             canChatOnProject={canChatOnSelected}
             onOpenIssue={openFromChatTab}
             onOpenSettings={() => patch({ view: 'settings' })}
+            initialAttachReportId={state.report}
           />
         )}
         {(view === 'board' || view === 'list') && (

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from erw.auth import get_session, get_user_project_role, require_admin, require_authenticated_user
 from erw.db import utcnow
-from erw.models import Issue, Project, ProjectMember, RiskState, User
+from erw.models import Issue, Project, ProjectMember, ReportFile, RiskState, User
 from erw.pipeline.chat_reports import persist_health_report, report_dedup_key
 from erw.settings import Settings, get_settings
 
@@ -233,10 +233,9 @@ def generate_health_report(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PM role required for project")
     now = utcnow()
     local = now.astimezone(ZoneInfo(settings.tz))
-    hhmm = f"{local:%H:%M}"
     local_day = local.date().isoformat()
-    slot_label = f"od-{hhmm}"
-    # On-demand dedup per user/project/day+minute; file name uses od- prefix vs schedule.
+    # Seconds → unique artifact per generate/update (§3 A: new file, no overwrite).
+    slot_label = f"od-{local:%H%M%S}"
     dedup = report_dedup_key(user.id, key, slot_label, local_day)
     message = persist_health_report(
         session,
@@ -254,12 +253,14 @@ def generate_health_report(
             status_code=status.HTTP_409_CONFLICT,
             detail="Health report already generated for this slot/day",
         )
+    report = session.scalar(select(ReportFile).where(ReportFile.message_id == message.id))
     return {
         "ok": True,
         "message_id": message.id,
+        "report_id": report.id if report else None,
         "project": key,
         "report_date": local_day,
-        "slot_hhmm": hhmm,
+        "slot_hhmm": slot_label,
     }
 
 

@@ -1,7 +1,4 @@
-# Share the integration checkout SQLite + Jira data so demo login matches :8000.
-# From this worktree:
-#   APP_PORT=8010 docker compose -p tgn-health -f docker-compose.yml -f docker-compose.health-demo.yml up -d --build app
-# Creds (seed-demo): admin@earlyrisk.local / Admin@123456
+# Share main checkout SQLite + data so login matches :8000.
 services:
   app:
     volumes:

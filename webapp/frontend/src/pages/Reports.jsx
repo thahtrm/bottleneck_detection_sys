@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Button, Group, Stack, Text, Title } from '@mantine/core';
 import { IconAlertCircle, IconFileReport, IconMessageCircle, IconSettings } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import ReportFileManager from '../components/chat/ReportFileManager';
+import ReportPreviewDrawer from '../components/reports/ReportPreviewDrawer';
 import { generateHealthReport } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import '../styles/kaggleTokens.css';
@@ -11,7 +12,10 @@ import '../styles/kaggleTokens.css';
 export default function Reports({
   project = '',
   projects = [],
+  selectedReportId = null,
+  onSelectReport,
   onOpenChat,
+  onAskReportInChat,
   onOpenProjectSettings,
   onOpenScheduleSettings,
 }) {
@@ -22,16 +26,34 @@ export default function Reports({
   const projectRole = projectMeta?.role;
   const canGenerate = Boolean(project) && (isAdmin || projectRole === 'pm');
   const canRead = Boolean(project) && (isAdmin || projectRole === 'pm' || projectRole === 'viewer');
+  const [previewId, setPreviewId] = useState(selectedReportId);
+
+  useEffect(() => {
+    setPreviewId(selectedReportId);
+  }, [selectedReportId]);
+
+  const openPreview = (reportOrId) => {
+    const id = typeof reportOrId === 'object' ? reportOrId?.id : reportOrId;
+    if (!id) return;
+    setPreviewId(id);
+    onSelectReport?.(id);
+  };
+
+  const closePreview = () => {
+    setPreviewId(null);
+    onSelectReport?.(null);
+  };
 
   const generate = useMutation({
     mutationFn: () => generateHealthReport(project),
-    onSuccess: () => {
+    onSuccess: (data) => {
       notifications.show({
         title: 'Đã tạo báo cáo',
         message: `Báo cáo sức khỏe hôm nay cho ${project} đã sẵn sàng.`,
         color: 'teal',
       });
       queryClient.invalidateQueries({ queryKey: ['chat-reports', project] });
+      if (data?.report_id) openPreview(data.report_id);
     },
     onError: (err) => {
       notifications.show({
@@ -114,9 +136,24 @@ export default function Reports({
             canHide={canGenerate}
             showPdfDownload
             onOpenSettings={onOpenScheduleSettings}
+            onPreview={openPreview}
           />
         </div>
       </Stack>
+
+      <ReportPreviewDrawer
+        reportId={previewId}
+        opened={Boolean(previewId)}
+        onClose={closePreview}
+        onAskInChat={
+          onAskReportInChat
+            ? (id) => {
+                closePreview();
+                onAskReportInChat(id);
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

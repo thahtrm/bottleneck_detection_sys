@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Group, Stack, Text, Tooltip } from '@mantine/core';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { IconDownload, IconEyeOff, IconFileTypePdf } from '@tabler/icons-react';
+import { IconDownload, IconEye, IconEyeOff, IconFileTypePdf } from '@tabler/icons-react';
 import { downloadChatReport, getChatReports, hideChatReport } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
@@ -42,6 +42,7 @@ async function saveBlob(report, format) {
 export default function ReportFileManager({
   project,
   onOpenSettings,
+  onPreview,
   canHide = true,
   showPdfDownload = true,
 }) {
@@ -110,7 +111,24 @@ export default function ReportFileManager({
           const downloadingPdf =
             download.isPending && download.variables?.report?.id === id && download.variables?.format === 'pdf';
           return (
-            <div key={id} className="pm-chat-file-row">
+            <div
+              key={id}
+              className="pm-chat-file-row"
+              data-clickable={onPreview ? 'true' : undefined}
+              onClick={onPreview ? () => onPreview(report) : undefined}
+              onKeyDown={
+                onPreview
+                  ? (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        onPreview(report);
+                      }
+                    }
+                  : undefined
+              }
+              role={onPreview ? 'button' : undefined}
+              tabIndex={onPreview ? 0 : undefined}
+            >
               <Stack gap={4}>
                 <Group gap="xs" wrap="wrap">
                   <Text className="pm-chat-label">{formatReportDate(report.report_date)}</Text>
@@ -118,7 +136,20 @@ export default function ReportFileManager({
                   <Text className="pm-chat-meta">{report.project_key || project}</Text>
                 </Group>
                 <Text className="pm-chat-body">{previewLine(report)}</Text>
-                <Group gap="xs">
+                <Group gap="xs" onClick={(event) => event.stopPropagation()}>
+                  {onPreview ? (
+                    <Tooltip label="Xem trong app" withArrow>
+                      <Button
+                        className="pm-chat-btn-secondary"
+                        size="compact-sm"
+                        leftSection={<IconEye size={14} />}
+                        onClick={() => onPreview(report)}
+                        style={{ height: 32, padding: '0 16px' }}
+                      >
+                        Xem
+                      </Button>
+                    </Tooltip>
+                  ) : null}
                   <Tooltip label="Tải Markdown" withArrow>
                     <Button
                       className="pm-chat-btn-secondary"

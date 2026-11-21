@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import { usePmChatSession } from '../../hooks/usePmChatSession';
 import '../../styles/kaggleTokens.css';
+import ReportPreviewDrawer from '../reports/ReportPreviewDrawer';
 import PmChatComposer from './PmChatComposer';
 import PmChatTimeline from './PmChatTimeline';
 import ReportFileManager from './ReportFileManager';
@@ -15,8 +16,23 @@ export default function PmChatPage({
   canChatOnProject = false,
   onOpenIssue,
   onOpenSettings,
+  initialAttachReportId = null,
 }) {
   const session = usePmChatSession(canChatOnProject ? project : '');
+  const [previewId, setPreviewId] = useState(null);
+
+  // Seed attach from Reports "Hỏi trong Chat"
+  React.useEffect(() => {
+    if (!initialAttachReportId || !canChatOnProject) return;
+    session.setAttachedReport({
+      id: initialAttachReportId,
+      report_date: '',
+      slot_hhmm: '',
+    });
+    if (!session.draft.trim()) {
+      session.setDraft('Theo báo cáo này, tóm tắt rủi ro và việc cần ưu tiên.');
+    }
+  }, [initialAttachReportId, canChatOnProject]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!project) {
     return (
@@ -65,17 +81,21 @@ export default function PmChatPage({
               <Button variant="subtle" size="compact-xs" className="pm-chat-link-btn" onClick={onOpenSettings}>
                 Cài đặt
               </Button>
-              .
+              . Có thể gõ “tạo báo cáo sức khỏe…” hoặc đính kèm @report.
             </Text>
             <PmChatTimeline
               messages={session.messages}
               isError={session.isError}
               error={session.error}
               onOpenIssue={onOpenIssue}
+              onOpenReport={setPreviewId}
             />
             <PmChatComposer
+              project={project}
               draft={session.draft}
               setDraft={session.setDraft}
+              attachedReport={session.attachedReport}
+              setAttachedReport={session.setAttachedReport}
               onSubmit={session.submit}
               pending={session.sendPending}
               failed={session.sendFailed}
@@ -86,10 +106,27 @@ export default function PmChatPage({
 
         <Box style={{ flex: '1 1 280px', minWidth: 240, maxWidth: 420 }}>
           <Paper className="pm-chat-card" p="md" withBorder={false} style={{ height: '100%' }}>
-            <ReportFileManager project={project} onOpenSettings={onOpenSettings} />
+            <ReportFileManager
+              project={project}
+              onOpenSettings={onOpenSettings}
+              onPreview={(report) => setPreviewId(report.id)}
+            />
           </Paper>
         </Box>
       </Group>
+
+      <ReportPreviewDrawer
+        reportId={previewId}
+        opened={Boolean(previewId)}
+        onClose={() => setPreviewId(null)}
+        onAskInChat={(id) => {
+          setPreviewId(null);
+          session.setAttachedReport({ id, report_date: '', slot_hhmm: '' });
+          if (!session.draft.trim()) {
+            session.setDraft('Theo báo cáo này, tóm tắt rủi ro chính.');
+          }
+        }}
+      />
     </div>
   );
 }

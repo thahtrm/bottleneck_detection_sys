@@ -559,3 +559,59 @@
   justify-content: center;
   width: 100%;
 }
+
+/* Daily health report in-app preview */
+.erw-report-scope {
+  font-family: Inter, sans-serif;
+  color: var(--color-on-surface, #202124);
+}
+.erw-report-md h1 {
+  font-size: 1.35rem;
+  margin: 0 0 0.75rem;
+  color: var(--color-neutral, #202124);
+}
+.erw-report-md h2 {
+  font-size: 1.1rem;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--color-secondary, #1a73e8);
+  border-bottom: 1px solid var(--color-outline, #bdc1c6);
+  padding-bottom: 0.25rem;
+}
+.erw-report-md h3 {
+  font-size: 0.95rem;
+  margin: 0.75rem 0 0.35rem;
+  color: var(--color-neutral, #202124);
+}
+.erw-report-md ul {
+  margin: 0.25rem 0 0.75rem;
+  padding-left: 1.25rem;
+}
+.erw-report-md li,
+.erw-report-md p {
+  font-size: 0.9rem;
+  line-height: 1.45;
+  margin: 0.2rem 0;
+}
+.erw-report-md em {
+  color: #5f6368;
+}
+.pm-chat-file-row[data-clickable='true'] {
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+.pm-chat-file-row[data-clickable='true']:hover {
+  background: var(--color-surface-container, #f8f9fa);
+}
+.pm-chat-report-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-outline, #bdc1c6);
+  background: #e8f0fe;
+  color: var(--color-secondary, #1a73e8);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}

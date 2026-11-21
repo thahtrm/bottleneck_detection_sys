@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -100,6 +101,14 @@ def write_report_file(
     return row
 
 
+def write_report_meta(settings: Settings, rel_path: str, meta: dict) -> None:
+    """Sidecar JSON next to md for chat Q&A allowlists (no invent)."""
+    meta_rel = rel_path[:-3] + ".meta.json" if rel_path.endswith(".md") else rel_path + ".meta.json"
+    path = report_abs_path(settings, meta_rel)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def persist_health_report(
     session: Session,
     settings: Settings,
@@ -138,8 +147,9 @@ def persist_health_report(
             session.flush()
     except IntegrityError:
         return None
+    report_row = None
     try:
-        write_report_file(
+        report_row = write_report_file(
             session,
             settings,
             user_id=user_id,
@@ -150,6 +160,22 @@ def persist_health_report(
             local_day=local_day,
             created_at=now,
         )
+        if report_row is not None:
+            write_report_meta(
+                settings,
+                report_row.rel_path,
+                {
+                    "report_id": report_row.id,
+                    "project": project,
+                    "report_date": local_day,
+                    "slot_hhmm": hhmm,
+                    "allowed_keys": sorted(snap.allowed_keys),
+                    "allowed_counts": snap.allowed_counts,
+                    "overview": snap.facts.get("overview", {}),
+                    "facts": snap.facts,
+                },
+            )
+            message.body = "\n".join(summary_lines) + f"\n[[report:{report_row.id}]]"
     except OSError:
         log.exception(
             "failed to write health report file user=%s project=%s day=%s slot=%s",

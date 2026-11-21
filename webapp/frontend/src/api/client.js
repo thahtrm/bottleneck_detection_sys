@@ -257,10 +257,12 @@ export async function getChatMessages(project) {
   return await apiFetch(`/api/chat/messages?${query.toString()}`);
 }
 
-export async function postChatMessage(project, text) {
+export async function postChatMessage(project, text, reportId = null) {
+  const body = { project, text };
+  if (reportId != null) body.report_id = reportId;
   return await apiFetch('/api/chat/messages', {
     method: 'POST',
-    body: { project, text },
+    body,
   });
 }
 
@@ -335,6 +337,11 @@ export async function generateHealthReport(project) {
   return await apiFetch(`/api/projects/${encodeURIComponent(project)}/health-report`, {
     method: 'POST',
   });
+}
+
+/** In-app markdown content for report preview drawer. */
+export async function getChatReportContent(reportId) {
+  return await apiFetch(`/api/chat/reports/${encodeURIComponent(reportId)}/content`);
 }
 
 /** Soft-hide report from file manager (timeline message kept). */
