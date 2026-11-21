@@ -28,21 +28,16 @@ import {
   IconClock,
   IconCpu,
   IconDeviceFloppy,
-  IconFolders,
   IconMessageCircle,
   IconPlayerPlay,
   IconRefresh,
   IconServer,
   IconSettings,
   IconUser,
-  IconUsers,
   IconWebhook,
 } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
-import { OpenProjectOnJira } from '../components/JiraLinks';
-import MemoryPrefsSection from '../components/settings/MemoryPrefsSection';
-import ProjectMembersSection from '../components/settings/ProjectMembersSection';
 import ReportScheduleSection from '../components/settings/ReportScheduleSection';
 import { useAuth } from '../context/AuthContext';
 import { useBubblePref } from '../hooks/useBubblePref';
@@ -51,7 +46,6 @@ import {
   getChatSystemStatus,
   getProjects,
   runModelBatch,
-  toggleProjectTracking,
   updateAdminSettings,
 } from '../api/client';
 import '../styles/kaggleTokens.css';
@@ -103,6 +97,7 @@ export default function Settings({
   projects: projectsProp,
   onOpenChat,
   onOpenUsers,
+  onOpenProjectSettings,
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -133,11 +128,8 @@ export default function Settings({
   });
 
   const projects = projectsProp ?? projectsQuery;
-  const projectRole = projects.find((item) => item.key === project)?.role;
   const isPmSomewhere = isAdmin || projects.some((item) => item.role === 'pm');
   const canChatSettings = isPmSomewhere;
-  const canEditProjectMemory = Boolean(project) && (isAdmin || projectRole === 'pm');
-  const canManageMembers = Boolean(project) && (isAdmin || projectRole === 'pm');
 
   const systemStatus = useQuery({
     queryKey: ['chat-system-status'],
@@ -151,7 +143,6 @@ export default function Settings({
   const [llmModel, setLlmModel] = useState('gemma4:e4b');
   const [isRunningBatch, setIsRunningBatch] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const [togglingKeys, setTogglingKeys] = useState(new Set());
 
   useEffect(() => {
     if (!adminSettings) return;
@@ -227,37 +218,6 @@ export default function Settings({
     }
   };
 
-  const handleToggleTracking = async (projectKey) => {
-    setTogglingKeys((prev) => new Set(prev).add(projectKey));
-    try {
-      const updated = await toggleProjectTracking(projectKey);
-      notifications.show({
-        title: 'Cập nhật dự án thành công',
-        message: `Dự án ${projectKey} hiện ${updated?.tracked ? 'đang được theo dõi' : 'đã dừng theo dõi'}.`,
-        color: 'teal',
-        icon: <IconCheck size={18} />,
-      });
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['projects'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin-settings'] }),
-        queryClient.invalidateQueries({ queryKey: ['dashboard-board'] }),
-      ]);
-    } catch (err) {
-      notifications.show({
-        title: 'Cập nhật thất bại',
-        message: err.message || `Không thể đổi trạng thái theo dõi dự án ${projectKey}.`,
-        color: 'red',
-        icon: <IconAlertCircle size={18} />,
-      });
-    } finally {
-      setTogglingKeys((prev) => {
-        const next = new Set(prev);
-        next.delete(projectKey);
-        return next;
-      });
-    }
-  };
-
   const handleRefreshAll = async () => {
     const jobs = [refetchProjects()];
     if (isAdmin) jobs.push(refetchSettings());
@@ -316,14 +276,21 @@ export default function Settings({
         </Group>
 
         <SettingsCard
-          title="Vai trò & dự án"
+          title="Vai trò của tôi"
           icon={<IconUser size={22} color="var(--color-secondary)" />}
           right={
-            isAdmin && onOpenUsers ? (
-              <Button className="erw-settings-btn-secondary" size="compact-sm" onClick={onOpenUsers}>
-                Người dùng hệ thống
-              </Button>
-            ) : null
+            <Group gap="xs">
+              {onOpenProjectSettings ? (
+                <Button className="erw-settings-btn-secondary" size="compact-sm" onClick={onOpenProjectSettings}>
+                  Cài đặt dự án
+                </Button>
+              ) : null}
+              {isAdmin && onOpenUsers ? (
+                <Button className="erw-settings-btn-secondary" size="compact-sm" onClick={onOpenUsers}>
+                  Người dùng hệ thống
+                </Button>
+              ) : null}
+            </Group>
           }
         >
           {isLoadingProjects ? (
@@ -333,53 +300,56 @@ export default function Settings({
           ) : projects.length === 0 ? (
             <Text className="erw-settings-meta">Chưa có dự án trong tài khoản.</Text>
           ) : (
-            <Table.ScrollContainer minWidth={480}>
-              <Table verticalSpacing="sm">
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Mã</Table.Th>
-                    <Table.Th>Tên</Table.Th>
-                    <Table.Th>Vai trò</Table.Th>
-                    <Table.Th>Theo dõi</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {projects.map((item) => (
-                    <Table.Tr key={item.key}>
-                      <Table.Td>
-                        <Badge variant="light" color="blue" size="md">
-                          {item.key}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm" fw={500}>
-                          {item.name || '—'}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm">{user.is_admin ? 'admin' : item.role || 'viewer'}</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        {item.tracked ? (
-                          <Badge color="teal" size="sm" variant="light">
-                            Tracked
-                          </Badge>
-                        ) : (
-                          <Badge color="gray" size="sm" variant="light">
-                            Off
-                          </Badge>
-                        )}
-                      </Table.Td>
+            <>
+              <Table.ScrollContainer minWidth={480}>
+                <Table verticalSpacing="sm">
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Mã</Table.Th>
+                      <Table.Th>Tên</Table.Th>
+                      <Table.Th>Vai trò</Table.Th>
+                      <Table.Th>Theo dõi</Table.Th>
                     </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </Table.ScrollContainer>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {projects.map((item) => (
+                      <Table.Tr key={item.key}>
+                        <Table.Td>
+                          <Badge variant="light" color="blue" size="md">
+                            {item.key}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm" fw={500}>
+                            {item.name || '—'}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm">{user.is_admin ? 'admin' : item.role || 'viewer'}</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          {item.tracked ? (
+                            <Badge color="teal" size="sm" variant="light">
+                              Tracked
+                            </Badge>
+                          ) : (
+                            <Badge color="gray" size="sm" variant="light">
+                              Off
+                            </Badge>
+                          )}
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+              <Text className="erw-settings-meta" mt="sm">
+                Thành viên, ghi nhớ chat và theo dõi từng dự án nằm ở{' '}
+                <strong>Cài đặt dự án</strong>
+                {onOpenProjectSettings ? ' (nút phía trên).' : ' — chọn dự án trên Header trước.'}
+              </Text>
+            </>
           )}
-        </SettingsCard>
-
-        <SettingsCard title="Thành viên dự án" icon={<IconUsers size={22} color="var(--color-secondary)" />}>
-          <ProjectMembersSection project={project} canManage={canManageMembers} />
         </SettingsCard>
 
         {canChatSettings && (
@@ -389,23 +359,6 @@ export default function Settings({
               icon={<IconClock size={22} color="var(--color-secondary)" />}
             >
               <ReportScheduleSection onViewReports={onOpenChat} />
-            </SettingsCard>
-
-            <SettingsCard
-              title="Ghi nhớ chat"
-              icon={<IconMessageCircle size={22} color="var(--color-secondary)" />}
-            >
-              {!project ? (
-                <Text className="erw-settings-meta">
-                  Chọn dự án trên Header để quản lý ghi nhớ theo project.
-                </Text>
-              ) : !canEditProjectMemory ? (
-                <Text className="erw-settings-meta">
-                  Ghi nhớ chỉ chỉnh được khi bạn là PM (hoặc Admin) trên dự án {project}.
-                </Text>
-              ) : (
-                <MemoryPrefsSection project={project} />
-              )}
             </SettingsCard>
 
             <SettingsCard
@@ -519,7 +472,8 @@ export default function Settings({
 
         {!canChatSettings && (
           <Alert icon={<IconAlertCircle size={18} />} color="gray" variant="light" radius="md">
-            Tài khoản viewer chỉ xem vai trò / dự án. Chat và lịch báo cáo dành cho PM hoặc Admin.
+            Tài khoản viewer chỉ xem vai trò và Cài đặt dự án (thành viên read-only). Chat / lịch báo cáo dành
+            cho PM hoặc Admin.
           </Alert>
         )}
 
@@ -678,112 +632,19 @@ export default function Settings({
               </form>
             </SettingsCard>
 
-            <SettingsCard
-              title="Quản lý dự án theo dõi"
-              icon={<IconFolders size={22} color="var(--color-secondary)" />}
-              right={
-                <Badge variant="light" color="blue">
-                  {projects.filter((p) => p.tracked).length} / {projects.length} đang theo dõi
-                </Badge>
-              }
-            >
-              <Text className="erw-settings-body" mb="md">
-                Chỉ dự án tracked nhận webhook, tính rủi ro và xuất hiện trong bộ lọc.
-              </Text>
-              {isLoadingProjects ? (
-                <Center py="xl">
-                  <Loader size="md" type="dots" />
-                </Center>
-              ) : projects.length === 0 ? (
-                <Alert icon={<IconAlertCircle size={18} />} title="Chưa có dự án nào" color="gray" variant="light">
-                  Kiểm tra cấu hình `JIRA_PROJECTS` hoặc tài khoản Jira.
-                </Alert>
+            <Alert icon={<IconAlertCircle size={18} />} color="gray" variant="light" radius="md">
+              Bật/tắt theo dõi từng dự án ở <strong>Cài đặt dự án</strong>
+              {onOpenProjectSettings ? (
+                <>
+                  {' — '}
+                  <Button variant="subtle" size="compact-xs" className="erw-settings-link" onClick={onOpenProjectSettings}>
+                    mở trang
+                  </Button>
+                </>
               ) : (
-                <Table.ScrollContainer minWidth={600}>
-                  <Table verticalSpacing="sm" highlightOnHover striped>
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th style={{ width: 140 }}>Mã dự án</Table.Th>
-                        <Table.Th>Tên dự án</Table.Th>
-                        <Table.Th style={{ width: 120 }}>Tổng task</Table.Th>
-                        <Table.Th style={{ width: 220 }}>Rủi ro</Table.Th>
-                        <Table.Th style={{ width: 160, textAlign: 'right' }}>Theo dõi</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {projects.map((item) => {
-                        const isToggling = togglingKeys.has(item.key);
-                        const isTracked = Boolean(item.tracked);
-                        const stats = item.stats || {};
-                        return (
-                          <Table.Tr key={item.key}>
-                            <Table.Td>
-                              <Group gap={6} wrap="nowrap">
-                                <Badge variant="light" color="blue" size="md">
-                                  {item.key}
-                                </Badge>
-                                <OpenProjectOnJira projectKey={item.key} variant="subtle" px={6}>
-                                  Jira
-                                </OpenProjectOnJira>
-                              </Group>
-                            </Table.Td>
-                            <Table.Td>
-                              <Text fw={500} size="sm">
-                                {item.name || (
-                                  <Text span c="dimmed" fs="italic">
-                                    Chưa đặt tên
-                                  </Text>
-                                )}
-                              </Text>
-                            </Table.Td>
-                            <Table.Td>
-                              <Text fw={600} size="sm">
-                                {stats.total_issues ?? 0}
-                              </Text>
-                            </Table.Td>
-                            <Table.Td>
-                              <Group gap={6}>
-                                {stats.high_risk_issues > 0 ? (
-                                  <Badge color="red" size="sm" variant="filled">
-                                    {stats.high_risk_issues} cao
-                                  </Badge>
-                                ) : null}
-                                {stats.med_risk_issues > 0 ? (
-                                  <Badge color="yellow" size="sm" variant="filled">
-                                    {stats.med_risk_issues} tb
-                                  </Badge>
-                                ) : null}
-                                {stats.blocked_issues > 0 ? (
-                                  <Badge color="orange" size="sm" variant="outline">
-                                    {stats.blocked_issues} nghẽn
-                                  </Badge>
-                                ) : null}
-                                {!stats.high_risk_issues && !stats.med_risk_issues && !stats.blocked_issues ? (
-                                  <Badge color="gray" size="sm" variant="light">
-                                    An toàn
-                                  </Badge>
-                                ) : null}
-                              </Group>
-                            </Table.Td>
-                            <Table.Td style={{ textAlign: 'right' }}>
-                              <Switch
-                                checked={isTracked}
-                                onChange={() => handleToggleTracking(item.key)}
-                                disabled={isToggling}
-                                color="blue"
-                                size="sm"
-                                label={isTracked ? 'Đang theo dõi' : 'Tạm dừng'}
-                                aria-label={`Bật tắt theo dõi cho dự án ${item.key}`}
-                              />
-                            </Table.Td>
-                          </Table.Tr>
-                        );
-                      })}
-                    </Table.Tbody>
-                  </Table>
-                </Table.ScrollContainer>
+                ' (chọn dự án trên Header trước).'
               )}
-            </SettingsCard>
+            </Alert>
           </>
         )}
       </Stack>

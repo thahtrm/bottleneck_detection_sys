@@ -9,6 +9,7 @@ import { useBubblePref } from './hooks/useBubblePref';
 import { useNavCollapsed } from './hooks/useNavCollapsed';
 import Login from './pages/Login';
 import Settings from './pages/Settings';
+import ProjectSettings from './pages/ProjectSettings';
 import UsersAdmin from './pages/UsersAdmin';
 import Header from './components/Header';
 import LeftNav from './components/LeftNav';
@@ -102,6 +103,7 @@ function AppContent() {
     Boolean(state.project) && (user.is_admin || selectedProjectRole === 'pm');
 
   // Settings open to all authenticated; chat nav for PM/Admin only; users nav admin-only.
+  // Project-settings stays selectable without project (empty state); nav item requires project.
   let view = state.view;
   if (view === 'chat' && !canUseChat) view = 'board';
   if (view === 'users' && !user.is_admin) view = 'board';
@@ -127,7 +129,11 @@ function AppContent() {
 
   const showBubble = bubbleEnabled && (view === 'board' || view === 'list') && canUseChat;
   const panelOpen =
-    Boolean(state.issue) && view !== 'settings' && view !== 'chat' && view !== 'users';
+    Boolean(state.issue) &&
+    view !== 'settings' &&
+    view !== 'project-settings' &&
+    view !== 'chat' &&
+    view !== 'users';
 
   return (
     <AppShell
@@ -163,6 +169,7 @@ function AppContent() {
           }}
           showChatNav={canUseChat}
           showUsersNav={Boolean(user.is_admin)}
+          showProjectSettingsNav={Boolean(state.project)}
           collapsed={railCollapsed}
           onToggleCollapsed={setNavCollapsed}
           showCollapseToggle={!isMobileNav}
@@ -193,6 +200,16 @@ function AppContent() {
             onBackToDashboard={() => patch({ view: 'board' })}
             onOpenChat={() => patch({ view: 'chat' })}
             onOpenUsers={user.is_admin ? () => patch({ view: 'users' }) : undefined}
+            onOpenProjectSettings={
+              state.project ? () => patch({ view: 'project-settings' }) : undefined
+            }
+          />
+        )}
+        {view === 'project-settings' && (
+          <ProjectSettings
+            project={state.project}
+            projects={projects}
+            onOpenSystemSettings={() => patch({ view: 'settings' })}
           />
         )}
         {view === 'users' && <UsersAdmin />}
