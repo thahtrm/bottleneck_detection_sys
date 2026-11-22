@@ -321,10 +321,21 @@ SECTION_TITLES = {
 }
 
 
-def _bullets(items: list[str]) -> str:
+def _bullets(items: list[str], *, indent: int = 0) -> str:
+    prefix = " " * indent
     if not items:
-        return "- (không có)\n"
-    return "".join(f"- {line}\n" for line in items)
+        return f"{prefix}- (không có)\n"
+    return "".join(f"{prefix}- {line}\n" for line in items)
+
+
+def _nested_group(label: str, items: list[str]) -> list[str]:
+    """Parent bullet + nested children — keeps web preview indent aligned."""
+    lines = [f"- **{label}**"]
+    if not items:
+        lines.append("  - (không có)")
+    else:
+        lines.extend(f"  - {item}" for item in items)
+    return lines
 
 
 def overall_status(snap: HealthSnapshot) -> tuple[str, str]:
@@ -357,64 +368,62 @@ def _section_facts_blocks(snap: HealthSnapshot) -> dict[str, list[str]]:
         "progress": [
             f"- Created 24h: {p['created_count']} · Resolved: {p['resolved_count']} · "
             f"Updated: {p['updated_count']} · Status transitions: {p['transition_count']}",
-            "Created:",
-            _bullets([f"{x['key']} — {x['summary']}" for x in p["created"]]).rstrip()
-            if p["created"]
-            else "- (không có)",
-            "Resolved:",
-            _bullets([f"{x['key']} — {x['summary']}" for x in p["resolved"]]).rstrip()
-            if p["resolved"]
-            else "- (không có)",
-            "Status transitions:",
-            _bullets([f"{x['key']}: {x['from']} → {x['to']}" for x in p["status_transitions"]]).rstrip()
-            if p["status_transitions"]
-            else "- (không có)",
+            *_nested_group("Created", [f"{x['key']} — {x['summary']}" for x in p["created"]]),
+            *_nested_group("Resolved", [f"{x['key']} — {x['summary']}" for x in p["resolved"]]),
+            *_nested_group(
+                "Status transitions",
+                [f"{x['key']}: {x['from']} → {x['to']}" for x in p["status_transitions"]],
+            ),
         ],
         "risk": [
             f"- Risky open: {r['risky_count']} (raised 24h: {r['raised_24h']})",
-            _bullets(
+            *(
                 [
-                    f"{x['key']} `[{x['level']}]` {x['summary']} · {x['deadline'] or 'chưa hạn'} · @{x['assignee']}"
+                    f"- {x['key']} `[{x['level']}]` {x['summary']} · {x['deadline'] or 'chưa hạn'} · @{x['assignee']}"
                     + (" · `BLOCKED`" if x["blocked"] else "")
                     for x in r["top"]
                 ]
-            ).rstrip()
-            if r["top"]
-            else "- (không có)",
+                if r["top"]
+                else ["- (không có)"]
+            ),
         ],
         "bottleneck": [
             f"- Blocked open: {b['blocked_count']}",
-            _bullets(
+            *(
                 [
-                    f"{x['key']} — {x['summary']} · @{x['assignee']}"
+                    f"- {x['key']} — {x['summary']} · @{x['assignee']}"
                     + (f" · blockers {', '.join(x['blockers'])}" if x["blockers"] else "")
                     for x in b["blocked"]
                 ]
-            ).rstrip()
-            if b["blocked"]
-            else "- (không có)",
-            "Top blockers by fan-out:",
-            _bullets([f"{x['key']} → {x['downstream']} downstream" for x in b["top_blockers_by_fanout"]]).rstrip()
-            if b["top_blockers_by_fanout"]
-            else "- (không có)",
+                if b["blocked"]
+                else ["- (không có)"]
+            ),
+            *_nested_group(
+                "Top blockers by fan-out",
+                [f"{x['key']} → {x['downstream']} downstream" for x in b["top_blockers_by_fanout"]],
+            ),
         ],
         "dependency": [
             f"- Links touching HIGH/blocked: {d['link_count']}",
-            _bullets([f"{x['source']} —{x['type']}→ {x['target']}" for x in d["links"]]).rstrip()
-            if d["links"]
-            else "- (không có)",
+            *(
+                [f"- {x['source']} —{x['type']}→ {x['target']}" for x in d["links"]]
+                if d["links"]
+                else ["- (không có)"]
+            ),
         ],
         "resource": [
             f"- Unassigned open: {res['unassigned']} · Median open/assignee: {res['median_open']}",
-            _bullets([f"{x['name']}: {x['open_count']} việc ({', '.join(x['keys'])})" for x in res["assignees"]]).rstrip()
-            if res["assignees"]
-            else "- (không có)",
+            *(
+                [f"- {x['name']}: {x['open_count']} việc ({', '.join(x['keys'])})" for x in res["assignees"]]
+                if res["assignees"]
+                else ["- (không có)"]
+            ),
         ],
-        "actions": [
-            _bullets([f"{x['key']} — {x['reason']}: {x['detail']}" for x in a["candidates"]]).rstrip()
+        "actions": (
+            [f"- {x['key']} — {x['reason']}: {x['detail']}" for x in a["candidates"]]
             if a["candidates"]
-            else "- (không có)",
-        ],
+            else ["- (không có)"]
+        ),
     }
 
 

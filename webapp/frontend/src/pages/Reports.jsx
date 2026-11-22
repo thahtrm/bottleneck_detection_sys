@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Group, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button } from '@mantine/core';
 import { IconAlertCircle, IconFileReport, IconMessageCircle, IconSettings } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
@@ -67,7 +67,7 @@ export default function Reports({
 
   if (!project) {
     return (
-      <div className="erw-settings-scope" style={{ maxWidth: 960, margin: '0 auto' }}>
+      <div className="erw-reports-scope">
         <Alert icon={<IconAlertCircle size={18} />} color="gray" variant="light" radius="md">
           Chọn dự án trên thanh trên để xem và quản lý báo cáo sức khỏe.
         </Alert>
@@ -77,7 +77,7 @@ export default function Reports({
 
   if (!canRead) {
     return (
-      <div className="erw-settings-scope" style={{ maxWidth: 960, margin: '0 auto' }}>
+      <div className="erw-reports-scope">
         <Alert icon={<IconAlertCircle size={18} />} color="red" variant="light" radius="md">
           Bạn cần là thành viên dự án {project} để đọc báo cáo.
         </Alert>
@@ -86,64 +86,69 @@ export default function Reports({
   }
 
   return (
-    <div className="erw-settings-scope" style={{ maxWidth: 960, margin: '0 auto' }}>
-      <Stack gap="xl">
-        <Group justify="space-between" align="flex-start" wrap="wrap">
-          <Stack gap={4}>
-            <Title order={2} className="erw-settings-page-title">
-              Báo cáo
-            </Title>
-            <Text className="erw-settings-body">
-              Báo cáo sức khỏe hàng ngày cho <strong>{project}</strong>
-              {projectMeta?.name ? ` — ${projectMeta.name}` : ''}.
-            </Text>
-          </Stack>
-          <Group gap="sm" wrap="wrap">
-            {canGenerate ? (
-              <Button
-                className="erw-settings-btn-primary"
-                leftSection={<IconFileReport size={16} />}
-                loading={generate.isPending}
-                onClick={() => generate.mutate()}
-              >
-                Tạo báo cáo hôm nay
-              </Button>
-            ) : null}
-            {onOpenChat ? (
-              <Button
-                className="erw-settings-btn-secondary"
-                leftSection={<IconMessageCircle size={16} />}
-                onClick={onOpenChat}
-              >
-                Xem trong Chat
-              </Button>
-            ) : null}
-            {onOpenProjectSettings ? (
-              <Button
-                className="erw-settings-btn-secondary"
-                leftSection={<IconSettings size={16} />}
-                onClick={onOpenProjectSettings}
-              >
-                Cài đặt dự án
-              </Button>
-            ) : null}
-          </Group>
-        </Group>
-
-        <div className="erw-settings-card pm-chat-scope">
-          <ReportFileManager
-            project={project}
-            manage
-            canHide={canGenerate}
-            canUnhide={canGenerate}
-            showPdfDownload
-            onOpenSettings={onOpenScheduleSettings}
-            onPreview={openPreview}
-            onRegenerate={canGenerate ? () => generate.mutate() : undefined}
-            regeneratePending={generate.isPending}
-          />
+    <div className="erw-reports-scope">
+      <header className="erw-reports-hero">
+        <div>
+          <p className="erw-reports-kicker">Daily Project Health</p>
+          <h1 className="erw-reports-title">Báo cáo</h1>
+          <p className="erw-reports-subtitle">
+            Báo cáo sức khỏe hàng ngày cho <strong>{project}</strong>
+            {projectMeta?.name ? ` — ${projectMeta.name}` : ''}.
+          </p>
         </div>
-      </Stack>
+        <div className="erw-reports-actions">
+          {canGenerate ? (
+            <Button
+              className="erw-settings-btn-primary"
+              leftSection={<IconFileReport size={16} />}
+              loading={generate.isPending}
+              onClick={() => generate.mutate()}
+            >
+              Tạo báo cáo hôm nay
+            </Button>
+          ) : null}
+          {onOpenChat ? (
+            <Button
+              className="erw-settings-btn-secondary"
+              leftSection={<IconMessageCircle size={16} />}
+              onClick={onOpenChat}
+            >
+              Xem trong Chat
+            </Button>
+          ) : null}
+          {onOpenProjectSettings ? (
+            <Button
+              className="erw-settings-btn-secondary"
+              leftSection={<IconSettings size={16} />}
+              onClick={onOpenProjectSettings}
+            >
+              Cài đặt dự án
+            </Button>
+          ) : null}
+        </div>
+      </header>
+
+      <section className="erw-reports-card">
+        <div className="erw-reports-card-head">
+          <h2 className="erw-reports-card-title">Danh sách báo cáo</h2>
+          {onOpenScheduleSettings ? (
+            <Button variant="subtle" size="compact-sm" className="pm-chat-btn-subtle" onClick={onOpenScheduleSettings}>
+              Đổi lịch
+            </Button>
+          ) : null}
+        </div>
+        <ReportFileManager
+          project={project}
+          manage
+          canHide={canGenerate}
+          canUnhide={canGenerate}
+          showPdfDownload
+          hideHeader
+          onPreview={openPreview}
+          onRegenerate={canGenerate ? () => generate.mutate() : undefined}
+          regeneratePending={generate.isPending}
+        />
+      </section>
 
       <ReportPreviewDrawer
         reportId={previewId}

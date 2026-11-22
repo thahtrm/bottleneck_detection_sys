@@ -84,6 +84,7 @@ export default function ReportFileManager({
   canUnhide = true,
   showPdfDownload = true,
   manage = false,
+  hideHeader = false,
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -128,45 +129,49 @@ export default function ReportFileManager({
   );
   const confirmReport = items.find((item) => item.id === confirmHideId) || null;
 
+  const showList = hideHeader || listOpen;
+
   return (
     <Stack gap="sm" className="pm-chat-files">
-      <Group justify="space-between" align="center" wrap="wrap" gap="xs">
-        <UnstyledButton
-          className="pm-chat-files-collapse-btn"
-          onClick={() => setListOpen((open) => !open)}
-          aria-expanded={listOpen}
-          aria-controls="pm-chat-reports-list"
-        >
-          <Group gap={6} wrap="nowrap">
-            {listOpen ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
-            <Text className="pm-chat-title">Báo cáo sức khỏe</Text>
-            <Badge size="xs" variant="light" color="gray">
-              {items.length}
-            </Badge>
+      {!hideHeader ? (
+        <Group justify="space-between" align="center" wrap="wrap" gap="xs">
+          <UnstyledButton
+            className="pm-chat-files-collapse-btn"
+            onClick={() => setListOpen((open) => !open)}
+            aria-expanded={listOpen}
+            aria-controls="pm-chat-reports-list"
+          >
+            <Group gap={6} wrap="nowrap">
+              {listOpen ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
+              <Text className="pm-chat-title">Báo cáo sức khỏe</Text>
+              <Badge size="xs" variant="light" color="gray">
+                {items.length}
+              </Badge>
+            </Group>
+          </UnstyledButton>
+          <Group gap="xs">
+            {manage && onRegenerate ? (
+              <Button
+                className="pm-chat-btn-primary"
+                size="compact-sm"
+                leftSection={<IconRefresh size={14} />}
+                loading={regeneratePending}
+                onClick={onRegenerate}
+                style={{ height: 32, padding: '0 16px' }}
+              >
+                Tạo lại hôm nay
+              </Button>
+            ) : null}
+            {onOpenSettings && (
+              <Button variant="subtle" size="compact-sm" className="pm-chat-btn-subtle" onClick={onOpenSettings}>
+                Đổi lịch
+              </Button>
+            )}
           </Group>
-        </UnstyledButton>
-        <Group gap="xs">
-          {manage && onRegenerate ? (
-            <Button
-              className="pm-chat-btn-primary"
-              size="compact-sm"
-              leftSection={<IconRefresh size={14} />}
-              loading={regeneratePending}
-              onClick={onRegenerate}
-              style={{ height: 32, padding: '0 16px' }}
-            >
-              Tạo lại hôm nay
-            </Button>
-          ) : null}
-          {onOpenSettings && (
-            <Button variant="subtle" size="compact-sm" className="pm-chat-btn-subtle" onClick={onOpenSettings}>
-              Đổi lịch
-            </Button>
-          )}
         </Group>
-      </Group>
+      ) : null}
 
-      {listOpen ? (
+      {showList ? (
         <>
           <TextInput
             className="pm-chat-input"
