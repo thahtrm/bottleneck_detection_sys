@@ -1,4 +1,4 @@
-"""Daily Project Health Report — 7-section facts + optional AI narrative + PDF."""
+"""Daily Project Health Report — Mode B: LLM full md from snapshot + Facts-only fallback + PDF."""
 
 from __future__ import annotations
 
@@ -36,7 +36,10 @@ except Exception:  # pillow ships with xhtml2pdf stack; keep optional for lean t
 log = logging.getLogger(__name__)
 
 KEY_RE = re.compile(r"\b([A-Z][A-Z0-9]+-\d+)\b")
+NUMBER_RE = re.compile(r"\d+")
 TOP_N = 8
+# Marker in narratives dict: PDF should render from final md body, not snap HTML chrome.
+LLM_FULL_MD_FLAG = "__llm_full_md__"
 SECTION_IDS = (
     "overview",
     "progress",
@@ -460,7 +463,9 @@ def render_health_markdown(snap: HealthSnapshot, narratives: dict[str, str] | No
     return "\n".join(parts).rstrip() + "\n"
 
 
-def _strip_disallowed(text: str, allowed_keys: frozenset[str]) -> str:
+def _strip_disallowed_keys(text: str, allowed_keys: frozenset[str]) -> str:
+    """Remove issue keys not in the snapshot allowlist; drop emptied lines."""
+
     def repl(match: re.Match[str]) -> str:
         key = match.group(1)
         return key if key in allowed_keys else ""
@@ -469,19 +474,132 @@ def _strip_disallowed(text: str, allowed_keys: frozenset[str]) -> str:
     return "\n".join(line for line in cleaned.splitlines() if line.strip())
 
 
-def narrate_health(snap: HealthSnapshot, settings: Settings) -> dict[str, str]:
-    """Return {section_id: narrative}. Empty dict on failure."""
+# Back-compat alias used by older tests / callers.
+_strip_disallowed = _strip_disallowed_keys
+
+
+def _fact_number_allowlist(snap: HealthSnapshot) -> frozenset[int]:
+    """Every integer that appears in the deterministic snapshot (plus 0–7 section chrome)."""
+    blob = " ".join(
+        [
+            json.dumps(snap.facts, ensure_ascii=False),
+            json.dumps(snap.allowed_counts, ensure_ascii=False),
+            snap.day_iso,
+            snap.day_label,
+            snap.generated_at,
+            snap.project,
+            snap.tz,
+        ]
+    )
+    nums = {int(m.group(0)) for m in NUMBER_RE.finditer(blob)}
+    nums.update(range(0, 8))
+    return frozenset(nums)
+
+
+def _has_invented_counts(text: str, allowed_numbers: frozenset[int]) -> bool:
+    for match in NUMBER_RE.finditer(text):
+        if int(match.group(0)) not in allowed_numbers:
+            return True
+    return False
+
+
+def _has_all_sections(md: str) -> bool:
+    return all(f"## {SECTION_TITLES[sid]}" in md for sid in SECTION_IDS)
+
+
+def health_md_skeleton(snap: HealthSnapshot) -> str:
+    """7-section skeleton the LLM must fill; counts/keys come only from the JSON snapshot."""
+    o = snap.facts["overview"]
+    status_code, status_label = overall_status(snap)
+    parts = [
+        "# Daily Project Health Report",
+        f"## {snap.project} · {o.get('name') or snap.project}",
+        f"> {snap.day_label} · TZ {snap.tz} · Generated {snap.generated_at}",
+        "",
+        f"**Overall status:** `{status_code}` {status_label}",
+        f"**Sprint:** {o.get('sprint_line') or 'Không có sprint active'}",
+        "",
+        "### KPI Snapshot",
+        "",
+        "| Open | Done | Risky | Blocked | HIGH | MED |",
+        "| :---: | :---: | :---: | :---: | :---: | :---: |",
+        "| (from snapshot) | … | … | … | … | … |",
+        "",
+        "---",
+        "",
+    ]
+    for sid in SECTION_IDS:
+        title = SECTION_TITLES[sid]
+        facts_label = "### Facts" + (" (ứng viên)" if sid == "actions" else "")
+        parts.extend(
+            [
+                f"## {title}",
+                facts_label,
+                "- (fill from snapshot.facts only)",
+                "",
+                "### AI Insight",
+                "> (1–3 sentences; only allowed_keys / allowed_counts)",
+                "",
+            ]
+        )
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def validate_health_markdown(md: str, snap: HealthSnapshot) -> str | None:
+    """
+    Post-validate LLM full md.
+    - Strip invented issue keys.
+    - Reject (return None) if sections missing or invented counts remain.
+    """
+    if not isinstance(md, str) or not md.strip():
+        return None
+    text = md.strip()
+    # Unwrap accidental fenced block.
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    if not _has_all_sections(text):
+        return None
+    cleaned = _strip_disallowed_keys(text, snap.allowed_keys)
+    if not _has_all_sections(cleaned):
+        return None
+    allowed_numbers = _fact_number_allowlist(snap)
+    if _has_invented_counts(cleaned, allowed_numbers):
+        return None
+    return cleaned.rstrip() + "\n"
+
+
+def narrate_health(snap: HealthSnapshot, settings: Settings) -> str | None:
+    """
+    Mode B: LLM renders the FULL health-report markdown from snapshot + skeleton.
+    Returns validated markdown, or None on LLM/validate failure (caller → Facts-only).
+    """
     if not settings.ollama_url:
-        return {}
+        return None
     system = (
-        "You write short Vietnamese PM narratives for a daily project health report. "
-        "Reply JSON object with keys: overview, progress, risk, bottleneck, dependency, resource, actions. "
-        "Each value is 1-3 sentences. ONLY mention issue keys present in facts.allowed_keys. "
-        "Do not invent counts; use only numbers present in facts. If unsure, omit."
+        "You write a FULL daily project health report as Markdown for a PM. "
+        "Follow the provided 7-section skeleton exactly (same headings). "
+        "Fill Facts and AI Insight from the JSON snapshot only. "
+        "ONLY mention issue keys listed in allowed_keys. "
+        "ONLY use numeric counts present in allowed_counts / snapshot facts — never invent. "
+        "Vietnamese for narrative; keep section titles as given. "
+        'Reply JSON object: {"markdown": "<full markdown document>"}.'
     )
     prompt = json.dumps(
         {
-            "facts": snap.facts,
+            "skeleton": health_md_skeleton(snap),
+            "snapshot": {
+                "project": snap.project,
+                "day_iso": snap.day_iso,
+                "day_label": snap.day_label,
+                "tz": snap.tz,
+                "generated_at": snap.generated_at,
+                "facts": snap.facts,
+            },
             "allowed_keys": sorted(snap.allowed_keys),
             "allowed_counts": snap.allowed_counts,
         },
@@ -490,23 +608,24 @@ def narrate_health(snap: HealthSnapshot, settings: Settings) -> dict[str, str]:
     try:
         raw = call_ollama_chat(prompt, system, settings.llm_model, settings.ollama_url)
     except Exception:
-        log.exception("health narrative LLM failed")
-        return {}
+        log.exception("health full-md LLM failed")
+        return None
     if not isinstance(raw, dict):
-        return {}
-    out: dict[str, str] = {}
-    for sid in SECTION_IDS:
-        value = raw.get(sid)
-        if isinstance(value, str) and value.strip():
-            out[sid] = _strip_disallowed(value.strip(), snap.allowed_keys)
-    return out
+        return None
+    markdown = raw.get("markdown")
+    if not isinstance(markdown, str):
+        return None
+    validated = validate_health_markdown(markdown, snap)
+    if validated is None:
+        log.warning("health full-md failed post-validate; falling back to Facts-only")
+    return validated
 
 
 def merge_narrative(facts_md: str, narratives: dict[str, str]) -> str:
-    """Backward-compatible: if facts_md already full template, re-render is preferred via snap."""
-    if not narratives:
+    """Legacy helper: append per-section AI Insight under ## headings (Mode A). Unused in Mode B."""
+    usable = {k: v for k, v in narratives.items() if k != LLM_FULL_MD_FLAG and v}
+    if not usable:
         return facts_md
-    # Legacy path: append insights after each ## N. heading block.
     mapping = {f"## {title}": sid for sid, title in SECTION_TITLES.items()}
     lines = facts_md.splitlines()
     out: list[str] = []
@@ -515,14 +634,14 @@ def merge_narrative(facts_md: str, narratives: dict[str, str]) -> str:
         line = lines[i]
         out.append(line)
         sid = mapping.get(line.strip())
-        if sid and narratives.get(sid):
+        if sid and usable.get(sid):
             i += 1
             while i < len(lines) and not lines[i].startswith("## "):
                 out.append(lines[i])
                 i += 1
             if not any(x.strip() == "### AI Insight" for x in out[-12:]):
                 out.append("### AI Insight")
-                out.append(f"> {narratives[sid]}")
+                out.append(f"> {usable[sid]}")
                 out.append("")
             continue
         i += 1
@@ -890,7 +1009,12 @@ def pdf_rel_from_md(rel_path: str) -> str:
 def build_health_markdown(
     session: Session, project: str, now: datetime, settings: Settings
 ) -> tuple[str, HealthSnapshot, dict[str, str]]:
+    """
+    Mode B: prefer LLM full markdown; on LLM/validate failure → Facts-only template.
+    narratives carries LLM_FULL_MD_FLAG when body came from the LLM (PDF from md).
+    """
     snap = collect_health_snapshot(session, project, now, settings)
-    narratives = narrate_health(snap, settings)
-    body = render_health_markdown(snap, narratives)
-    return body, snap, narratives
+    llm_md = narrate_health(snap, settings)
+    if llm_md:
+        return llm_md, snap, {LLM_FULL_MD_FLAG: "1"}
+    return render_facts_markdown(snap), snap, {}

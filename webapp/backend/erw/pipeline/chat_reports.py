@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from erw.models import ChatMessage, ProjectMember, ReportFile, ReportSlot
 from erw.pipeline.health_report import (
+    LLM_FULL_MD_FLAG,
     build_health_markdown,
     pdf_rel_from_md,
     write_pdf_from_health,
@@ -78,7 +79,8 @@ def write_report_file(
     pdf_rel = pdf_rel_from_md(rel)
     try:
         pdf_path = report_abs_path(settings, pdf_rel)
-        if snap is not None:
+        # Mode B LLM full md → PDF from that md; Facts-only → styled HTML from snapshot.
+        if snap is not None and not (narratives or {}).get(LLM_FULL_MD_FLAG):
             write_pdf_from_health(snap, narratives or {}, pdf_path)
         else:
             write_pdf_from_markdown(body, pdf_path)
