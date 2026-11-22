@@ -593,6 +593,18 @@
   color: #5f6368;
   margin: 0;
 }
+.erw-report-md strong {
+  font-weight: 700;
+}
+.erw-report-md .erw-report-status {
+  margin: 0.35rem 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+.erw-report-md .erw-report-status strong {
+  font-weight: 800;
+  color: var(--color-neutral, #202124);
+}
 .erw-report-md .erw-kpi-wrap {
   margin: 12px 0 18px;
 }

@@ -916,6 +916,14 @@ def write_pdf_from_health(
         return False
 
 
+def _inline_md_html(text: str) -> str:
+    """Escape + convert **bold** and `code` markers used in health-report markdown."""
+    html = escape(text)
+    html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html)
+    html = re.sub(r"`([^`]+)`", r"<code>\1</code>", html)
+    return html
+
+
 def write_pdf_from_markdown(md: str, path: Path) -> bool:
     """Fallback when snapshot unavailable — minimal styled HTML from md markers."""
     if pisa is None:
@@ -928,7 +936,10 @@ def write_pdf_from_markdown(md: str, path: Path) -> bool:
         _pdf_font_css(),
         "body{color:#202124;font-size:12px;}"
         "h1{color:#1a73e8;} h2{color:#202124;border-bottom:1px solid #dadce0;padding-bottom:4px;}"
+        "strong{font-weight:bold;}"
+        "code{font-family:Helvetica,monospace;font-size:11px;}"
         ".insight{border-left:4px solid #20beff;background:#e8f7ff;padding:8px 12px;margin:8px 0;}"
+        ".status-line{margin:4px 0;}"
         "table{border-collapse:collapse;width:100%;margin:8px 0;}"
         "th,td{border:1px solid #e8eaed;padding:8px;text-align:center;}"
         "th{background:#f8f9fa;font-size:10px;color:#5f6368;}"
@@ -976,12 +987,12 @@ def write_pdf_from_markdown(md: str, path: Path) -> bool:
             if in_list:
                 chunks.append("</ul>")
                 in_list = False
-            chunks.append(f"<p>{escape(line[2:])}</p></div>")
+            chunks.append(f"<p>{_inline_md_html(line[2:])}</p></div>")
         elif line.startswith("- "):
             if not in_list:
                 chunks.append("<ul>")
                 in_list = True
-            chunks.append(f"<li>{escape(line[2:])}</li>")
+            chunks.append(f"<li>{_inline_md_html(line[2:])}</li>")
         elif not line.strip():
             if in_list:
                 chunks.append("</ul>")
@@ -990,7 +1001,9 @@ def write_pdf_from_markdown(md: str, path: Path) -> bool:
             if in_list:
                 chunks.append("</ul>")
                 in_list = False
-            chunks.append(f"<p>{escape(line)}</p>")
+            # Hero status/sprint lines: keep strong labels visible in PDF.
+            css = " class='status-line'" if line.lstrip().startswith("**Overall status:**") or line.lstrip().startswith("**Sprint:**") else ""
+            chunks.append(f"<p{css}>{_inline_md_html(line)}</p>")
     if in_list:
         chunks.append("</ul>")
     if in_table:

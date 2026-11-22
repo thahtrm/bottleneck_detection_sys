@@ -14,6 +14,32 @@ function decorateInline(escaped) {
     .replace(/`([A-Z_]+)`/g, '<span class="erw-badge erw-badge-$1">$1</span>');
 }
 
+/** Hero lines: **Overall status:** / **Sprint:** — always emit explicit <strong> labels. */
+function renderStatusOrSprintLine(line) {
+  const overall = line.match(/^\*\*Overall status:\*\*\s*(.*)$/i);
+  if (overall) {
+    const rest = decorateInline(escapeHtml(overall[1] || ''));
+    return `<p class="erw-report-status"><strong>Overall status:</strong> ${rest}</p>`;
+  }
+  const sprint = line.match(/^\*\*Sprint:\*\*\s*(.*)$/i);
+  if (sprint) {
+    const rest = decorateInline(escapeHtml(sprint[1] || ''));
+    return `<p class="erw-report-status"><strong>Sprint:</strong> ${rest}</p>`;
+  }
+  // Tolerant: label without markdown markers still bolded.
+  const plainOverall = line.match(/^Overall status:\s*(.*)$/i);
+  if (plainOverall) {
+    const rest = decorateInline(escapeHtml(plainOverall[1] || ''));
+    return `<p class="erw-report-status"><strong>Overall status:</strong> ${rest}</p>`;
+  }
+  const plainSprint = line.match(/^Sprint:\s*(.*)$/i);
+  if (plainSprint) {
+    const rest = decorateInline(escapeHtml(plainSprint[1] || ''));
+    return `<p class="erw-report-status"><strong>Sprint:</strong> ${rest}</p>`;
+  }
+  return null;
+}
+
 /** Escape then format modern health-report markdown (KPI table, badges, AI insights). */
 function renderMarkdown(md) {
   const lines = String(md || '').split('\n');
@@ -124,10 +150,11 @@ function renderMarkdown(md) {
       closeInsight();
     } else {
       closeList();
-      const inner = decorateInline(escapeHtml(line));
-      if (inInsight) {
-        html.push(`<p>${inner}</p>`);
+      const statusHtml = !inInsight ? renderStatusOrSprintLine(line.trim()) : null;
+      if (statusHtml) {
+        html.push(statusHtml);
       } else {
+        const inner = decorateInline(escapeHtml(line));
         html.push(`<p>${inner}</p>`);
       }
     }
