@@ -7,9 +7,11 @@ import PmChatComposer from './PmChatComposer';
 import PmChatTimeline from './PmChatTimeline';
 import ReportFileManager from './ReportFileManager';
 
+
 /**
  * Full-page Chat tab: timeline (~2/3) + report file manager (~1/3).
  * Issue clicks navigate Board + IssuePanel via onOpenIssue (caller patches view).
+ * Shell fills the AppShell main viewport; only the timeline scrolls.
  */
 export default function PmChatPage({
   project,
@@ -36,7 +38,7 @@ export default function PmChatPage({
 
   if (!project) {
     return (
-      <div className="pm-chat-scope">
+      <div className="pm-chat-scope pm-chat-page">
         <Paper className="pm-chat-card" p="lg" withBorder={false}>
           <Stack gap="sm">
             <Text className="pm-chat-title">Chat PM</Text>
@@ -49,7 +51,7 @@ export default function PmChatPage({
 
   if (!canChatOnProject) {
     return (
-      <div className="pm-chat-scope">
+      <div className="pm-chat-scope pm-chat-page">
         <Paper className="pm-chat-card" p="lg" withBorder={false}>
           <Stack gap="sm">
             <Text className="pm-chat-title">Chat PM</Text>
@@ -64,14 +66,9 @@ export default function PmChatPage({
 
   return (
     <div className="pm-chat-scope pm-chat-page">
-      <Group align="stretch" gap="md" wrap="wrap" style={{ minHeight: 'calc(100dvh - 120px)' }}>
-        <Paper
-          className="pm-chat-card"
-          p="md"
-          withBorder={false}
-          style={{ flex: '2 1 420px', minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 420 }}
-        >
-          <Stack gap="sm" style={{ flex: 1, minHeight: 0 }}>
+      <div className="pm-chat-page-layout">
+        <Paper className="pm-chat-card pm-chat-page-main" p="md" withBorder={false}>
+          <Stack gap="sm" className="pm-chat-page-column">
             <Group justify="space-between">
               <Text className="pm-chat-title">Chat PM</Text>
               <Text className="pm-chat-meta">{project}</Text>
@@ -104,8 +101,8 @@ export default function PmChatPage({
           </Stack>
         </Paper>
 
-        <Box style={{ flex: '1 1 280px', minWidth: 240, maxWidth: 420 }}>
-          <Paper className="pm-chat-card" p="md" withBorder={false} style={{ height: '100%' }}>
+        <Box className="pm-chat-page-side">
+          <Paper className="pm-chat-card pm-chat-page-side-card" p="md" withBorder={false}>
             <ReportFileManager
               project={project}
               onOpenSettings={onOpenSettings}
@@ -113,7 +110,7 @@ export default function PmChatPage({
             />
           </Paper>
         </Box>
-      </Group>
+      </div>
 
       <ReportPreviewDrawer
         reportId={previewId}

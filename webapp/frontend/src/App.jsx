@@ -139,6 +139,9 @@ function AppContent() {
 
   const showBubble = bubbleEnabled && (view === 'board' || view === 'list') && canUseChat;
   const boardLike = view === 'board' || view === 'list';
+  // Chat tab must fill the viewport like Board/List so the page never scrolls;
+  // message history scrolls inside PmChatTimeline instead.
+  const fillViewport = boardLike || view === 'chat';
   const panelOpen =
     Boolean(state.issue) &&
     view !== 'settings' &&
@@ -158,7 +161,7 @@ function AppContent() {
       aside={{ width: 440, breakpoint: 'sm', collapsed: { desktop: !panelOpen, mobile: !panelOpen } }}
       padding="md"
       styles={{
-        main: boardLike
+        main: fillViewport
           ? {
               display: 'flex',
               flexDirection: 'column',
@@ -262,13 +265,15 @@ function AppContent() {
           <NetworkGraph selectedProject={state.project} onSelectIssue={selectIssue} selectedIssueKey={state.issue} />
         )}
         {view === 'chat' && (
-          <PmChatPage
-            project={state.project}
-            canChatOnProject={canChatOnSelected}
-            onOpenIssue={openFromChatTab}
-            onOpenSettings={() => patch({ view: 'settings' })}
-            initialAttachReportId={state.report}
-          />
+          <Box style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <PmChatPage
+              project={state.project}
+              canChatOnProject={canChatOnSelected}
+              onOpenIssue={openFromChatTab}
+              onOpenSettings={() => patch({ view: 'settings' })}
+              initialAttachReportId={state.report}
+            />
+          </Box>
         )}
         {boardLike && (
           <Box style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
