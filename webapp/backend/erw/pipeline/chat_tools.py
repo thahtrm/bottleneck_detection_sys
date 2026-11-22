@@ -28,6 +28,7 @@ from erw.pipeline.chat_lookup import (
     classify_question,
 )
 from erw.pipeline.chat_reports import persist_health_report, report_abs_path, report_dedup_key
+from erw.domain.types import Level
 from erw.pipeline.digest import collect_digest
 from erw.settings import Settings
 
@@ -234,14 +235,31 @@ def run_tool(
             return _from_answer(name, _answer_issue(session, project_key, text))
         if name == "get_digest_snapshot":
             snap = collect_digest(session, project_key, now, settings)
-            top = [{"key": item.key, "level": item.level_name} for item in snap.top_risky]
+            top = [
+                {
+                    "key": item.key,
+                    "level": item.level_name,
+                    "assignee": item.assignee,
+                    "deadline": item.deadline_label,
+                    "summary": item.summary,
+                }
+                for item in snap.top_risky
+            ]
             keys = frozenset(item.key for item in snap.top_risky)
+            # A3: VI opener (no English "Digest:"); mirrors Slack build_digest tone.
             facts = (
-                f"Digest: {snap.risky_count} nguy cơ trễ, {snap.raised_24h} tăng bậc/24h, "
-                f"{snap.blocked_count} bị block."
+                f"Nguy cơ trễ: {snap.risky_count} ({snap.raised_24h} tăng bậc 24h) · "
+                f"Bị chặn: {snap.blocked_count}."
             )
             if snap.sprint_line:
                 facts = f"{facts}\n{snap.sprint_line}"
+            for item in snap.top_risky:
+                level_vi = Level[item.level_name].label_vi if item.level_name in Level.__members__ else item.level_name
+                bits = [item.key, f"mức {level_vi}"]
+                if item.deadline_label:
+                    bits.append(item.deadline_label)
+                bits.append(f"@{item.assignee}")
+                facts = f"{facts}\n{' · '.join(bits)}"
             return ToolResult(
                 name,
                 facts,
@@ -251,10 +269,11 @@ def run_tool(
                     "risky_count": snap.risky_count,
                     "raised_24h": snap.raised_24h,
                     "blocked_count": snap.blocked_count,
+                    "new_24h": snap.new_24h,
                     "sprint_line": snap.sprint_line,
                     "top_risky": top,
                 },
-                False,
+                True,
                 True,
             )
         if name == "get_issue_suggestion":

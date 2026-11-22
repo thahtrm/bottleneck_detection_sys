@@ -89,7 +89,8 @@ def test_risky_facts_count_everyone_and_list_five(session, settings):
     assert answer.kind == "risky"
     lines = answer.facts.splitlines()
     assert lines[0] == "Đang có 6 issue nguy cơ trễ, 2 tăng bậc trong 24 giờ."
-    assert "DEMO-41 bị block và đang chặn DEMO-18, assignee Lan." in lines
+    assert "DEMO-41 · bị chặn · đang chặn DEMO-18 · phụ trách Lan" in lines
+    assert "assignee" not in answer.facts.casefold()
     assert sum(1 for line in lines if line.startswith("DEMO-")) == 5
     assert answer.allowed_keys == frozenset(key for key in ("DEMO-41", "DEMO-18", "DEMO-1", "DEMO-2", "DEMO-3", "DEMO-4"))
     assert answer.skip_recommendation is False
@@ -102,7 +103,7 @@ def test_blocked_facts_count_open_blocked_only(session, settings):
     session.flush()
     answer = answer_facts(session, "DEMO", "Issue nào đang bị block?", NOW, settings)
     assert answer.kind == "blocked"
-    assert answer.facts.splitlines()[0] == "Đang có 2 issue mở bị block."
+    assert answer.facts.splitlines()[0] == "Đang có 2 issue mở bị chặn."
 
 
 def test_sprint_facts_follow_sprint_line(session, settings):
@@ -160,7 +161,7 @@ def test_open_work_facts_count_not_done(session, settings):
     assert answer.facts.splitlines()[0] == "Đang còn 2 công việc chưa xong."
     assert "DEMO-3" not in answer.facts
     assert "DEMO-4" not in answer.facts
-    assert answer.skip_recommendation is False
+    assert answer.skip_recommendation is True
 
 
 def test_assignee_load_names_the_busiest_open_assignee(session, settings):
@@ -189,13 +190,18 @@ def test_assignee_load_names_the_busiest_open_assignee(session, settings):
     assert lines[0] == "Lan đang được giao nhiều việc chưa xong nhất: 6 việc."
     listed = [line for line in lines if line.startswith("DEMO-")]
     assert len(listed) == 5
+    assert all("Lan" not in line for line in listed)  # A1: no repeated assignee on bullets
+    assert "assignee" not in answer.facts.casefold()
+    assert "phụ trách" not in "\n".join(listed).casefold()
     assert "DEMO-6" not in answer.facts
     assert "DEMO-7" not in answer.facts
     assert "DEMO-8" not in answer.facts
     assert "DEMO-10" not in answer.facts
     assert "DEMO-11" not in answer.facts
     assert answer.allowed_keys == frozenset(f"DEMO-{n}" for n in range(1, 6))
-    assert answer.skip_recommendation is False
+    assert answer.payload["count"] == 6
+    assert all("key" in row and "line" in row for row in answer.payload["issues"])
+    assert answer.skip_recommendation is True
 
     empty = answer_facts(session, "OTHER", "Ai đang được giao nhiều việc chưa xong nhất?", NOW, settings)
     assert empty.facts == "Không có ai được giao việc chưa xong."
@@ -214,12 +220,13 @@ def test_due_soon_uses_deadline_or_duedate(session, settings):
     assert answer.kind == "due"
     lines = answer.facts.splitlines()
     assert lines[0] == "Có 2 issue đến hạn trong 7 ngày tới."
-    assert "DEMO-1 còn 1 ngày, assignee An." in lines
-    assert "DEMO-2 còn 1 ngày, assignee chưa giao." in lines
+    assert "DEMO-1 · còn 1 ngày · phụ trách An" in lines
+    assert "DEMO-2 · còn 1 ngày · phụ trách chưa giao" in lines
+    assert "assignee" not in answer.facts.casefold()
     assert "DEMO-3" not in answer.facts
     assert "DEMO-4" not in answer.facts
     assert "còn 16 ngày" not in answer.facts
-    assert answer.skip_recommendation is False
+    assert answer.skip_recommendation is True
 
     far = answer_facts(session, "FAR", "Có issue nào sắp đến hạn không?", NOW, settings)
     assert far.facts == "Không có issue nào còn hạn phía trước."
@@ -246,11 +253,12 @@ def test_overdue_count_ignores_future_done_and_deleted(session, settings):
     assert answer.kind == "overdue"
     lines = answer.facts.splitlines()
     assert lines[0] == "Đang có 2 issue mở quá hạn."
-    assert "DEMO-2 quá hạn 3 ngày, assignee An." in lines
-    assert "DEMO-1 quá hạn 2 ngày, assignee An." in lines
+    assert "DEMO-2 · quá hạn 3 ngày · phụ trách An" in lines
+    assert "DEMO-1 · quá hạn 2 ngày · phụ trách An" in lines
+    assert "assignee" not in answer.facts.casefold()
     assert "DEMO-3" not in answer.facts
     assert "DEMO-4" not in answer.facts
-    assert answer.skip_recommendation is False
+    assert answer.skip_recommendation is True
 
     none = answer_facts(session, "OTHER", "Có bao nhiêu việc đang quá hạn?", NOW, settings)
     assert none.facts == "Không có issue mở nào quá hạn."
@@ -268,7 +276,7 @@ def test_important_lists_open_critical_issues(session, settings):
     assert "DEMO-1" in answer.facts
     assert "DEMO-2" not in answer.facts
     assert "DEMO-3" not in answer.facts
-    assert answer.skip_recommendation is False
+    assert answer.skip_recommendation is True
 
     none = answer_facts(session, "OTHER", "Issue nào được đánh dấu quan trọng?", NOW, settings)
     assert none.facts == "Không có issue mở nào được đánh dấu quan trọng."

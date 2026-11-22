@@ -77,6 +77,8 @@ def test_recommendation_from_stored_uses_summary():
     text, status = recommendation_from_stored(output, {"DEMO-1"})
     assert status == "ready"
     assert "Nên xử lý DEMO-1 trước." in text
+    assert "leo thang blocker" in text
+    assert "escalate_blocker" not in text
 
 
 def test_enqueue_updates_the_same_message(session, settings, engine, monkeypatch):
