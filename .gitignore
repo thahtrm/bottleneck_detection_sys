@@ -289,3 +289,9 @@ dist/
 experiments/delay_t0/**/*.csv
 .superpowers/
 webapp/spikes/.env.s3
+
+# worktree local mounts / compare runtime
+/data
+/bundles
+experiments/compare/logs/
+experiments/leaderboard_multihead_crit_scratch.json

@@ -82,6 +82,83 @@ def find_optimal_threshold(
     return best_thr, best_f1, best_p, best_r
 
 
+def find_threshold_max_f1(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    thr_min: float = 0.05,
+    thr_max: float = 0.95,
+    thr_step: float = 0.01,
+) -> tuple[float, float, float, float]:
+    """Val sweep: maximize F1. Returns (threshold, f1, precision, recall)."""
+    y_true_b = y_true == 1
+    tot_pos = int(np.sum(y_true_b))
+    best_thr, best_f1, best_p, best_r = 0.5, -1.0, 0.0, 0.0
+    for thr in np.arange(thr_min, thr_max, thr_step):
+        mask = y_prob >= thr
+        pred_pos = int(np.sum(mask))
+        if pred_pos == 0 or tot_pos == 0:
+            continue
+        tp = int(np.sum(y_true_b & mask))
+        p = tp / pred_pos
+        r = tp / tot_pos
+        f1 = (2.0 * p * r / (p + r)) if (p + r) > 0 else 0.0
+        if f1 > best_f1:
+            best_thr, best_f1, best_p, best_r = float(thr), float(f1), float(p), float(r)
+    return best_thr, best_f1, best_p, best_r
+
+
+def find_threshold_recall_ge(
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    min_recall: float = 0.80,
+    thr_min: float = 0.05,
+    thr_max: float = 0.95,
+    thr_step: float = 0.01,
+) -> tuple[float, float, float, float, bool]:
+    """Val sweep: max F1 among thresholds with Recall >= min_recall.
+
+    Falls back to unconstrained max-F1 when no threshold meets the recall floor.
+    Returns (threshold, f1, precision, recall, recall_constraint_met).
+    """
+    y_true_b = y_true == 1
+    tot_pos = int(np.sum(y_true_b))
+    best_thr, best_f1, best_p, best_r = 0.5, -1.0, 0.0, 0.0
+    found = False
+    for thr in np.arange(thr_min, thr_max, thr_step):
+        mask = y_prob >= thr
+        pred_pos = int(np.sum(mask))
+        if pred_pos == 0 or tot_pos == 0:
+            continue
+        tp = int(np.sum(y_true_b & mask))
+        p = tp / pred_pos
+        r = tp / tot_pos
+        f1 = (2.0 * p * r / (p + r)) if (p + r) > 0 else 0.0
+        if r >= min_recall and f1 > best_f1:
+            best_thr, best_f1, best_p, best_r = float(thr), float(f1), float(p), float(r)
+            found = True
+    if not found:
+        best_thr, best_f1, best_p, best_r = find_threshold_max_f1(y_true, y_prob, thr_min, thr_max, thr_step)
+    return best_thr, best_f1, best_p, best_r, found
+
+
+def duration_abs_errors(
+    y_pred_duration: np.ndarray,
+    y_true_duration: np.ndarray,
+    resolved_mask: np.ndarray | None = None,
+) -> tuple[float, float, int]:
+    """Return (MAE mean, MedAE, n) on resolved issues (or all rows if mask is None)."""
+    pred = np.asarray(y_pred_duration, dtype=np.float64)
+    true = np.asarray(y_true_duration, dtype=np.float64)
+    if resolved_mask is None:
+        mask = np.isfinite(pred) & np.isfinite(true)
+    else:
+        mask = np.asarray(resolved_mask, dtype=bool) & np.isfinite(pred) & np.isfinite(true)
+    if not np.any(mask):
+        return float("nan"), float("nan"), 0
+    err = np.abs(pred[mask] - true[mask])
+    return float(np.mean(err)), float(np.median(err)), int(mask.sum())
+
+
 def evaluate_predictions(
     test_pred_path: str,
     val_pred_path: str | None = None,

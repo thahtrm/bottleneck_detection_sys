@@ -20,15 +20,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from sklearn.metrics import (
-    average_precision_score,
-    brier_score_loss,
-    confusion_matrix,
-    f1_score,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
+from sklearn.metrics import roc_auc_score
 
 from early_risk_detection._logging import setup_logging
 from early_risk_detection.bundle import ModelBundle
@@ -43,6 +35,7 @@ from early_risk_detection.criticality.memory import MEM, EventStream, load_memor
 from early_risk_detection.criticality.readout import static_matrix
 from early_risk_detection.criticality.stream import load_neighbours
 from early_risk_detection.evaluation import evaluate_criticality
+from early_risk_detection.evaluation.multihead_compare import eval_delay_dual_protocol
 from training.criticality.train_project_change import compute_change_timestamps
 from training.criticality.train_readout import hybrid_loss, quick_metrics
 
@@ -57,66 +50,15 @@ def eval_delay_metrics(
     pred_dur_test: np.ndarray,
     true_dur_test: np.ndarray,
 ) -> dict:
-    """Compute both Max-F1 and Recall>=0.80 delay metrics on Val and Test."""
-    # 1. Sweep threshold for Max F1 on Val
-    best_f1_thr, best_val_f1 = 0.5, -1.0
-    # 2. Sweep threshold for Max F1 subject to Test/Val Recall >= 0.80
-    rec80_thr, best_rec80_f1 = 0.35, -1.0
-
-    y_vb = y_val_true == 1
-    tot_v_pos = int(y_vb.sum())
-    for thr in np.arange(0.05, 0.95, 0.01):
-        m = y_val_prob >= thr
-        pp = int(m.sum())
-        if pp == 0 or tot_v_pos == 0:
-            continue
-        tp = int((y_vb & m).sum())
-        p = tp / pp
-        r = tp / tot_v_pos
-        f1 = 2.0 * p * r / (p + r) if (p + r) > 0 else 0.0
-        if f1 > best_val_f1:
-            best_val_f1 = f1
-            best_f1_thr = float(thr)
-
-    y_tb = y_test_true == 1
-    tot_t_pos = int(y_tb.sum())
-    for thr in np.arange(0.05, 0.95, 0.01):
-        m = y_test_prob >= thr
-        pp = int(m.sum())
-        if pp == 0 or tot_t_pos == 0:
-            continue
-        tp = int((y_tb & m).sum())
-        p = tp / pp
-        r = tp / tot_t_pos
-        f1 = 2.0 * p * r / (p + r) if (p + r) > 0 else 0.0
-        if r >= 0.80 and f1 > best_rec80_f1:
-            best_rec80_f1 = f1
-            rec80_thr = float(thr)
-
-    def _metrics_at(y_t: np.ndarray, y_p: np.ndarray, thr: float) -> dict:
-        pred = (y_p >= thr).astype(int)
-        tn, fp, fn, tp = confusion_matrix(y_t, pred).ravel()
-        return {
-            "threshold": round(float(thr), 4),
-            "f1_score": round(float(f1_score(y_t, pred, zero_division=0)), 4),
-            "precision": round(float(precision_score(y_t, pred, zero_division=0)), 4),
-            "recall": round(float(recall_score(y_t, pred, zero_division=0)), 4),
-            "roc_auc": round(float(roc_auc_score(y_t, y_p)), 4),
-            "pr_auc": round(float(average_precision_score(y_t, y_p)), 4),
-            "brier_score": round(float(brier_score_loss(y_t, np.clip(y_p, 0.0, 1.0))), 4),
-            "confusion_matrix": {"tp": int(tp), "fp": int(fp), "tn": int(tn), "fn": int(fn)},
-        }
-
-    # Also find exact threshold on val that yields recall >= 0.80 on test if distribution shifted, or tune quantile
-    # Note: val positive rate is 33.9% vs test 21.7%; calibrated quantile/threshold at rec80_thr:
-    dur_mae = float(np.median(np.abs(pred_dur_test - true_dur_test)))
-    return {
-        "val_max_f1": _metrics_at(y_val_true, y_val_prob, best_f1_thr),
-        "test_max_f1": _metrics_at(y_test_true, y_test_prob, best_f1_thr),
-        "val_high_recall": _metrics_at(y_val_true, y_val_prob, rec80_thr),
-        "test_high_recall": _metrics_at(y_test_true, y_test_prob, rec80_thr),
-        "median_abs_duration_error_days": round(dur_mae, 2),
-    }
+    """Compute Max-F1 + Recall>=0.80 (val-swept) delay metrics and mean MAE / MedAE."""
+    return eval_delay_dual_protocol(
+        y_val_true,
+        y_val_prob,
+        y_test_true,
+        y_test_prob,
+        pred_dur_test=pred_dur_test,
+        true_dur_test=true_dur_test,
+    )
 
 
 def train_dual_head_seed(
