@@ -304,9 +304,10 @@ export async function deleteChatMemory(project, memoryId) {
   });
 }
 
-/** List non-hidden health report artifacts for project members. */
-export async function getChatReports(project) {
-  const query = new URLSearchParams({ project });
+/** List health report artifacts for project members (`visibility`: visible|hidden|all). */
+export async function getChatReports(project, { q = '', visibility = 'visible' } = {}) {
+  const query = new URLSearchParams({ project, visibility });
+  if (q && String(q).trim()) query.set('q', String(q).trim());
   return await apiFetch(`/api/chat/reports?${query.toString()}`);
 }
 
@@ -347,6 +348,13 @@ export async function getChatReportContent(reportId) {
 /** Soft-hide report from file manager (timeline message kept). */
 export async function hideChatReport(reportId) {
   return await apiFetch(`/api/chat/reports/${encodeURIComponent(reportId)}/hide`, {
+    method: 'POST',
+  });
+}
+
+/** Restore a soft-hidden report into the file manager. */
+export async function unhideChatReport(reportId) {
+  return await apiFetch(`/api/chat/reports/${encodeURIComponent(reportId)}/unhide`, {
     method: 'POST',
   });
 }

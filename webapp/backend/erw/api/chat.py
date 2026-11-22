@@ -81,7 +81,26 @@ def _serialize_report(row: ReportFile) -> dict:
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "filename": Path(row.rel_path).name,
         "owner_user_id": row.user_id,
+        "hidden": row.hidden_at is not None,
+        "hidden_at": row.hidden_at.isoformat() if row.hidden_at else None,
     }
+
+
+def _report_matches_query(row: ReportFile, q: str) -> bool:
+    """Match date / title(preview) / project / slot / filename text (case-insensitive)."""
+    needle = (q or "").strip().lower()
+    if not needle:
+        return True
+    filename = Path(row.rel_path).name
+    haystacks = (
+        row.report_date or "",
+        row.preview or "",
+        row.project_key or "",
+        row.slot_hhmm or "",
+        filename,
+        row.rel_path or "",
+    )
+    return any(needle in part.lower() for part in haystacks)
 
 
 def _owned_report(session: Session, report_id: int, user: User) -> ReportFile | None:
@@ -399,19 +418,32 @@ def get_system_status(
 @chat_router.get("/reports")
 def list_reports(
     project: str,
+    q: str | None = None,
+    visibility: Literal["visible", "hidden", "all"] = "visible",
     user: User = Depends(require_authenticated_user),
     session: Session = Depends(get_session),
 ) -> list[dict]:
     # §8.4 A: any project member (viewer/pm) or admin may list project health reports.
     _require_project_member(session, user, project)
+    clauses = [ReportFile.project_key == project.strip()]
+    if visibility == "visible":
+        clauses.append(ReportFile.hidden_at.is_(None))
+    elif visibility == "hidden":
+        clauses.append(ReportFile.hidden_at.is_not(None))
+    elif visibility == "all":
+        pass
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="visibility must be visible, hidden, or all",
+        )
     rows = session.scalars(
         select(ReportFile)
-        .where(
-            ReportFile.project_key == project.strip(),
-            ReportFile.hidden_at.is_(None),
-        )
+        .where(*clauses)
         .order_by(ReportFile.report_date.desc(), ReportFile.slot_hhmm.desc(), ReportFile.id.desc())
     ).all()
+    if q and q.strip():
+        rows = [row for row in rows if _report_matches_query(row, q)]
     return [_serialize_report(row) for row in rows]
 
 
@@ -485,7 +517,26 @@ def _hide_report_row(session: Session, report_id: int, user: User) -> dict:
     return {
         "ok": True,
         "id": row.id,
+        "hidden": True,
         "hidden_at": row.hidden_at.isoformat() if row.hidden_at else None,
+        "message_still_present": message is not None and message.kind == "report",
+    }
+
+
+def _unhide_report_row(session: Session, report_id: int, user: User) -> dict:
+    row = _owned_report(session, report_id, user)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    require_chat_access(session, user, row.project_key)
+    if row.hidden_at is not None:
+        row.hidden_at = None
+        session.commit()
+    message = session.get(ChatMessage, row.message_id)
+    return {
+        "ok": True,
+        "id": row.id,
+        "hidden": False,
+        "hidden_at": None,
         "message_still_present": message is not None and message.kind == "report",
     }
 
@@ -497,6 +548,16 @@ def hide_report(
     session: Session = Depends(get_session),
 ) -> dict:
     return _hide_report_row(session, report_id, user)
+
+
+@chat_router.post("/reports/{report_id}/unhide")
+def unhide_report(
+    report_id: int,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Restore a soft-hidden report into the file manager list."""
+    return _unhide_report_row(session, report_id, user)
 
 
 @chat_router.delete("/reports/{report_id}")

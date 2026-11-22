@@ -264,6 +264,28 @@
   background: #f1f3f4;
 }
 
+.pm-chat-scope .pm-chat-file-row[data-hidden='true'] {
+  border-style: dashed;
+}
+
+.pm-chat-scope .pm-chat-files .mantine-SegmentedControl-root {
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-full);
+}
+
+.pm-chat-scope .pm-chat-files .mantine-SegmentedControl-indicator {
+  background: var(--color-surface-container);
+  border-radius: var(--radius-full);
+  box-shadow: none;
+}
+
+.pm-chat-scope .pm-chat-files .mantine-SegmentedControl-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
 /* Settings scope — same Kaggle tokens */
 .erw-settings-scope {
   --color-primary: #20beff;

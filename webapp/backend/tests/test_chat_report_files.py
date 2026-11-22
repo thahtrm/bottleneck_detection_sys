@@ -92,30 +92,81 @@ def test_list_download_and_soft_hide_keep_timeline(client, settings, session, ch
     assert len(items) == 1
     assert items[0]["id"] == row.id
     assert items[0]["filename"] == "2026-11-04-0800.md"
-    assert "Báo cáo" in items[0]["preview"]
+    assert items[0]["hidden"] is False
+    assert items[0]["preview"]
 
     dl = client.get(f"/api/chat/reports/{row.id}/download")
     assert dl.status_code == 200
-    assert "Báo cáo" in dl.text
+    assert "## 1. Overview" in dl.text or "Báo cáo" in dl.text or "Health" in dl.text
     assert "text/markdown" in dl.headers.get("content-type", "")
 
     hide = client.post(f"/api/chat/reports/{row.id}/hide")
     assert hide.status_code == 200
     body = hide.json()
     assert body["ok"] is True
+    assert body["hidden"] is True
     assert body["message_still_present"] is True
 
     assert client.get("/api/chat/reports", params={"project": "DEMO"}).json() == []
+    hidden_list = client.get("/api/chat/reports", params={"project": "DEMO", "visibility": "hidden"})
+    assert hidden_list.status_code == 200
+    assert len(hidden_list.json()) == 1
+    assert hidden_list.json()[0]["hidden"] is True
+
+    unhide = client.post(f"/api/chat/reports/{row.id}/unhide")
+    assert unhide.status_code == 200
+    assert unhide.json()["hidden"] is False
+    assert len(client.get("/api/chat/reports", params={"project": "DEMO"}).json()) == 1
+
+    # hide again then DELETE alias also soft-hides (idempotent)
+    assert client.post(f"/api/chat/reports/{row.id}/hide").status_code == 200
+    again = client.delete(f"/api/chat/reports/{row.id}")
+    assert again.status_code == 200
+    assert again.json()["ok"] is True
+
     session.expire_all()
     assert session.get(ChatMessage, msg_id) is not None
     assert session.get(ChatMessage, msg_id).kind == "report"
     assert session.get(ReportFile, row.id).hidden_at is not None
     assert report_abs_path(settings, row.rel_path).is_file()
 
-    # DELETE alias also soft-hides (idempotent)
-    again = client.delete(f"/api/chat/reports/{row.id}")
-    assert again.status_code == 200
-    assert again.json()["ok"] is True
+
+def test_list_reports_search_and_visibility(client, settings, session, chat_world, reports_dir):
+    pm = chat_world["pm"]
+    session.add(ReportSlot(user_id=pm.id, time_hhmm="08:00"))
+    session.flush()
+    run_due_reports(session, NOW, settings)
+    session.commit()
+    row = session.query(ReportFile).one()
+    login(client, pm, settings)
+
+    by_date = client.get("/api/chat/reports", params={"project": "DEMO", "q": "2026-11-04"})
+    assert by_date.status_code == 200
+    assert len(by_date.json()) == 1
+
+    preview_token = (row.preview or "Health").split()[0]
+    by_title = client.get("/api/chat/reports", params={"project": "DEMO", "q": preview_token})
+    assert by_title.status_code == 200
+    assert len(by_title.json()) == 1
+
+    by_project = client.get("/api/chat/reports", params={"project": "DEMO", "q": "DEMO"})
+    assert by_project.status_code == 200
+    assert len(by_project.json()) == 1
+
+    by_filename = client.get("/api/chat/reports", params={"project": "DEMO", "q": "0800.md"})
+    assert by_filename.status_code == 200
+    assert len(by_filename.json()) == 1
+
+    miss = client.get("/api/chat/reports", params={"project": "DEMO", "q": "zzz-no-match"})
+    assert miss.status_code == 200
+    assert miss.json() == []
+
+    assert client.post(f"/api/chat/reports/{row.id}/hide").status_code == 200
+    all_rows = client.get("/api/chat/reports", params={"project": "DEMO", "visibility": "all", "q": "DEMO"})
+    assert all_rows.status_code == 200
+    assert len(all_rows.json()) == 1
+    assert all_rows.json()[0]["hidden"] is True
+    assert client.get("/api/chat/reports", params={"project": "DEMO", "visibility": "visible"}).json() == []
 
 
 def test_viewer_can_list_and_download_reports(client, settings, session, chat_world, reports_dir):

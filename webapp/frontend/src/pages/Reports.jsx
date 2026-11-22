@@ -130,13 +130,17 @@ export default function Reports({
           </Group>
         </Group>
 
-        <div className="erw-settings-card">
+        <div className="erw-settings-card pm-chat-scope">
           <ReportFileManager
             project={project}
+            manage
             canHide={canGenerate}
+            canUnhide={canGenerate}
             showPdfDownload
             onOpenSettings={onOpenScheduleSettings}
             onPreview={openPreview}
+            onRegenerate={canGenerate ? () => generate.mutate() : undefined}
+            regeneratePending={generate.isPending}
           />
         </div>
       </Stack>
