@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Drawer, Group, Loader, Stack, Text } from '@mantine/core';
+import { Button, Drawer, Group, Loader, ScrollArea, Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { IconDownload, IconFileTypePdf, IconMessageCircle } from '@tabler/icons-react';
 import { downloadChatReport, getChatReportContent } from '../../api/client';
@@ -41,10 +41,29 @@ export default function ReportPreviewDrawer({
           ? `Báo cáo ${content.data.report_date || ''} · ${content.data.slot_hhmm || ''}`
           : 'Xem báo cáo'
       }
-      classNames={{ body: 'erw-report-scope' }}
+      classNames={{
+        content: 'erw-report-drawer-content',
+        body: 'erw-report-scope erw-report-drawer-body',
+      }}
+      styles={{
+        content: {
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          maxHeight: '100dvh',
+        },
+        header: { flexShrink: 0 },
+        body: {
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        },
+      }}
     >
-      <Stack gap="md">
-        <Group gap="sm" wrap="wrap">
+      <Stack gap="md" className="erw-report-drawer-stack">
+        <Group gap="sm" wrap="wrap" className="erw-report-drawer-actions">
           <Button
             className="erw-settings-btn-secondary"
             leftSection={<IconDownload size={14} />}
@@ -75,11 +94,18 @@ export default function ReportPreviewDrawer({
             </Button>
           ) : null}
         </Group>
-        {content.isLoading && <Loader size="sm" type="dots" />}
-        {content.isError && (
-          <Text className="erw-settings-error">{content.error?.message || 'Không tải được nội dung.'}</Text>
-        )}
-        {content.data?.markdown ? <ReportMarkdown markdown={content.data.markdown} /> : null}
+        <ScrollArea
+          className="erw-report-drawer-scroll"
+          style={{ flex: 1, minHeight: 0 }}
+          offsetScrollbars
+          type="auto"
+        >
+          {content.isLoading && <Loader size="sm" type="dots" />}
+          {content.isError && (
+            <Text className="erw-settings-error">{content.error?.message || 'Không tải được nội dung.'}</Text>
+          )}
+          {content.data?.markdown ? <ReportMarkdown markdown={content.data.markdown} /> : null}
+        </ScrollArea>
       </Stack>
     </Drawer>
   );
