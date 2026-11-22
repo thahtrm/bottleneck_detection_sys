@@ -64,13 +64,16 @@ def test_validate_strips_invented_keys(session, settings: Settings):
     assert "DEMO-99" not in cleaned
 
 
-def test_validate_rejects_invented_counts(session, settings: Settings):
+def test_validate_strips_invented_counts(session, settings: Settings):
     _seed_demo(session)
     snap = collect_health_snapshot(session, "DEMO", NOW, settings)
     md = render_facts_markdown(snap)
-    # Inject a count that cannot appear in the snapshot allowlist.
+    # Inject a count that cannot appear in the snapshot allowlist — strip, keep sections.
     poisoned = md.replace(f"Open: {snap.facts['overview']['open_count']}", "Open: 424242", 1)
-    assert validate_health_markdown(poisoned, snap) is None
+    cleaned = validate_health_markdown(poisoned, snap)
+    assert cleaned is not None
+    assert "424242" not in cleaned
+    assert "## 1. Overview" in cleaned
 
 
 def test_validate_rejects_missing_section(session, settings: Settings):
@@ -86,10 +89,10 @@ def test_narrate_health_returns_validated_full_md(session, settings: Settings):
     facts = render_facts_markdown(snap)
     settings.ollama_url = "http://ollama.test"
 
-    def fake_llm(prompt, system, model, base_url, client=None):
-        return {"markdown": facts}
+    def fake_llm(prompt, system, model, base_url, client=None, timeout=300.0):
+        return facts
 
-    with patch("erw.pipeline.health_report.call_ollama_chat", side_effect=fake_llm):
+    with patch("erw.pipeline.health_report.call_ollama_chat_text", side_effect=fake_llm):
         out = narrate_health(snap, settings)
     assert out is not None
     assert "## 1. Overview" in out
@@ -104,7 +107,7 @@ def test_narrate_health_none_on_llm_failure(session, settings: Settings):
     def boom(*_a, **_k):
         raise RuntimeError("ollama down")
 
-    with patch("erw.pipeline.health_report.call_ollama_chat", side_effect=boom):
+    with patch("erw.pipeline.health_report.call_ollama_chat_text", side_effect=boom):
         assert narrate_health(snap, settings) is None
 
 
@@ -129,10 +132,10 @@ def test_build_health_markdown_uses_llm_full_md(session, settings: Settings):
         1,
     )
 
-    def fake_llm(prompt, system, model, base_url, client=None):
-        return {"markdown": llm_body}
+    def fake_llm(prompt, system, model, base_url, client=None, timeout=300.0):
+        return llm_body
 
-    with patch("erw.pipeline.health_report.call_ollama_chat", side_effect=fake_llm):
+    with patch("erw.pipeline.health_report.call_ollama_chat_text", side_effect=fake_llm):
         body, _snap, narratives = build_health_markdown(session, "DEMO", NOW, settings)
     assert narratives.get(LLM_FULL_MD_FLAG) == "1"
     assert "LLM_FULL_MARK" in body

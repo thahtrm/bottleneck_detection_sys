@@ -17,7 +17,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from erw.domain.types import Level
-from erw.integrations.llm import call_ollama_chat
+from erw.integrations.llm import call_ollama_chat_text
 from erw.models import Change, Issue, Link, Project, RiskState
 from erw.pipeline.chat_lookup import blocker_keys, blocks_keys, keys_in_text
 from erw.pipeline.digest import collect_digest
@@ -496,11 +496,27 @@ def _fact_number_allowlist(snap: HealthSnapshot) -> frozenset[int]:
     return frozenset(nums)
 
 
-def _has_invented_counts(text: str, allowed_numbers: frozenset[int]) -> bool:
-    for match in NUMBER_RE.finditer(text):
-        if int(match.group(0)) not in allowed_numbers:
-            return True
-    return False
+def _strip_invented_counts(text: str, allowed_numbers: frozenset[int]) -> str:
+    """Remove numeric tokens absent from the snapshot allowlist (parallel to key strip)."""
+
+    def repl(match: re.Match[str]) -> str:
+        return match.group(0) if int(match.group(0)) in allowed_numbers else ""
+
+    cleaned = NUMBER_RE.sub(repl, text)
+    out: list[str] = []
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Keep markdown table separator rows (| :---: | …).
+        if stripped.startswith("|") and set(stripped) <= set("|:- "):
+            out.append(line)
+            continue
+        # Drop lines that became punctuation-only after stripping numbers.
+        if re.fullmatch(r"[\W_]+", stripped):
+            continue
+        out.append(line)
+    return "\n".join(out)
 
 
 def _has_all_sections(md: str) -> bool:
@@ -548,8 +564,8 @@ def health_md_skeleton(snap: HealthSnapshot) -> str:
 def validate_health_markdown(md: str, snap: HealthSnapshot) -> str | None:
     """
     Post-validate LLM full md.
-    - Strip invented issue keys.
-    - Reject (return None) if sections missing or invented counts remain.
+    - Strip invented issue keys and invented counts.
+    - Reject (return None) only if required 7 sections are missing after cleanup.
     """
     if not isinstance(md, str) or not md.strip():
         return None
@@ -565,10 +581,8 @@ def validate_health_markdown(md: str, snap: HealthSnapshot) -> str | None:
     if not _has_all_sections(text):
         return None
     cleaned = _strip_disallowed_keys(text, snap.allowed_keys)
+    cleaned = _strip_invented_counts(cleaned, _fact_number_allowlist(snap))
     if not _has_all_sections(cleaned):
-        return None
-    allowed_numbers = _fact_number_allowlist(snap)
-    if _has_invented_counts(cleaned, allowed_numbers):
         return None
     return cleaned.rstrip() + "\n"
 
@@ -577,43 +591,38 @@ def narrate_health(snap: HealthSnapshot, settings: Settings) -> str | None:
     """
     Mode B: LLM renders the FULL health-report markdown from snapshot + skeleton.
     Returns validated markdown, or None on LLM/validate failure (caller → Facts-only).
+    Uses plain-text Ollama (not JSON) so the full document is not truncated in a string field.
     """
     if not settings.ollama_url:
         return None
     system = (
         "You write a FULL daily project health report as Markdown for a PM. "
-        "Follow the provided 7-section skeleton exactly (same headings). "
+        "Follow the provided 7-section skeleton exactly (same ## headings 1–7). "
         "Fill Facts and AI Insight from the JSON snapshot only. "
         "ONLY mention issue keys listed in allowed_keys. "
         "ONLY use numeric counts present in allowed_counts / snapshot facts — never invent. "
         "Vietnamese for narrative; keep section titles as given. "
-        'Reply JSON object: {"markdown": "<full markdown document>"}.'
+        "Reply with ONLY the markdown document — no JSON wrapper, no preamble."
     )
-    prompt = json.dumps(
-        {
-            "skeleton": health_md_skeleton(snap),
-            "snapshot": {
-                "project": snap.project,
-                "day_iso": snap.day_iso,
-                "day_label": snap.day_label,
-                "tz": snap.tz,
-                "generated_at": snap.generated_at,
-                "facts": snap.facts,
-            },
-            "allowed_keys": sorted(snap.allowed_keys),
-            "allowed_counts": snap.allowed_counts,
-        },
-        ensure_ascii=False,
+    prompt = (
+        "Fill this skeleton using the snapshot. Output the complete markdown only.\n\n"
+        "## SKELETON\n"
+        f"{health_md_skeleton(snap)}\n"
+        "## SNAPSHOT_JSON\n"
+        f"{json.dumps({'project': snap.project, 'day_iso': snap.day_iso, 'day_label': snap.day_label, 'tz': snap.tz, 'generated_at': snap.generated_at, 'facts': snap.facts}, ensure_ascii=False)}\n"
+        "## ALLOWED_KEYS\n"
+        f"{json.dumps(sorted(snap.allowed_keys), ensure_ascii=False)}\n"
+        "## ALLOWED_COUNTS\n"
+        f"{json.dumps(snap.allowed_counts, ensure_ascii=False)}\n"
     )
     try:
-        raw = call_ollama_chat(prompt, system, settings.llm_model, settings.ollama_url)
+        markdown = call_ollama_chat_text(
+            prompt, system, settings.llm_model, settings.ollama_url, timeout=300.0
+        )
     except Exception:
         log.exception("health full-md LLM failed")
         return None
-    if not isinstance(raw, dict):
-        return None
-    markdown = raw.get("markdown")
-    if not isinstance(markdown, str):
+    if not isinstance(markdown, str) or not markdown.strip():
         return None
     validated = validate_health_markdown(markdown, snap)
     if validated is None:

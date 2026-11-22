@@ -341,6 +341,40 @@ def call_ollama_chat(
     return json.loads(content)
 
 
+def call_ollama_chat_text(
+    prompt: str,
+    system_prompt: str,
+    model: str,
+    base_url: str,
+    client: httpx.Client | None = None,
+    *,
+    timeout: float = 300.0,
+) -> str:
+    """Plain-text Ollama chat (no format=json) — for long markdown documents."""
+    url = f"{base_url.rstrip('/')}/api/chat"
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
+        "stream": False,
+    }
+    c = client or _http_client
+    if c is not None:
+        resp = c.post(url, json=payload, timeout=timeout)
+    else:
+        with httpx.Client(timeout=timeout) as http_client:
+            resp = http_client.post(url, json=payload)
+    resp.raise_for_status()
+    data = resp.json()
+    message = data.get("message", {})
+    content = message.get("content", "")
+    if isinstance(content, dict):
+        return json.dumps(content, ensure_ascii=False)
+    return str(content or "")
+
+
 def call_ollama_embed(
     texts: list[str],
     model: str,
