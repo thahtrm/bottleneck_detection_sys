@@ -142,16 +142,26 @@ def issue_fact_line(
     blocked: bool,
     blocking: list[str],
     blockers: list[str],
+    *,
+    include_assignee: bool = True,
 ) -> str:
+    """Polished VI fact line (Option A). Omit assignee when the digest is already scoped."""
+    parts: list[str] = [key]
     if blocked and blocking:
-        return f"{key} bị block và đang chặn {', '.join(blocking)}, assignee {assignee}."
-    if blocked and blockers:
-        return f"{key} bị block bởi {', '.join(blockers)}, assignee {assignee}."
-    if blocked:
-        return f"{key} bị block, assignee {assignee}."
-    if deadline:
-        return f"{key} mức {level_label}, {deadline}, assignee {assignee}."
-    return f"{key} mức {level_label}, assignee {assignee}."
+        parts.append("bị chặn")
+        parts.append(f"đang chặn {', '.join(blocking)}")
+    elif blocked and blockers:
+        parts.append(f"bị chặn bởi {', '.join(blockers)}")
+    elif blocked:
+        parts.append("bị chặn")
+    else:
+        if level_label:
+            parts.append(f"mức {level_label}")
+        if deadline:
+            parts.append(deadline)
+    if include_assignee:
+        parts.append(f"phụ trách {assignee}")
+    return " · ".join(parts)
 
 
 def _finish(kind: LookupKind, facts: str, payload: dict, issue_key: str | None, skip: bool) -> FactAnswer:
@@ -184,8 +194,11 @@ def _when(days: int) -> str:
     return f"còn {days} ngày"
 
 
-def _dated_line(issue: Issue, days: int) -> str:
-    return f"{issue.key} {_when(days)}, assignee {_assignee(issue)}."
+def _dated_line(issue: Issue, days: int, *, include_assignee: bool = True) -> str:
+    parts = [issue.key, _when(days)]
+    if include_assignee:
+        parts.append(f"phụ trách {_assignee(issue)}")
+    return " · ".join(parts)
 
 
 def _by_risk(issue: Issue, risk: RiskState | None) -> tuple:
@@ -236,18 +249,42 @@ def _open_risk_rows(session: Session, project: str) -> list[tuple[Issue, RiskSta
     return [(issue, risk) for issue, risk in rows]
 
 
-def _line_for(session: Session, issue: Issue, risk: RiskState) -> str:
-    blocking = blocks_keys(session, issue.key)
-    blockers = blocker_keys(session, issue.key) if risk.blocked else []
+def _issue_struct(session: Session, issue: Issue, risk: RiskState | None) -> dict:
+    """Structured row for narrate allowlists + template render (Option B payload-first)."""
+    blocked = bool(risk.blocked) if risk is not None else False
+    blocking = blocks_keys(session, issue.key) if risk is not None else []
+    blockers = blocker_keys(session, issue.key) if risk is not None and risk.blocked else []
+    return {
+        "key": issue.key,
+        "assignee": _assignee(issue),
+        "level": _level(risk.level).label_vi if risk is not None and risk.level else None,
+        "deadline": risk.deadline_label if risk is not None else None,
+        "blocked": blocked,
+        "blocking": blocking,
+        "blockers": blockers,
+    }
+
+
+def _line_from_struct(row: dict, *, include_assignee: bool = True) -> str:
+    if row.get("level") is None and not row.get("blocked"):
+        parts = [str(row["key"]), "chưa có mức rủi ro"]
+        if include_assignee:
+            parts.append(f"phụ trách {row.get('assignee') or 'chưa giao'}")
+        return " · ".join(parts)
     return issue_fact_line(
-        issue.key,
-        _assignee(issue),
-        _level(risk.level).label_vi,
-        risk.deadline_label,
-        bool(risk.blocked),
-        blocking,
-        blockers,
+        str(row["key"]),
+        str(row.get("assignee") or "chưa giao"),
+        row.get("level"),
+        row.get("deadline"),
+        bool(row.get("blocked")),
+        list(row.get("blocking") or []),
+        list(row.get("blockers") or []),
+        include_assignee=include_assignee,
     )
+
+
+def _line_for(session: Session, issue: Issue, risk: RiskState, *, include_assignee: bool = True) -> str:
+    return _line_from_struct(_issue_struct(session, issue, risk), include_assignee=include_assignee)
 
 
 def _answer_sprint(session: Session, project: str, now: datetime) -> FactAnswer:
@@ -262,12 +299,13 @@ def _answer_sprint(session: Session, project: str, now: datetime) -> FactAnswer:
 def _answer_blocked(session: Session, project: str) -> FactAnswer:
     rows = [pair for pair in _open_risk_rows(session, project) if pair[1].blocked]
     rows.sort(key=lambda pair: (-int(_level(pair[1].level)), pair[1].crit_score is None, -(pair[1].crit_score or 0.0), pair[0].key))
-    lines = [f"Đang có {len(rows)} issue mở bị block."]
+    lines = [f"Đang có {len(rows)} issue mở bị chặn."]
     listed = []
     for issue, risk in rows[:MAX_ITEMS]:
-        line = _line_for(session, issue, risk)
+        row = _issue_struct(session, issue, risk)
+        line = _line_from_struct(row)
         lines.append(line)
-        listed.append({"key": issue.key, "line": line})
+        listed.append({**row, "line": line})
     facts = "\n".join(lines)
     return _finish("blocked", facts, {"kind": "blocked", "count": len(rows), "issues": listed}, None, False)
 
@@ -284,9 +322,10 @@ def _answer_risky(session: Session, project: str, now: datetime, settings: Setti
         risk = risks.get(item.key)
         if issue is None or risk is None:
             continue
-        line = _line_for(session, issue, risk)
+        row = _issue_struct(session, issue, risk)
+        line = _line_from_struct(row)
         lines.append(line)
-        listed.append({"key": item.key, "line": line})
+        listed.append({**row, "line": line})
     facts = "\n".join(lines)
     return _finish(
         "risky",
@@ -337,14 +376,12 @@ def _answer_open(session: Session, project: str) -> FactAnswer:
     listed = []
     for issue in issues[:MAX_ITEMS]:
         risk = risks.get(issue.key)
-        if risk is None:
-            line = f"{issue.key} chưa có mức rủi ro, assignee {_assignee(issue)}."
-        else:
-            line = _line_for(session, issue, risk)
+        row = _issue_struct(session, issue, risk)
+        line = _line_from_struct(row)
         lines.append(line)
-        listed.append({"key": issue.key, "line": line})
+        listed.append({**row, "line": line})
     facts = "\n".join(lines)
-    return _finish("open", facts, {"kind": "open", "open_count": len(issues), "issues": listed}, None, len(issues) == 0)
+    return _finish("open", facts, {"kind": "open", "open_count": len(issues), "issues": listed}, None, True)
 
 
 def _answer_issue(session: Session, project: str, text: str) -> FactAnswer:
@@ -360,18 +397,18 @@ def _answer_issue(session: Session, project: str, text: str) -> FactAnswer:
     blocking = blocks_keys(session, key)
     blockers = blocker_keys(session, key)
     if risk is not None and risk.blocked and blocking:
-        block_sentence = f"Bị block và đang chặn {', '.join(blocking)}."
+        block_sentence = f"Bị chặn và đang chặn {', '.join(blocking)}."
     elif risk is not None and risk.blocked and blockers:
-        block_sentence = f"Bị block bởi {', '.join(blockers)}."
+        block_sentence = f"Bị chặn bởi {', '.join(blockers)}."
     elif risk is not None and risk.blocked:
-        block_sentence = "Bị block."
+        block_sentence = "Bị chặn."
     elif blocking:
         block_sentence = f"Đang chặn {', '.join(blocking)}."
     else:
-        block_sentence = "Không bị block."
+        block_sentence = "Không bị chặn."
     factors = ", ".join(_factor_labels(risk)) or "không có"
     facts = (
-        f"{key}: {issue.summary or ''}. Mức {level}. Assignee {_assignee(issue)}. "
+        f"{key}: {issue.summary or ''}. Mức {level}. Phụ trách {_assignee(issue)}. "
         f"Hạn {deadline}. {block_sentence} Yếu tố: {factors}."
     )
     payload = {
@@ -407,16 +444,18 @@ def _answer_assignee(session: Session, project: str) -> FactAnswer:
     listed = []
     for issue in owned[:MAX_ITEMS]:
         risk = risks.get(issue.key)
-        line = _line_for(session, issue, risk) if risk is not None else f"{issue.key} chưa có mức rủi ro, assignee {winner}."
+        row = _issue_struct(session, issue, risk)
+        row["assignee"] = winner if risk is None else row["assignee"]
+        line = _line_from_struct(row, include_assignee=False)
         lines.append(line)
-        listed.append({"key": issue.key, "line": line})
+        listed.append({**row, "line": line})
     facts = "\n".join(lines)
     return _finish(
         "assignee",
         facts,
         {"kind": "assignee", "assignee": winner, "count": len(owned), "issues": listed},
         None,
-        False,
+        True,  # A4: list answer is complete — skip bolted-on recommend
     )
 
 
@@ -443,14 +482,21 @@ def _answer_due(session: Session, project: str, now: datetime, settings: Setting
     for days, issue, _risk in soon[:MAX_ITEMS]:
         line = _dated_line(issue, days)
         lines.append(line)
-        listed.append({"key": issue.key, "days": days, "line": line})
+        listed.append(
+            {
+                "key": issue.key,
+                "days": days,
+                "assignee": _assignee(issue),
+                "line": line,
+            }
+        )
     facts = "\n".join(lines)
     return _finish(
         "due",
         facts,
         {"kind": "due", "count": len(soon), "soon_days": SOON_DAYS, "issues": listed},
         None,
-        False,
+        True,
     )
 
 
@@ -466,9 +512,16 @@ def _answer_overdue(session: Session, project: str, now: datetime, settings: Set
     for days, issue, _risk in overdue[:MAX_ITEMS]:
         line = _dated_line(issue, days)
         lines.append(line)
-        listed.append({"key": issue.key, "days": days, "line": line})
+        listed.append(
+            {
+                "key": issue.key,
+                "days": days,
+                "assignee": _assignee(issue),
+                "line": line,
+            }
+        )
     facts = "\n".join(lines)
-    return _finish("overdue", facts, {"kind": "overdue", "count": len(overdue), "issues": listed}, None, False)
+    return _finish("overdue", facts, {"kind": "overdue", "count": len(overdue), "issues": listed}, None, True)
 
 
 def _answer_important(session: Session, project: str) -> FactAnswer:
@@ -482,11 +535,12 @@ def _answer_important(session: Session, project: str) -> FactAnswer:
     lines = [f"Đang có {len(flagged)} issue mở được đánh dấu quan trọng."]
     listed = []
     for issue in flagged[:MAX_ITEMS]:
-        line = _line_for(session, issue, risks[issue.key])
+        row = _issue_struct(session, issue, risks[issue.key])
+        line = _line_from_struct(row)
         lines.append(line)
-        listed.append({"key": issue.key, "line": line})
+        listed.append({**row, "line": line})
     facts = "\n".join(lines)
-    return _finish("important", facts, {"kind": "important", "count": len(flagged), "issues": listed}, None, False)
+    return _finish("important", facts, {"kind": "important", "count": len(flagged), "issues": listed}, None, True)
 
 
 def answer_facts(session: Session, project: str, text: str, now: datetime, settings: Settings) -> FactAnswer | None:

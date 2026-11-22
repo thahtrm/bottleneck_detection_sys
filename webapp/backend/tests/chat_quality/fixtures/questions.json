@@ -16,7 +16,7 @@
     "expected_tool": "lookup_blocked",
     "forbid_chua_co": true,
     "require_payload_fields": {"count": "blocked_open"},
-    "require_substrings": ["bị block"],
+    "require_substrings": ["bị chặn"],
     "must_include_keys": ["DEMO-41"],
     "expect_keys_from_facts": true
   },

@@ -66,6 +66,6 @@ def test_render_and_union(session, settings):
     a = run_tool(session, "lookup_blocked", {}, "DEMO", NOW, settings)
     b = run_tool(session, "lookup_risky", {}, "DEMO", NOW, settings)
     facts = render_facts_from_tool_results([a, b])
-    assert "bị block" in facts
+    assert "bị chặn" in facts
     assert board_tool_succeeded([a, b])
     assert "DEMO-1" in union_allowed_keys([a, b])

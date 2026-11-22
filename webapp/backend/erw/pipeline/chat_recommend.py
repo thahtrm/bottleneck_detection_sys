@@ -23,6 +23,15 @@ log = logging.getLogger(__name__)
 FAILED_RECOMMENDATION = "Chưa tạo được đề xuất bám dữ liệu."
 RecommendationStatus = Literal["ready", "failed"]
 
+# A5: display labels for stored suggestion action_type (machine enum stays in JSON).
+ACTION_LABEL_VI = {
+    "adjust_deadline": "điều chỉnh hạn",
+    "change_assignee": "đổi người phụ trách",
+    "change_status": "đổi trạng thái",
+    "add_comment": "thêm bình luận",
+    "escalate_blocker": "leo thang blocker",
+}
+
 
 class ChatRecommendation(BaseModel):
     text: str
@@ -95,8 +104,9 @@ def recommendation_from_stored(output: dict, allowed_keys: set[str]) -> tuple[st
             return FAILED_RECOMMENDATION, "failed"
     lines = [summary] if summary else []
     for action in actions:
+        label = ACTION_LABEL_VI.get(action.action_type, action.action_type)
         target = f"{action.target}: " if action.target else ""
-        lines.append(f"{target}{action.action_type} — {action.reason}")
+        lines.append(f"{target}{label} — {action.reason}")
     text = "\n".join(line for line in lines if line).strip()
     if not text or not validate_recommendation(text, actions, allowed_keys):
         return FAILED_RECOMMENDATION, "failed"

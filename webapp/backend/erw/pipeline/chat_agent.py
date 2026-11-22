@@ -18,6 +18,7 @@ from erw.pipeline.chat_memory import (
     write_episode,
 )
 from erw.pipeline.chat_rag import format_rag_for_prompt, retrieve
+from erw.pipeline.chat_narrate import narrate_chat_facts
 from erw.pipeline.chat_recommend import (
     FAILED_RECOMMENDATION,
     recommendation_from_stored,
@@ -318,7 +319,11 @@ def run_agent_turn(
             steps.append({"step": "ensure", "tool": "get_issue_suggestion", "ok": sug.ok})
 
     needs_board = hint is not None and hint in (BOARD_TOOLS | REPORT_TOOLS)
+    # Option A templates first; Option B constrained narrate replaces when validate OK.
     facts = render_facts_from_tool_results(results)
+    narrated = narrate_chat_facts(results, settings, client)
+    if narrated:
+        facts = narrated
     allowed = union_allowed_keys(results)
     rag_only = bool(rag_chunks) and not needs_board and not board_tool_succeeded(results)
 
