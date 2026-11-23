@@ -104,10 +104,18 @@ def render(doc: dict, tip: str) -> str:
     entries = doc.get("entries", [])
     overall, delay_win, crit_win = winners(entries)
     n_models = sorted({e.get("model") for e in entries})
+    expected = 2 * len(PRIMARY_SNAPSHOTS) * len(MODELS)
+    complete = len(entries) >= expected and all(
+        any(e.get("task") == t and e.get("snapshot") == s and e.get("model") == m for e in entries)
+        for t in ("delay_risk", "criticality")
+        for s in PRIMARY_SNAPSHOTS
+        for m in MODELS
+    )
+    status = "complete" if complete else f"partial ({len(entries)}/{expected} entries)"
     sections = [
         "# Báo cáo so sánh: TGN Multiple-Head vs Classical Baselines",
         "",
-        f"**Trạng thái:** partial/complete tùy leaderboard · **Repo tip:** `{tip}`  ",
+        f"**Trạng thái:** {status} · **Repo tip:** `{tip}`  ",
         "**Protocol:** Q1=B′ (primary snapshots `T0_pre` / `T3_change` / `T7_change` / `T_active_change`), Q2–Q8=A  ",
         f"**Models có số liệu:** {', '.join(f'`{m}`' for m in n_models) or '—'}  ",
         f"**Leaderboard:** `experiments/leaderboard_multihead_vs_classical.json`",
@@ -118,6 +126,7 @@ def render(doc: dict, tip: str) -> str:
         f"- **Head Delay Risk:** {delay_win}",
         f"- **Head Criticality:** {crit_win}",
         "- **Post-T0:** Dual-Head dùng memory `z` động; classical dùng T0 base ⊕ **as-of tabular** (không có `z`).",
+        "- **@T_active_change:** cả Dual-Head và classical mạnh hơn T0 trên Delay PR-AUC; Dual-Head dẫn Prec@Top-5% (P0).",
         "",
         "## 2. Protocol đã khóa",
         "",

@@ -1,6 +1,6 @@
 # Báo cáo so sánh: TGN Multiple-Head vs Classical Baselines
 
-**Trạng thái:** partial/complete tùy leaderboard · **Repo tip:** `c65acfd598dcdc12c0f50d31196ef4b344e2428b`  
+**Trạng thái:** complete · **Repo tip:** `PLACEHOLDER`  
 **Protocol:** Q1=B′ (primary snapshots `T0_pre` / `T3_change` / `T7_change` / `T_active_change`), Q2–Q8=A  
 **Models có số liệu:** `dual_tgn`, `logreg`, `rf`, `xgb`  
 **Leaderboard:** `experiments/leaderboard_multihead_vs_classical.json`
@@ -11,6 +11,7 @@
 - **Head Delay Risk:** `rf` (PR-AUC=0.4226 @T0_pre)
 - **Head Criticality:** `dual_tgn` (NDCG@10 Grouped=0.8551 @T0_pre)
 - **Post-T0:** Dual-Head dùng memory `z` động; classical dùng T0 base ⊕ **as-of tabular** (không có `z`).
+- **@T_active_change:** cả Dual-Head và classical mạnh hơn T0 trên Delay PR-AUC; Dual-Head dẫn Prec@Top-5% (P0).
 
 ## 2. Protocol đã khóa
 
