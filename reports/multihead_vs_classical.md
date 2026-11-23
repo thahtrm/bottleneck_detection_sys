@@ -1,6 +1,6 @@
 # Báo cáo so sánh: TGN Multiple-Head vs Classical Baselines
 
-**Trạng thái:** partial/complete tùy leaderboard · **Repo tip:** `fba57086429a62422c4673d14970de5df3bc4a21`  
+**Trạng thái:** partial/complete tùy leaderboard · **Repo tip:** `7ff2a115d7d5fd24f6853fb671a6dea13555f454`  
 **Protocol:** Q1=B′ (primary snapshots `T0_pre` / `T3_change` / `T7_change` / `T_active_change`), Q2–Q8=A  
 **Models có số liệu:** `dual_tgn`, `logreg`, `rf`, `xgb`  
 **Leaderboard:** `experiments/leaderboard_multihead_vs_classical.json`
