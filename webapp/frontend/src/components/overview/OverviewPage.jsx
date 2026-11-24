@@ -23,9 +23,21 @@ import {
   IconRefresh,
   IconX,
 } from '@tabler/icons-react';
-import { downloadOverviewExport, getProjectOverview } from '../../api/client';
+import {
+  downloadOverviewExport,
+  getOverviewCompare,
+  getProjectOverview,
+  refreshOverviewShap,
+} from '../../api/client';
 import '../../styles/kaggleTokens.css';
 import classes from './overview.module.css';
+
+const BUCKET_LABEL = {
+  person: 'Người / load',
+  dependency: 'Phụ thuộc',
+  time: 'Thời gian / quy trình',
+  content: 'Nội dung issue',
+};
 
 const ACTOR_TABS = [
   { value: 'all', label: 'Tất cả' },
@@ -77,7 +89,44 @@ function KpiCell({ label, value, hint, active, onClick }) {
   );
 }
 
-function ExplainDrawer({ opened, onClose, explain, onOpenBoard }) {
+function ShapWaterfall({ shap }) {
+  if (!shap?.values?.length) return null;
+  const maxAbs = Math.max(0.001, ...shap.values.map((v) => Math.abs(Number(v.phi) || 0)));
+  return (
+    <Stack gap="xs" mt="xs">
+      <Text size="xs" c="dimmed">
+        {shap.shap_method} · {shap.model_tag}
+        {shap.as_of ? ` · ${shap.as_of}` : ''}
+      </Text>
+      {shap.values.slice(0, 8).map((item) => {
+        const phi = Number(item.phi) || 0;
+        const pct = (100 * Math.abs(phi)) / maxAbs;
+        const positive = phi >= 0;
+        return (
+          <div key={item.feature}>
+            <Group justify="space-between" gap="xs" mb={2}>
+              <Text size="xs" fw={600}>
+                {item.feature}
+              </Text>
+              <Text size="xs" c={positive ? 'red' : 'teal'}>
+                {positive ? '+' : ''}
+                {phi.toFixed(3)}
+              </Text>
+            </Group>
+            <div className={classes.barTrack}>
+              <div
+                className={positive ? classes.barFillPos : classes.barFillNeg}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </Stack>
+  );
+}
+
+function ExplainDrawer({ opened, onClose, explain, onOpenBoard, onOpenGraph }) {
   if (!explain) return null;
   return (
     <Drawer
@@ -105,13 +154,18 @@ function ExplainDrawer({ opened, onClose, explain, onOpenBoard }) {
       classNames={{ content: classes.drawerContent }}
     >
       <Stack gap="md">
-        <Group gap="md">
+        <Group gap="sm">
           <Text size="sm">
             p_delay: <strong>{formatPDelay(explain.p_delay)}</strong>
           </Text>
           <Button size="compact-sm" variant="light" onClick={() => onOpenBoard(explain.key)}>
             Mở trên Bảng
           </Button>
+          {onOpenGraph ? (
+            <Button size="compact-sm" variant="subtle" onClick={() => onOpenGraph(explain.key)}>
+              Mở Đồ thị
+            </Button>
+          ) : null}
         </Group>
 
         <div>
@@ -131,10 +185,14 @@ function ExplainDrawer({ opened, onClose, explain, onOpenBoard }) {
         </div>
 
         <div>
-          <Text className={classes.sectionOverline}>SHAP</Text>
-          <Alert mt="xs" color="gray" variant="light">
-            {explain.shap_status || 'Chưa có SHAP cho snapshot này'}
-          </Alert>
+          <Text className={classes.sectionOverline}>SHAP waterfall</Text>
+          {explain.shap?.values?.length ? (
+            <ShapWaterfall shap={explain.shap} />
+          ) : (
+            <Alert mt="xs" color="gray" variant="light">
+              {explain.shap_status || 'Chưa có SHAP cho snapshot này'}
+            </Alert>
+          )}
         </div>
 
         <div>
@@ -146,9 +204,13 @@ function ExplainDrawer({ opened, onClose, explain, onOpenBoard }) {
           ) : (
             <Stack gap={4} mt="xs">
               {explain.downstream.map((key) => (
-                <Text key={key} size="sm">
-                  {key}
-                </Text>
+                <UnstyledButton
+                  key={key}
+                  className={classes.depRow}
+                  onClick={() => (onOpenGraph ? onOpenGraph(key) : onOpenBoard(key))}
+                >
+                  <Text size="sm">{key}</Text>
+                </UnstyledButton>
               ))}
             </Stack>
           )}
@@ -163,13 +225,19 @@ export default function OverviewPage({
   selectedIssueKey,
   onSelectIssue,
   onOpenBoard,
+  onOpenGraph,
+  canRefreshShap = false,
 }) {
   const queryClient = useQueryClient();
   const isMobile = useMediaQuery('(max-width: 61.99em)');
   const [actorTab, setActorTab] = useState('all');
-  const [chartTab, setChartTab] = useState('risk');
+  const [chartTab, setChartTab] = useState('shap');
   const [tableFilter, setTableFilter] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [shapMode, setShapMode] = useState('features'); // features | buckets
+  const [highOnly, setHighOnly] = useState(false);
+  const [shapRefreshing, setShapRefreshing] = useState(false);
+  const [compare, setCompare] = useState(null);
 
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['project-overview', project],
@@ -238,6 +306,38 @@ export default function OverviewPage({
     }
   };
 
+  const handleRefreshShap = async () => {
+    if (!project || !canRefreshShap) return;
+    setShapRefreshing(true);
+    try {
+      await refreshOverviewShap(project);
+      // Poll overview a few times while batch runs on the jobs executor.
+      for (let i = 0; i < 8; i += 1) {
+        await new Promise((r) => setTimeout(r, 800));
+        await queryClient.invalidateQueries({ queryKey: ['project-overview', project] });
+        const fresh = await refetch();
+        if (fresh.data?.shap_available) break;
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-alert
+      window.alert(err?.message || 'Không enqueue được SHAP');
+    } finally {
+      setShapRefreshing(false);
+    }
+  };
+
+  const handleLoadCompare = async () => {
+    if (!project) return;
+    try {
+      const body = await getOverviewCompare(project);
+      setCompare(body);
+      setChartTab('compare');
+    } catch (err) {
+      // eslint-disable-next-line no-alert
+      window.alert(err?.message || 'Không tải được so sánh snapshot');
+    }
+  };
+
   const handleActorClick = (actor) => {
     if (actor.kind === 'person') {
       setTableFilter({ type: 'assignee', value: actor.name });
@@ -282,6 +382,17 @@ export default function OverviewPage({
   const kpi = data.kpi || {};
   const sprint = data.sprint;
   const maxRisk = Math.max(1, ...(data.risk_distribution || []).map((d) => d.count));
+  const shapProject = highOnly ? data.shap_project_high || data.shap_project : data.shap_project;
+  const shapBars =
+    shapMode === 'buckets' ? shapProject?.buckets || [] : shapProject?.features || [];
+  const maxShap = Math.max(
+    0.001,
+    ...shapBars.map((row) => Number(row.mean_abs_phi) || 0),
+  );
+  const chartTabs = [
+    ...CHART_TABS,
+    { value: 'compare', label: 'So sánh' },
+  ];
 
   return (
     <Box className={`erw-overview-scope ${classes.root}`}>
@@ -315,6 +426,20 @@ export default function OverviewPage({
               }}
             >
               Làm mới
+            </Button>
+            {canRefreshShap ? (
+              <Button
+                variant="light"
+                size="sm"
+                radius="xl"
+                loading={shapRefreshing}
+                onClick={handleRefreshShap}
+              >
+                Làm mới SHAP
+              </Button>
+            ) : null}
+            <Button variant="subtle" size="sm" radius="xl" onClick={handleLoadCompare}>
+              So sánh snapshot
             </Button>
             <Menu shadow="md" width={180} position="bottom-end">
               <Menu.Target>
@@ -473,13 +598,69 @@ export default function OverviewPage({
                 size="xs"
                 value={chartTab}
                 onChange={setChartTab}
-                data={CHART_TABS}
+                data={chartTabs}
               />
             </Group>
             {chartTab === 'shap' && (
-              <Alert color="blue" variant="light" title="SHAP (P1)">
-                KernelSHAP Dual-Head chưa có trong P0. Actor ranking và bảng issue vẫn dùng được.
-              </Alert>
+              <Stack gap="sm">
+                {!data.shap_available ? (
+                  <Alert color="blue" variant="light" title="SHAP chưa có cache">
+                    KernelSHAP quanh Dual-Head delay chạy batch (không sync trên HTTP). Actor
+                    ranking vẫn dùng được.
+                    {canRefreshShap ? ' Bấm “Làm mới SHAP” để enqueue.' : ''}
+                  </Alert>
+                ) : (
+                  <>
+                    <Group gap="xs" wrap="wrap">
+                      <SegmentedControl
+                        size="xs"
+                        value={shapMode}
+                        onChange={setShapMode}
+                        data={[
+                          { value: 'features', label: 'Feature' },
+                          { value: 'buckets', label: 'Bucket' },
+                        ]}
+                      />
+                      <Button
+                        size="compact-xs"
+                        variant={highOnly ? 'filled' : 'default'}
+                        radius="xl"
+                        onClick={() => setHighOnly((v) => !v)}
+                      >
+                        HIGH only
+                      </Button>
+                    </Group>
+                    <Text size="xs" c="dimmed">
+                      {shapProject?.shap_method || 'kernel_dual_head'} ·{' '}
+                      {shapProject?.model_tag || data.meta?.model_id || '—'}
+                      {shapProject?.as_of ? ` · as_of ${shapProject.as_of}` : ''}
+                    </Text>
+                    {shapBars.map((row) => {
+                      const label =
+                        shapMode === 'buckets'
+                          ? BUCKET_LABEL[row.bucket] || row.bucket
+                          : row.feature;
+                      const value = Number(row.mean_abs_phi) || 0;
+                      return (
+                        <div key={label}>
+                          <Group justify="space-between" mb={4}>
+                            <Text size="sm">{label}</Text>
+                            <Text size="sm" fw={600}>
+                              {value.toFixed(3)}
+                            </Text>
+                          </Group>
+                          <div className={classes.barTrack}>
+                            <div
+                              className={classes.barFill}
+                              style={{ width: `${(100 * value) / maxShap}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </Stack>
             )}
             {chartTab === 'risk' && (
               <Stack gap="sm">
@@ -516,19 +697,61 @@ export default function OverviewPage({
                   </Text>
                 ) : (
                   (data.top_blockers || []).map((b) => (
-                    <UnstyledButton
-                      key={b.key}
-                      className={classes.depRow}
-                      onClick={() => onSelectIssue(b.key)}
-                    >
-                      <Text size="sm" fw={600}>
-                        {b.key}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        fan-out {b.fan_out} · impact {b.impact}
-                      </Text>
-                    </UnstyledButton>
+                    <Group key={b.key} justify="space-between" wrap="nowrap" gap="xs">
+                      <UnstyledButton
+                        className={classes.depRow}
+                        style={{ flex: 1 }}
+                        onClick={() => onSelectIssue(b.key)}
+                      >
+                        <Text size="sm" fw={600}>
+                          {b.key}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          fan-out {b.fan_out} · impact {b.impact}
+                        </Text>
+                      </UnstyledButton>
+                      {onOpenGraph ? (
+                        <Button
+                          size="compact-xs"
+                          variant="subtle"
+                          onClick={() => onOpenGraph(b.key)}
+                        >
+                          Đồ thị
+                        </Button>
+                      ) : null}
+                    </Group>
                   ))
+                )}
+              </Stack>
+            )}
+            {chartTab === 'compare' && (
+              <Stack gap="sm">
+                {!compare ? (
+                  <Text size="sm" c="dimmed">
+                    Bấm “So sánh snapshot” trên header để tải.
+                  </Text>
+                ) : !compare.available ? (
+                  <Alert color="gray" variant="light">
+                    {compare.note || 'Cần ≥2 batch SHAP đã cache.'}
+                  </Alert>
+                ) : (
+                  <>
+                    <Text size="xs" c="dimmed">
+                      {compare.newer?.as_of} vs {compare.older?.as_of}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {compare.note}
+                    </Text>
+                    {(compare.bucket_delta || []).map((row) => (
+                      <Group key={row.bucket} justify="space-between">
+                        <Text size="sm">{BUCKET_LABEL[row.bucket] || row.bucket}</Text>
+                        <Text size="sm" fw={600} c={row.delta >= 0 ? 'red' : 'teal'}>
+                          {row.delta >= 0 ? '+' : ''}
+                          {row.delta}
+                        </Text>
+                      </Group>
+                    ))}
+                  </>
                 )}
               </Stack>
             )}
@@ -621,6 +844,7 @@ export default function OverviewPage({
         onClose={() => onSelectIssue(null)}
         explain={explain}
         onOpenBoard={onOpenBoard}
+        onOpenGraph={onOpenGraph}
       />
     </Box>
   );

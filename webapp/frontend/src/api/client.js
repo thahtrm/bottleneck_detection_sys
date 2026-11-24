@@ -340,7 +340,7 @@ export async function generateHealthReport(project) {
   });
 }
 
-/** Progress Attribution overview snapshot (P0 structural). */
+/** Progress Attribution overview snapshot (P0 structural + P1 SHAP cache). */
 export async function getProjectOverview(projectKey) {
   return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/overview`);
 }
@@ -365,6 +365,24 @@ export async function downloadOverviewExport(projectKey, format = 'md') {
     ? decodeURIComponent(match[1])
     : `overview-${projectKey}.${fallbackExt}`;
   return { blob, filename };
+}
+
+/** Enqueue KernelSHAP Dual-Head batch (PM/Admin). */
+export async function refreshOverviewShap(projectKey) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/overview/shap/refresh`, {
+    method: 'POST',
+  });
+}
+
+/** P2: compare two cached SHAP project summaries. */
+export async function getOverviewCompare(projectKey, { newerId, olderId } = {}) {
+  const query = new URLSearchParams();
+  if (newerId != null) query.set('newer_id', String(newerId));
+  if (olderId != null) query.set('older_id', String(olderId));
+  const qs = query.toString();
+  return await apiFetch(
+    `/api/projects/${encodeURIComponent(projectKey)}/overview/compare${qs ? `?${qs}` : ''}`,
+  );
 }
 
 /** In-app markdown content for report preview drawer. */

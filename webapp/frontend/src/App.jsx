@@ -262,6 +262,8 @@ function AppContent() {
               selectedIssueKey={state.issue}
               onSelectIssue={selectIssue}
               onOpenBoard={(key) => patch({ view: 'board', issue: key })}
+              onOpenGraph={(key) => patch({ view: 'graph', issue: key })}
+              canRefreshShap={Boolean(user.is_admin || selectedProjectRole === 'pm')}
             />
           </Box>
         )}
