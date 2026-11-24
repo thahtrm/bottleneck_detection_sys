@@ -286,3 +286,38 @@ class ChatAgentRun(Base):
     steps_json: Mapped[Any] = mapped_column(JSON, default=list)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class IssueShap(Base):
+    """Cached KernelSHAP (or Dual-Head delay-head surrogate) attributions — batch only."""
+
+    __tablename__ = "issue_shap"
+    __table_args__ = (
+        UniqueConstraint("issue_key", "model_tag", "shap_method", "as_of"),
+        Index("ix_issue_shap_project_as_of", "project_key", "as_of"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_key: Mapped[str] = mapped_column(String, index=True)
+    issue_key: Mapped[str] = mapped_column(String, index=True)
+    model_tag: Mapped[str] = mapped_column(String)
+    shap_method: Mapped[str] = mapped_column(String, default="kernel_dual_head")
+    as_of: Mapped[datetime] = mapped_column(UTCDateTime)
+    base_value: Mapped[float | None] = mapped_column(Float)
+    pred: Mapped[float | None] = mapped_column(Float)
+    values: Mapped[Any] = mapped_column(JSON, default=list)  # [{feature, phi, bucket}]
+    feature_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    meta: Mapped[Any] = mapped_column(JSON, default=dict)
+
+
+class OverviewSnapshotRecord(Base):
+    """Persisted overview snapshots for P2 compare (KPI / actors / SHAP summary)."""
+
+    __tablename__ = "overview_snapshots"
+    __table_args__ = (Index("ix_overview_snapshots_project_as_of", "project_key", "as_of"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_key: Mapped[str] = mapped_column(String, index=True)
+    as_of: Mapped[datetime] = mapped_column(UTCDateTime)
+    payload: Mapped[Any] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)

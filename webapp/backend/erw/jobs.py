@@ -233,10 +233,42 @@ def _morning_body() -> None:
 
 
 
+def _overview_shap_body(project: str) -> None:
+    from erw.pipeline.overview_shap import ShapBusy, run_shap_batch
+
+    with SessionLocal(bind=_engine) as session:
+        try:
+            report = run_shap_batch(session, project, utcnow(), _settings)
+            session.commit()
+            log.info("overview SHAP batch done: %s", report)
+        except ShapBusy:
+            log.warning("overview SHAP skipped for %s: busy", project)
+            session.rollback()
+        except Exception:
+            log.exception("overview SHAP batch failed for %s", project)
+            session.rollback()
+
+
+def enqueue_overview_shap(project: str) -> None:
+    """Queue KernelSHAP Dual-Head cache job (serialised on the jobs executor)."""
+    if _settings is None or _engine is None:
+        raise RuntimeError("jobs not configured")
+    executor.submit(_overview_shap_body, project)
+
+
+def _morning_shap_all_projects() -> None:
+    if _settings is None:
+        return
+    for project in _settings.jira_projects:
+        _overview_shap_body(project)
+
+
 def morning_job() -> None:
     """06:45: catch-up then model batch, run in the executor thread so writes stay serialised."""
     try:
         executor.submit(_morning_body).result()
+        # After Dual-Head scores refresh, refresh SHAP cache (batch only).
+        executor.submit(_morning_shap_all_projects).result()
     except Exception:
         log.exception("morning job failed")
 

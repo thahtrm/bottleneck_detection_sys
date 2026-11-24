@@ -20,6 +20,11 @@ from erw.pipeline.overview import (
     render_overview_markdown,
     write_overview_pdf,
 )
+from erw.pipeline.overview_shap import (
+    ShapBusy,
+    compare_shap_snapshots,
+    list_overview_snapshots,
+)
 from erw.settings import Settings, get_settings
 
 MemberRole = Literal["pm", "viewer"]
@@ -276,6 +281,61 @@ def export_project_overview(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'},
     )
+
+
+@_projects_sub.post("/{key}/overview/shap/refresh")
+@_projects_sub.post("/{key}/overview/shap/refresh/", include_in_schema=False)
+def refresh_overview_shap(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Enqueue KernelSHAP Dual-Head batch (PM/Admin). Never runs SHAP inline on the request."""
+    from erw import jobs
+
+    _ensure_project(session, key)
+    role = get_user_project_role(session, user, key)
+    if not (user.is_admin or role == "pm"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PM role required for project")
+    try:
+        jobs.enqueue_overview_shap(key)
+    except ShapBusy as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return {"ok": True, "queued": True, "project": key, "shap_method": "kernel_dual_head"}
+
+
+@_projects_sub.get("/{key}/overview/snapshots")
+@_projects_sub.get("/{key}/overview/snapshots/", include_in_schema=False)
+def get_overview_snapshots(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    _ensure_project(session, key)
+    _require_project_access(session, user, key)
+    return {"project": key, "snapshots": list_overview_snapshots(session, key, limit=12)}
+
+
+@_projects_sub.get("/{key}/overview/compare")
+@_projects_sub.get("/{key}/overview/compare/", include_in_schema=False)
+def get_overview_compare(
+    key: str,
+    newer_id: int | None = Query(None),
+    older_id: int | None = Query(None),
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """P2: compare two cached SHAP project summaries (bucket/feature deltas)."""
+    _ensure_project(session, key)
+    _require_project_access(session, user, key)
+    result = compare_shap_snapshots(session, key, newer_id=newer_id, older_id=older_id)
+    if result is None:
+        return {
+            "project": key,
+            "available": False,
+            "note": "Cần ≥2 batch SHAP đã cache để so sánh. Dual-Head checkpoint compare không ship (runtime).",
+        }
+    return {"project": key, "available": True, **result}
 
 
 @_projects_sub.post("/{key}/health-report")

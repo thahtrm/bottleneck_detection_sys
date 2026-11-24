@@ -19,6 +19,10 @@ from erw.models import Change, Issue, IssueSprint, Project, RiskState, Sprint
 from erw.pipeline.chat_lookup import blocker_keys, blocks_keys
 from erw.pipeline.digest import SP_COVERAGE, _sprint_line
 from erw.pipeline.health_report import write_pdf_from_markdown
+from erw.pipeline.overview_shap import (
+    compute_project_shap_summary,
+    load_latest_issue_shap,
+)
 from erw.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -271,12 +275,29 @@ def _status_actors(
     return actors
 
 
+def _shap_payload(row) -> dict[str, Any]:
+    values = list(row.values or [])
+    # Waterfall: keep top by |phi|, preserve sign (red+/cyan- in UI).
+    ordered = sorted(values, key=lambda v: -abs(float(v.get("phi") or 0)))
+    return {
+        "base_value": row.base_value,
+        "pred": row.pred,
+        "values": ordered[:12],
+        "model_tag": row.model_tag,
+        "shap_method": row.shap_method,
+        "as_of": row.as_of.isoformat() if row.as_of else None,
+        "feature_version": row.feature_version,
+    }
+
+
 def _build_issue_rows(
     session: Session,
     open_rows: list[tuple[Issue, RiskState | None]],
     now: datetime,
     assignee_open: dict[str, int],
+    shap_by_key: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    shap_by_key = shap_by_key or {}
     ranked = sorted(
         open_rows,
         key=lambda pair: (
@@ -321,6 +342,13 @@ def _build_issue_rows(
                 "evidence": f"{issue.status or '—'} · {dwell:.1f} ngày",
             }
         )
+        shap_row = shap_by_key.get(issue.key)
+        top_shap = None
+        shap_payload = None
+        if shap_row is not None:
+            shap_payload = _shap_payload(shap_row)
+            if shap_payload["values"]:
+                top_shap = shap_payload["values"][0]["feature"]
         row = {
             "key": issue.key,
             "summary": issue.summary or "",
@@ -328,7 +356,7 @@ def _build_issue_rows(
             "p_delay": round(p_delay, 4) if p_delay is not None else None,
             "assignee": assignee or "chưa giao",
             "blocked_by": blockers,
-            "top_shap_feature": None,
+            "top_shap_feature": top_shap,
             "deadline": risk.deadline_label if risk else None,
             "deadline_at": risk.deadline_at.isoformat() if risk and risk.deadline_at else None,
             "duedate": issue.duedate.isoformat() if issue.duedate else None,
@@ -345,8 +373,8 @@ def _build_issue_rows(
             "p_delay": row["p_delay"],
             "structural_factors": structural[:3],
             "downstream": downs,
-            "shap": None,
-            "shap_status": "Chưa có SHAP cho snapshot này",
+            "shap": shap_payload,
+            "shap_status": None if shap_payload else "Chưa có SHAP cho snapshot này",
         }
     return issues, explain
 
@@ -369,6 +397,7 @@ class OverviewSnapshot:
     top_blockers: list[dict[str, Any]]
     shap_available: bool = False
     shap_project: dict[str, Any] | None = None
+    shap_project_high: dict[str, Any] | None = None
     meta: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -444,7 +473,30 @@ def collect_overview_snapshot(
         if name_a:
             assignee_open[name_a] += 1
 
-    issues, explain = _build_issue_rows(session, open_rows, now, dict(assignee_open))
+    shap_by_key, shap_meta = load_latest_issue_shap(session, project)
+    issues, explain = _build_issue_rows(
+        session, open_rows, now, dict(assignee_open), shap_by_key=shap_by_key
+    )
+
+    shap_project = None
+    shap_project_high = None
+    if shap_by_key:
+        stored = [
+            {
+                "issue_key": k,
+                "level": next((r.level for i, r in open_rows if i.key == k and r), None),
+                "values": list(row.values or []),
+            }
+            for k, row in shap_by_key.items()
+        ]
+        shap_project = compute_project_shap_summary(stored, high_only=False)
+        shap_project_high = compute_project_shap_summary(stored, high_only=True)
+        if shap_meta:
+            shap_project = {**shap_project, **{k: shap_meta[k] for k in ("model_tag", "shap_method", "as_of", "feature_version") if k in shap_meta}}
+            shap_project_high = {
+                **shap_project_high,
+                **{k: shap_meta[k] for k in ("model_tag", "shap_method", "as_of", "feature_version") if k in shap_meta},
+            }
 
     risk_distribution = [
         {"level": "HIGH", "count": high},
@@ -482,6 +534,7 @@ def collect_overview_snapshot(
     }
 
     as_of_label = f"Cập nhật {local:%d/%m/%Y %H:%M} {settings.tz}"
+    shap_available = bool(shap_by_key)
     return OverviewSnapshot(
         project=project,
         name=name,
@@ -497,14 +550,22 @@ def collect_overview_snapshot(
         explain=explain,
         risk_distribution=risk_distribution,
         top_blockers=top_blockers,
-        shap_available=False,
-        shap_project=None,
+        shap_available=shap_available,
+        shap_project=shap_project,
+        shap_project_high=shap_project_high,
         meta={
-            "model_id": None,
-            "shap_method": None,
-            "feature_version": None,
-            "phase": "P0",
+            "model_id": (shap_meta or {}).get("model_tag"),
+            "shap_method": (shap_meta or {}).get("shap_method"),
+            "feature_version": (shap_meta or {}).get("feature_version"),
+            "phase": "P1" if shap_available else "P0",
             "as_of": now.isoformat(),
+            "shap_as_of": (shap_meta or {}).get("as_of"),
+            "shap_runtime": {
+                "max_issues": 40,
+                "nsamples": 64,
+                "surrogate": "ridge_on_dual_head_p_delay",
+                "feature_groups": 10,
+            },
         },
     )
 
@@ -557,11 +618,25 @@ def render_overview_markdown(snap: OverviewSnapshot) -> str:
                 f"- {row['key']} `[{level}]` p_delay={p_delay} · @{row['assignee']} · "
                 f"blocked-by {blocked} — {row['summary']}"
             )
+    lines.extend(["", "### SHAP (Dual-Head delay)"])
+    if snap.shap_available and snap.shap_project:
+        sp = snap.shap_project
+        lines.append(
+            f"- method `{sp.get('shap_method')}` · model `{sp.get('model_tag')}` · as_of {sp.get('as_of')}"
+        )
+        for f in (sp.get("features") or [])[:10]:
+            lines.append(f"- {f['feature']} ({f.get('bucket')}): mean|φ|={f['mean_abs_phi']}")
+        lines.append("- Buckets:")
+        for b in sp.get("buckets") or []:
+            lines.append(f"  - {b['bucket']}: {b['mean_abs_phi']}")
+    else:
+        lines.append("- (chưa có cache SHAP — chạy Làm mới SHAP / batch)")
+
     lines.extend(
         [
             "",
             "### Ghi chú",
-            "- P0 structural attribution only; KernelSHAP Dual-Head là P1.",
+            "- Structural actors + KernelSHAP quanh Dual-Head delay (cache).",
             f"- meta.phase={snap.meta.get('phase')} · shap_available={snap.shap_available}",
             "",
         ]
