@@ -18,6 +18,7 @@ import BoardView from './components/board/BoardView';
 import IssuePanel from './components/IssuePanel';
 import ActionConfirmModal from './components/ActionConfirmModal';
 import NetworkGraph from './components/NetworkGraph';
+import OverviewPage from './components/overview/OverviewPage';
 import PmChatBubbleShell from './components/chat/PmChatBubbleShell';
 import PmChatPage from './components/chat/PmChatPage';
 
@@ -25,7 +26,13 @@ const NAV_EXPANDED_WIDTH = 220;
 const NAV_COLLAPSED_WIDTH = 64;
 
 const ACTION_QUERY_KEYS = [['dashboard-board'], ['dashboard-graph'], ['issue-detail'], ['issue-suggestion']];
-const REFRESH_QUERY_KEYS = [['dashboard-board'], ['dashboard-graph'], ['projects'], ['admin-settings']];
+const REFRESH_QUERY_KEYS = [
+  ['dashboard-board'],
+  ['dashboard-graph'],
+  ['project-overview'],
+  ['projects'],
+  ['admin-settings'],
+];
 
 function moveStatusProposal(card) {
   return {
@@ -113,10 +120,11 @@ function AppContent() {
 
   // Settings open to all authenticated; chat nav for PM/Admin only; users nav admin-only.
   // Project-settings stays selectable without project (empty state); nav item requires project.
+  // Landing default is overview (§8.3-A); forbidden views fall back there too.
   let view = state.view;
-  if (view === 'chat' && !canUseChat) view = 'board';
-  if (view === 'reports' && !canReadReportsOnSelected) view = 'board';
-  if (view === 'users' && !user.is_admin) view = 'board';
+  if (view === 'chat' && !canUseChat) view = 'overview';
+  if (view === 'reports' && !canReadReportsOnSelected) view = 'overview';
+  if (view === 'users' && !user.is_admin) view = 'overview';
 
   const selectIssue = (issue) => {
     setSuggestionKey(null);
@@ -137,13 +145,16 @@ function AppContent() {
     patch({ view: 'board', issue: key });
   };
 
+  // FAB hidden on overview (and Graph/Chat/Settings) — §2.1.
   const showBubble = bubbleEnabled && (view === 'board' || view === 'list') && canUseChat;
   const boardLike = view === 'board' || view === 'list';
   // Chat tab must fill the viewport like Board/List so the page never scrolls;
   // message history scrolls inside PmChatTimeline instead.
-  const fillViewport = boardLike || view === 'chat';
+  const fillViewport = boardLike || view === 'chat' || view === 'overview';
+  // Overview owns its Explain drawer; do not open IssuePanel there.
   const panelOpen =
     Boolean(state.issue) &&
+    view !== 'overview' &&
     view !== 'settings' &&
     view !== 'project-settings' &&
     view !== 'chat' &&
@@ -224,7 +235,7 @@ function AppContent() {
           <Settings
             project={state.project}
             projects={projects}
-            onBackToDashboard={() => patch({ view: 'board' })}
+            onBackToDashboard={() => patch({ view: 'overview' })}
             onOpenChat={() => patch({ view: 'chat' })}
             onOpenReports={
               state.project ? () => patch({ view: 'reports' }) : undefined
@@ -243,6 +254,16 @@ function AppContent() {
             onOpenReports={() => patch({ view: 'reports' })}
             onOpenChat={canUseChat ? () => patch({ view: 'chat' }) : undefined}
           />
+        )}
+        {view === 'overview' && (
+          <Box style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <OverviewPage
+              project={state.project}
+              selectedIssueKey={state.issue}
+              onSelectIssue={selectIssue}
+              onOpenBoard={(key) => patch({ view: 'board', issue: key })}
+            />
+          </Box>
         )}
         {view === 'reports' && (
           <Reports

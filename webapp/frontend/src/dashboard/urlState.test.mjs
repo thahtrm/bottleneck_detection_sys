@@ -16,6 +16,7 @@ test('a full state survives a round trip through the URL', () => {
     chips: ['rising', 'overdue'],
     issue: 'DEMO-12',
     sprint: 7,
+    report: null,
   };
   const search = serializeDashboardState(state);
   assert.deepEqual(parseDashboardState(search), state);
@@ -23,13 +24,23 @@ test('a full state survives a round trip through the URL', () => {
 });
 
 test('defaults are left out of the URL', () => {
-  const search = serializeDashboardState({ ...DEFAULT_STATE, project: 'DEMO', view: 'board', group: 'triage' });
+  const search = serializeDashboardState({
+    ...DEFAULT_STATE,
+    project: 'DEMO',
+    view: 'overview',
+    group: 'triage',
+  });
   assert.equal(search, '?project=DEMO');
+});
+
+test('board view is explicit in the URL when not the landing default', () => {
+  const search = serializeDashboardState({ ...DEFAULT_STATE, project: 'DEMO', view: 'board' });
+  assert.equal(search, '?project=DEMO&view=board');
 });
 
 test('unknown views, groups, chips and bad sprint ids fall back to defaults', () => {
   const state = parseDashboardState('?view=kanban&group=color&chips=blocked,bogus&sprint=abc');
-  assert.equal(state.view, 'board');
+  assert.equal(state.view, 'overview');
   assert.equal(state.group, 'triage');
   assert.deepEqual(state.chips, ['blocked']);
   assert.equal(state.sprint, null);

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -12,6 +15,11 @@ from erw.auth import get_session, get_user_project_role, require_admin, require_
 from erw.db import utcnow
 from erw.models import Issue, Project, ProjectMember, ReportFile, RiskState, User
 from erw.pipeline.chat_reports import persist_health_report, report_dedup_key
+from erw.pipeline.overview import (
+    collect_overview_snapshot,
+    render_overview_markdown,
+    write_overview_pdf,
+)
 from erw.settings import Settings, get_settings
 
 MemberRole = Literal["pm", "viewer"]
@@ -216,6 +224,58 @@ def _guard_last_pm(session: Session, project_key: str, member: ProjectMember, *,
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot remove or demote the last PM of this project",
         )
+
+
+@_projects_sub.get("/{key}/overview")
+@_projects_sub.get("/{key}/overview/", include_in_schema=False)
+def get_project_overview(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    """P0 Progress Attribution dashboard snapshot (structural actors + KPI + risky issues)."""
+    _ensure_project(session, key)
+    _require_project_access(session, user, key)
+    snap = collect_overview_snapshot(session, key, utcnow(), settings)
+    return snap.to_dict()
+
+
+@_projects_sub.get("/{key}/overview/export")
+@_projects_sub.get("/{key}/overview/export/", include_in_schema=False)
+def export_project_overview(
+    key: str,
+    format: Literal["md", "pdf"] = Query("md"),
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    """Export overview as Markdown or PDF (KPI + actors + top issues). Viewer+ may export."""
+    _ensure_project(session, key)
+    _require_project_access(session, user, key)
+    snap = collect_overview_snapshot(session, key, utcnow(), settings)
+    md = render_overview_markdown(snap)
+    filename_base = f"overview-{key}-{snap.as_of[:10]}"
+    if format == "md":
+        return PlainTextResponse(
+            md,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename_base}.md"'},
+        )
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / f"{filename_base}.pdf"
+        ok = write_overview_pdf(snap, path)
+        if not ok or not path.is_file():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="PDF export unavailable (xhtml2pdf missing or render failed)",
+            )
+        data = path.read_bytes()
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'},
+    )
 
 
 @_projects_sub.post("/{key}/health-report")

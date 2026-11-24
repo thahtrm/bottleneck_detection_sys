@@ -340,6 +340,33 @@ export async function generateHealthReport(project) {
   });
 }
 
+/** Progress Attribution overview snapshot (P0 structural). */
+export async function getProjectOverview(projectKey) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/overview`);
+}
+
+/** Download overview export (`format`: md | pdf). */
+export async function downloadOverviewExport(projectKey, format = 'md') {
+  const query = new URLSearchParams({ format });
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectKey)}/overview/export?${query.toString()}`,
+    { credentials: 'include' },
+  );
+  if (!response.ok) {
+    const error = new Error(`Xuất tổng quan thất bại (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get('content-disposition') || '';
+  const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^\";]+)"?/i);
+  const fallbackExt = format === 'pdf' ? 'pdf' : 'md';
+  const filename = match?.[1]
+    ? decodeURIComponent(match[1])
+    : `overview-${projectKey}.${fallbackExt}`;
+  return { blob, filename };
+}
+
 /** In-app markdown content for report preview drawer. */
 export async function getChatReportContent(reportId) {
   return await apiFetch(`/api/chat/reports/${encodeURIComponent(reportId)}/content`);

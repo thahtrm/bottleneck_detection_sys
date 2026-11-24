@@ -4,6 +4,7 @@ import {
   IconAdjustments,
   IconAffiliate,
   IconFileReport,
+  IconLayoutDashboard,
   IconLayoutKanban,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
@@ -16,6 +17,7 @@ import '../styles/kaggleTokens.css';
 import AppLogo from './brand/AppLogo';
 
 const NAV_META = [
+  { value: 'overview', label: 'Tổng quan', Icon: IconLayoutDashboard },
   { value: 'board', label: 'Bảng', Icon: IconLayoutKanban },
   { value: 'list', label: 'Danh sách', Icon: IconList },
   { value: 'graph', label: 'Đồ thị', Icon: IconAffiliate },
@@ -63,7 +65,7 @@ export default function LeftNav({
     showProjectSettingsNav,
     showReportsNav,
   });
-  const active = items.some((item) => item.value === view) ? view : 'board';
+  const active = items.some((item) => item.value === view) ? view : 'overview';
   const scopeClass = collapsed ? 'erw-nav-scope erw-nav-collapsed' : 'erw-nav-scope';
 
   return (

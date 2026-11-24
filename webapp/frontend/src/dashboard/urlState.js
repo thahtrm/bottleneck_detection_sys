@@ -2,6 +2,7 @@ import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { CHIPS, GROUPINGS } from './boardModel.js';
 
 export const VIEWS = [
+  'overview',
   'board',
   'list',
   'graph',
@@ -15,7 +16,7 @@ export const VIEWS = [
 export const DEFAULT_STATE = Object.freeze({
   project: '',
   q: '',
-  view: 'board',
+  view: 'overview',
   group: 'triage',
   chips: [],
   issue: null,
