@@ -561,10 +561,11 @@ def collect_overview_snapshot(
             "as_of": now.isoformat(),
             "shap_as_of": (shap_meta or {}).get("as_of"),
             "shap_runtime": {
-                "max_issues": 40,
+                "max_issues": 80,
                 "nsamples": 64,
                 "surrogate": "ridge_on_dual_head_p_delay",
                 "feature_groups": 10,
+                "dual_head_memory_cache": "var/dual_head_memory/{project}/*.npz",
             },
         },
     )

@@ -151,6 +151,15 @@ def run_catch_up() -> None:
         with SessionLocal(bind=_engine) as session:
             n = catch_up(session, get_client(), _settings, utcnow())
             log.info("catch-up synced %d issues", n)
+            # Ingest may change graph/events → Dual-Head memory fingerprints stale.
+            try:
+                from erw.ml.dual_head_memory import invalidate_all
+
+                invalidate_all(session, _settings)
+                session.commit()
+            except Exception:
+                log.exception("failed to invalidate Dual-Head memory after catch-up")
+                session.rollback()
     except Exception:
         log.exception("catch-up failed")
 

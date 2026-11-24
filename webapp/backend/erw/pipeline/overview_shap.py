@@ -6,7 +6,9 @@ Runtime limits (demo stability)
   mapped to buckets person / dependency / time / content.
 - Surrogate = Ridge fitted to Dual-Head ``p_delay`` (RiskState.delay_value) so KernelSHAP
   explains the Dual-Head delay prediction without replaying TGN per coalition.
-- KernelExplainer ``nsamples`` default 64; max open issues explained = ``MAX_ISSUES`` (40).
+- KernelExplainer ``nsamples`` default 64; max open issues explained = ``MAX_ISSUES`` (80).
+- Dual-Head memory snapshots (option B, ``erw.ml.dual_head_memory``) supply frozen Z so SHAP
+  can refresh Dual-Head ``p_delay`` labels without TGN replay; IssueShap (A) still caches φ.
 - Never called from HTTP request handlers — only from jobs / explicit refresh enqueue.
 """
 
@@ -32,7 +34,8 @@ log = logging.getLogger(__name__)
 
 SHAP_METHOD = "kernel_dual_head"
 FEATURE_VERSION = "dual_head_groups_v1"
-MAX_ISSUES = 40
+# Raised from 40 after Dual-Head memory cache (option B) removed TGN replay from SHAP path.
+MAX_ISSUES = 80
 KERNEL_NSAMPLES = 64
 BACKGROUND_SIZE = 20
 
@@ -225,6 +228,44 @@ def compute_project_shap_summary(
     }
 
 
+def _refresh_delay_labels_from_memory(
+    session: Session,
+    settings: Settings,
+    project: str,
+    open_rows: list[tuple[Issue, RiskState | None]],
+) -> dict[str, float]:
+    """If Dual-Head Z cache (B) exists, readout delay probs without TGN replay."""
+    try:
+        from erw.ml.batch import LibraryScorers
+        from erw.ml.dual_head_memory import delay_probs_from_cached_z, load_project_snapshot
+    except Exception:
+        log.warning("Dual-Head memory helpers unavailable", exc_info=True)
+        return {}
+
+    snap = load_project_snapshot(settings, project, session=session)
+    if snap is None:
+        return {}
+    scorers = LibraryScorers(settings)
+    scorers._load()
+    if scorers._dual is None:
+        return {}
+    try:
+        probs = delay_probs_from_cached_z(
+            scorers._dual,
+            duckdb_path=str(settings.work_duckdb),
+            embeddings=scorers._emb,
+            project_key=project,
+            settings=settings,
+            snapshot=snap,
+        )
+    except Exception:
+        log.warning("delay readout from memory cache failed; using RiskState labels", exc_info=True)
+        return {}
+    # Optionally align RiskState for consistency (batch already owns scores; SHAP labels only).
+    _ = open_rows
+    return probs
+
+
 def run_shap_batch(
     session: Session,
     project: str,
@@ -253,7 +294,12 @@ def run_shap_batch(
             )
         )
         open_rows = open_rows[:max_issues]
+        memory_probs = _refresh_delay_labels_from_memory(session, settings, project, open_rows)
         X, keys, y = build_feature_matrix(session, open_rows, now)
+        if memory_probs:
+            for i, key in enumerate(keys):
+                if key in memory_probs:
+                    y[i] = memory_probs[key]
         if len(keys) == 0:
             return {"project": project, "n": 0, "model_tag": model_tag}
 
@@ -299,6 +345,7 @@ def run_shap_batch(
                     "dual_head_p_delay": None if not np.isfinite(y[idx]) else round(float(y[idx]), 6),
                     "nsamples": nsamples,
                     "surrogate": "ridge_on_dual_head_p_delay",
+                    "memory_cache": bool(memory_probs),
                 },
             )
             session.add(row)

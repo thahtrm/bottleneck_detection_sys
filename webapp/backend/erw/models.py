@@ -321,3 +321,21 @@ class OverviewSnapshotRecord(Base):
     as_of: Mapped[datetime] = mapped_column(UTCDateTime)
     payload: Mapped[Any] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class DualHeadMemorySnapshot(Base):
+    """Index row for on-disk Dual-Head TGN Z‖aux cache (option B)."""
+
+    __tablename__ = "dual_head_memory_snapshots"
+    __table_args__ = (Index("ix_dual_head_mem_project_as_of", "project_key", "as_of"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_key: Mapped[str] = mapped_column(String, index=True)
+    as_of: Mapped[datetime] = mapped_column(UTCDateTime)
+    fingerprint: Mapped[str] = mapped_column(String)
+    model_tag: Mapped[str] = mapped_column(String)
+    stream_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    rel_path: Mapped[str] = mapped_column(String)  # relative to var/
+    n_issues: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    meta: Mapped[Any] = mapped_column(JSON, default=dict)

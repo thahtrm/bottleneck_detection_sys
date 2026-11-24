@@ -14,6 +14,12 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from erw.db import utcnow
+from erw.ml.dual_head_memory import (
+    capture_memory_from_scorer,
+    invalidate_all,
+    try_dual_scores_from_memory,
+)
 from erw.ml.duckdb_sync import ensure_work_db, sync_erw_instance
 from erw.models import Issue, Score
 from erw.pipeline.alerts import dispatch
@@ -62,23 +68,43 @@ class LibraryScorers:
             self._delay = DelayRiskScorer.load(bdir / "delay")
             self._crit = CriticalityScorer.load(bdir / "criticality")
 
-    def _run_dual(self, db: str, keys: list[str]) -> pd.DataFrame:
+    def _run_dual(self, db: str, keys: list[str], *, session=None) -> pd.DataFrame:
         cache_key = (str(db), tuple(keys))
         if self._cached_dual_key == cache_key and self._cached_dual_df is not None:
             df = self._cached_dual_df
             self._cached_dual_key = None
             self._cached_dual_df = None
             return df
+        # Prefer option-B Z cache when stream fingerprint still matches (no TGN replay).
+        reused = try_dual_scores_from_memory(
+            self._dual,
+            duckdb_path=db,
+            embeddings=self._emb,
+            issue_keys=keys,
+            settings=self.settings,
+            session=session,
+            top_pct=self.settings.criticality_top_pct,
+            delay_threshold=self.settings.delay_threshold,
+        )
+        if reused is not None:
+            self._cached_dual_key = cache_key
+            self._cached_dual_df = reused
+            return reused
+        # Stream rebuild invalidates Dual-Head memory snapshots (option B).
         _reset_stream_dir(self.settings)
+        invalidate_all(session, self.settings)
         stream_dir_path = Path(self.settings.stream_dir)
         stream_dir_path.mkdir(parents=True, exist_ok=True)
         (stream_dir_path / ".erw_stream").touch()
-        df = self._dual.score(
-            db,
-            self._emb,
+        df, _counts = capture_memory_from_scorer(
+            self._dual,
+            duckdb_path=db,
+            embeddings=self._emb,
             issue_keys=keys,
-            as_of=None,
             stream_dir=self.settings.stream_dir,
+            settings=self.settings,
+            as_of=utcnow(),
+            session=session,
             top_pct=self.settings.criticality_top_pct,
             delay_threshold=self.settings.delay_threshold,
         )
@@ -86,21 +112,21 @@ class LibraryScorers:
         self._cached_dual_df = df
         return df
 
-    def delay(self, db: str, keys: list[str]) -> pd.DataFrame:
+    def delay(self, db: str, keys: list[str], *, session=None) -> pd.DataFrame:
         self._load()
         if self._dual is not None:
             from early_risk_detection.criticality.dual_head import DELAY_COLUMNS
 
-            df = self._run_dual(db, keys)
+            df = self._run_dual(db, keys, session=session)
             return df[DELAY_COLUMNS].sort_values("p_delay", ascending=False).reset_index(drop=True)
         return self._delay.score(db, self._emb, issue_keys=keys, as_of=None)
 
-    def criticality(self, db: str, keys: list[str]) -> pd.DataFrame:
+    def criticality(self, db: str, keys: list[str], *, session=None) -> pd.DataFrame:
         self._load()
         if self._dual is not None:
             from early_risk_detection.criticality.dual_head import CRITICALITY_COLUMNS
 
-            df = self._run_dual(db, keys)
+            df = self._run_dual(db, keys, session=session)
             return df[CRITICALITY_COLUMNS].sort_values(["instance", "rank_in_instance"]).reset_index(drop=True)
         return self._crit.score(db, self._emb, issue_keys=keys, stream_dir=self.settings.stream_dir)
 
@@ -138,6 +164,8 @@ def _reset_stream_dir(settings: Settings) -> None:
     if not path.is_dir() or not is_stream:
         raise ValueError(f"stream_dir is not an event stream (no meta.json or .erw_stream), refusing to delete: {path}")
     shutil.rmtree(path)
+    # Stream rebuild ⇒ Dual-Head memory fingerprints are stale.
+    invalidate_all(None, settings)
 
 
 def _key(uid: str) -> str:
@@ -167,7 +195,8 @@ def run_model_batch(
             db = str(settings.work_duckdb)
 
             t = time.monotonic()
-            for r in scorers.delay(db, uids).itertuples(index=False):
+            delay_kwargs = {"session": session} if isinstance(scorers, LibraryScorers) else {}
+            for r in scorers.delay(db, uids, **delay_kwargs).itertuples(index=False):
                 session.add(Score(
                     issue_key=_key(r.uid), scorer="delay_t0", as_of=now, value=float(r.p_delay),
                     extra={"predicted_duration_days": float(r.predicted_duration_days), "is_at_risk": bool(r.is_at_risk)},
@@ -175,13 +204,10 @@ def run_model_batch(
             report["delay_s"] = round(time.monotonic() - t, 2)
             session.commit()
 
-            # event stream is rebuilt every batch: changelog/link events can change at constant issue count
-            _reset_stream_dir(settings)
-            stream_dir_path = Path(settings.stream_dir)
-            stream_dir_path.mkdir(parents=True, exist_ok=True)
-            (stream_dir_path / ".erw_stream").touch()
+            # Second head reuses in-process dual cache from delay(); do not wipe stream/memory here.
             t = time.monotonic()
-            for r in scorers.criticality(db, uids).itertuples(index=False):
+            crit_kwargs = {"session": session} if isinstance(scorers, LibraryScorers) else {}
+            for r in scorers.criticality(db, uids, **crit_kwargs).itertuples(index=False):
                 session.add(Score(
                     issue_key=_key(r.uid), scorer="criticality_t0", as_of=now, value=float(r.score),
                     is_critical=bool(r.is_critical), extra={"rank_in_instance": int(r.rank_in_instance)},

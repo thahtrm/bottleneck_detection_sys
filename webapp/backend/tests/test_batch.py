@@ -80,23 +80,24 @@ def test_batch_passes_erw_uids(session, wsettings, seeded):
     assert fake.calls[0] == ("delay", ["ERW|DEMO-1"])
 
 
-def test_stream_dir_removed_before_criticality_every_batch(session, wsettings, seeded):
+def test_fake_scorers_do_not_wipe_stream_between_heads(session, wsettings, seeded):
+    """Delay+crit share one Dual-Head pass for LibraryScorers; FakeScorers leave stream alone.
+
+    Stream wipe + Dual-Head memory invalidate happen inside LibraryScorers._run_dual only.
+    """
     stream = Path(wsettings.stream_dir)
     seen_meta = []
-    seen_sentinel = []
 
     class Probe(FakeScorers):
         def criticality(self, db, keys):
             seen_meta.append((stream / "meta.json").exists())
-            seen_sentinel.append((stream / ".erw_stream").exists())
             return super().criticality(db, keys)
 
-    for _ in range(2):  # constant issue count both times
+    for _ in range(2):
         stream.mkdir(exist_ok=True)
         (stream / "meta.json").write_text("{}")
         run_model_batch(session, wsettings, NOW, Probe(), unload_llm=lambda: None)
-    assert seen_meta == [False, False]
-    assert seen_sentinel == [True, True]
+    assert seen_meta == [True, True]
 
 
 def test_reset_stream_dir_accepts_sentinel_with_partial_files(wsettings):
