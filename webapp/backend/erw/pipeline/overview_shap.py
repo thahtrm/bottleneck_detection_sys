@@ -268,6 +268,8 @@ def run_shap_batch(
                 IssueShap.shap_method == SHAP_METHOD,
             )
         )
+        session.flush()
+        session.expire_all()
 
         level_by_key = {
             i.key: (r.level if r else None) for i, r in open_rows
