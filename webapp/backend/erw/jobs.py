@@ -12,8 +12,9 @@ from sqlalchemy.orm import Session
 
 from erw.db import SessionLocal, utcnow
 from erw.ingest.sync import SyncResult, catch_up, mark_deleted, sync_issue, sync_sprint, sync_version
-from erw.integrations.jira import JiraClient, JiraError
+from erw.integrations.jira import JiraError
 from erw.integrations.llm import generate_suggestion, get_cached_suggestion
+from erw.integrations.local_jira import make_jira_client
 from erw.kv import kv_get_json, kv_set, kv_set_json
 from erw.models import Issue, Project, RiskState
 from erw.pipeline.chat_recommend import enqueue_message_recommendation
@@ -43,11 +44,10 @@ def set_client(client) -> None:
 
 
 def get_client():
-    global _client
-    if _client is None:
-        s = _settings
-        _client = JiraClient(s.jira_base_url, s.jira_email, s.jira_api_token)
-    return _client
+    if _client is not None:
+        return _client
+    s = _settings or Settings(_env_file=None)
+    return make_jira_client(s, engine=_engine)
 
 
 def _add_pending(session: Session, key: str) -> None:

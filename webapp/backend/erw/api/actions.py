@@ -4,14 +4,15 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from erw.auth import get_session, require_authenticated_user, require_pm
+from erw.auth import get_current_user, get_session, require_authenticated_user, require_pm
 from erw.db import utcnow
 from erw.domain.actions import execute_action
 from erw.integrations.jira import JiraClient, JiraError
+from erw.integrations.local_jira import LocalJiraClient, make_jira_client
 from erw.models import Action, Issue, User
 from erw.settings import Settings, get_settings
 
@@ -21,13 +22,20 @@ router = actions_router
 _TZ_NO_COLON = re.compile(r"([+-]\d{2})(\d{2})$")
 
 
-def get_jira_client(settings: Settings = Depends(get_settings)) -> JiraClient:
+def get_jira_client(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+    session: Session = Depends(get_session),
+) -> JiraClient | LocalJiraClient:
     from erw import jobs
 
     client = getattr(jobs, "_client", None)
     if client is not None:
         return client
-    return JiraClient(settings)
+    app_settings = getattr(request.app.state, "settings", None) or settings
+    engine = getattr(request.app.state, "engine", None)
+    actor = get_current_user(request, session=session, settings=app_settings)
+    return make_jira_client(app_settings, session=session, engine=engine, actor=actor)
 
 
 class ProposeActionRequest(BaseModel):

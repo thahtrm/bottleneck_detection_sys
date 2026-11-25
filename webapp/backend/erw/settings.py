@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     db_url: str = "sqlite:///var/erw.db"
 
+    jira_mode: Literal["local", "jira_cloud"] = "local"
     jira_base_url: str = ""
     jira_email: str = ""
     jira_api_token: str = ""
@@ -18,6 +19,7 @@ class Settings(BaseSettings):
     jira_sprint_field: str = "customfield_10020"
     jira_story_points_field: str = "customfield_10016"
     public_base_url: str = ""
+    attachments_dir: str = "var/attachments"
 
     slack_webhook_url: str = ""
     slack_max_per_hour: int = 20
@@ -60,6 +62,12 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [p.strip() for p in v.split(",") if p.strip()]
         return v
+
+    @model_validator(mode="after")
+    def _resolve_jira_mode(self) -> "Settings":
+        if "jira_mode" not in self.model_fields_set:
+            self.jira_mode = "jira_cloud" if (self.jira_base_url or "").strip() else "local"
+        return self
 
 
 @lru_cache

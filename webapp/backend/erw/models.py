@@ -1,3 +1,4 @@
+import uuid
 from datetime import date, datetime
 from typing import Any
 
@@ -5,6 +6,27 @@ from sqlalchemy import JSON, Boolean, Date, Float, ForeignKey, Index, Integer, S
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from erw.db import UTCDateTime
+
+_AVATAR_PALETTE = (
+    "#0052CC",
+    "#00875A",
+    "#6554C0",
+    "#FF5630",
+    "#FF991F",
+    "#00B8D9",
+    "#36B37E",
+)
+
+
+def default_avatar_color(seed: str | None) -> str:
+    s = (seed or "").strip().lower()
+    if not s:
+        return _AVATAR_PALETTE[0]
+    return _AVATAR_PALETTE[sum(ord(c) for c in s) % len(_AVATAR_PALETTE)]
+
+
+def _gen_account_id() -> str:
+    return f"acc-{uuid.uuid4().hex[:12]}"
 
 
 class Base(DeclarativeBase):
@@ -20,7 +42,25 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    account_id: Mapped[str | None] = mapped_column(
+        String, unique=True, index=True, nullable=True, default=_gen_account_id
+    )
+    avatar_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    avatar_color: Mapped[str | None] = mapped_column(String, nullable=True)
+    job_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    department: Mapped[str | None] = mapped_column(String, nullable=True)
+    timezone: Mapped[str] = mapped_column(String, default="Asia/Ho_Chi_Minh")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("is_admin", False)
+        kwargs.setdefault("is_active", True)
+        kwargs.setdefault("timezone", "Asia/Ho_Chi_Minh")
+        if not kwargs.get("avatar_color"):
+            kwargs["avatar_color"] = default_avatar_color(kwargs.get("name") or kwargs.get("email") or "")
+        if not kwargs.get("account_id"):
+            kwargs["account_id"] = _gen_account_id()
+        super().__init__(**kwargs)
 
 
 class Project(Base):
@@ -31,6 +71,10 @@ class Project(Base):
     tracked: Mapped[bool] = mapped_column(Boolean, default=True)
     status_map: Mapped[Any] = mapped_column(JSON, default=dict)
     thresholds: Mapped[Any] = mapped_column(JSON, default=dict)
+    description: Mapped[str] = mapped_column(Text, default="")
+    lead_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    issue_seq: Mapped[int] = mapped_column(Integer, default=0)
+    workflow: Mapped[Any] = mapped_column(JSON, default=dict)
 
 
 class ProjectMember(Base):
@@ -38,7 +82,7 @@ class ProjectMember(Base):
 
     project_key: Mapped[str] = mapped_column(ForeignKey("projects.key"), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    role: Mapped[str] = mapped_column(String)  # "pm" | "viewer"
+    role: Mapped[str] = mapped_column(String)  # "pm" | "developer" | "viewer"
 
 
 class Issue(Base):
@@ -46,21 +90,51 @@ class Issue(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     project_key: Mapped[str] = mapped_column(String, index=True)
+    parent_key: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     summary: Mapped[str] = mapped_column(Text, default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    environment: Mapped[str] = mapped_column(Text, default="")
     issuetype: Mapped[str | None] = mapped_column(String)
     priority: Mapped[str | None] = mapped_column(String)
     priority_norm: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str | None] = mapped_column(String)
     status_category: Mapped[str] = mapped_column(String, default="new")  # new|indeterminate|done
+    resolution: Mapped[str | None] = mapped_column(String, nullable=True)
     assignee_id: Mapped[str | None] = mapped_column(String)
     assignee_name: Mapped[str | None] = mapped_column(String)
+    reporter_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    reporter_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    creator_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    creator_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     duedate: Mapped[date | None] = mapped_column(Date)
     story_points: Mapped[float | None] = mapped_column(Float)
+    rank: Mapped[float] = mapped_column(Float, default=0.0, index=True)
+    original_estimate_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    remaining_estimate_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    time_spent_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    labels: Mapped[Any] = mapped_column(JSON, default=list)
+    version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     updated_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     raw: Mapped[Any] = mapped_column(JSON, default=dict)
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("summary", "")
+        kwargs.setdefault("description", "")
+        kwargs.setdefault("environment", "")
+        kwargs.setdefault("priority_norm", 0.0)
+        kwargs.setdefault("status_category", "new")
+        kwargs.setdefault("rank", 0.0)
+        kwargs.setdefault("time_spent_seconds", 0)
+        kwargs.setdefault("version", 1)
+        if kwargs.get("labels") is None:
+            kwargs["labels"] = []
+        if kwargs.get("raw") is None:
+            kwargs["raw"] = {}
+        super().__init__(**kwargs)
 
 
 class Change(Base):
@@ -72,6 +146,8 @@ class Change(Base):
     change_id: Mapped[str] = mapped_column(String)
     idx: Mapped[int] = mapped_column(Integer, default=0)
     at: Mapped[datetime] = mapped_column(UTCDateTime)
+    author_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String, nullable=True)
     field: Mapped[str] = mapped_column(String)  # Jira changelog items[].field, lower-cased
     from_val: Mapped[str | None] = mapped_column(Text)
     to_val: Mapped[str | None] = mapped_column(Text)
@@ -91,9 +167,11 @@ class Link(Base):
 class Sprint(Base):
     __tablename__ = "sprints"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_key: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     board_id: Mapped[int | None] = mapped_column(Integer)
     name: Mapped[str | None] = mapped_column(String)
+    goal: Mapped[str] = mapped_column(Text, default="")
     state: Mapped[str | None] = mapped_column(String)
     start_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     end_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
@@ -110,9 +188,11 @@ class IssueSprint(Base):
 class Version(Base):
     __tablename__ = "versions"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    project_key: Mapped[str | None] = mapped_column(String)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_key: Mapped[str | None] = mapped_column(String, index=True)
     name: Mapped[str | None] = mapped_column(String)
+    description: Mapped[str] = mapped_column(Text, default="")
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     release_date: Mapped[date | None] = mapped_column(Date)
     released: Mapped[bool] = mapped_column(Boolean, default=False)
 
@@ -122,6 +202,88 @@ class IssueVersion(Base):
 
     issue_key: Mapped[str] = mapped_column(ForeignKey("issues.key"), primary_key=True)
     version_id: Mapped[int] = mapped_column(ForeignKey("versions.id"), primary_key=True)
+    relation_type: Mapped[str] = mapped_column(String, primary_key=True, default="fix")
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs.setdefault("relation_type", "fix")
+        super().__init__(**kwargs)
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    issue_key: Mapped[str] = mapped_column(ForeignKey("issues.key"), index=True)
+    author_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    body: Mapped[str] = mapped_column(Text, default="")
+    mentions: Mapped[Any] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    issue_key: Mapped[str] = mapped_column(ForeignKey("issues.key"), index=True)
+    author_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    filename: Mapped[str] = mapped_column(String)
+    mime_type: Mapped[str] = mapped_column(String, default="application/octet-stream")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    storage_path: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class Worklog(Base):
+    __tablename__ = "worklogs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    issue_key: Mapped[str] = mapped_column(ForeignKey("issues.key"), index=True)
+    author_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    time_spent_seconds: Mapped[int] = mapped_column(Integer)
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    comment: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class IssueWatcher(Base):
+    __tablename__ = "watchers"
+
+    issue_key: Mapped[str] = mapped_column(ForeignKey("issues.key"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    created_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
+class IssueVote(Base):
+    __tablename__ = "votes"
+
+    issue_key: Mapped[str] = mapped_column(ForeignKey("issues.key"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    created_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
+class Component(Base):
+    __tablename__ = "components"
+    __table_args__ = (UniqueConstraint("project_key", "name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    project_key: Mapped[str] = mapped_column(ForeignKey("projects.key"), index=True)
+    name: Mapped[str] = mapped_column(String)
+    description: Mapped[str] = mapped_column(Text, default="")
+    lead_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class IssueComponent(Base):
+    __tablename__ = "issue_components"
+
+    issue_key: Mapped[str] = mapped_column(ForeignKey("issues.key"), primary_key=True)
+    component_id: Mapped[int] = mapped_column(ForeignKey("components.id"), primary_key=True)
 
 
 class Score(Base):

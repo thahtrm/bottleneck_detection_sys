@@ -29,9 +29,27 @@ def to_dump_shape(raw: dict) -> dict:
     comment = fields.get("comment")
     if isinstance(comment, dict) and "comments" in comment and "comments" not in fields:
         fields["comments"] = comment["comments"]
+    for c in fields.get("comments") or []:
+        if isinstance(c, dict) and isinstance(c.get("body"), (dict, list)):
+            c["body"] = _adf_text(c["body"]).strip()
     desc = fields.get("description")
     if isinstance(desc, (dict, list)):
         fields["description"] = _adf_text(desc).strip()
+    issue_key = doc.get("key")
+    if issue_key and isinstance(fields.get("issuelinks"), list):
+        norm_links = []
+        for lk in fields["issuelinks"]:
+            if not isinstance(lk, dict):
+                norm_links.append(lk)
+                continue
+            out_issue = lk.get("outwardIssue")
+            in_issue = lk.get("inwardIssue")
+            if out_issue and not in_issue:
+                lk = {**lk, "outwardIssue": {"key": issue_key}, "inwardIssue": out_issue}
+            elif in_issue and not out_issue:
+                lk = {**lk, "outwardIssue": in_issue, "inwardIssue": {"key": issue_key}}
+            norm_links.append(lk)
+        fields["issuelinks"] = norm_links
     return doc
 
 

@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+ui/node_modules/
+ui/test-results/
+ui/playwright-report/

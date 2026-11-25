@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from erw.db import utcnow
 from erw.integrations.jira import JiraClient, JiraError
 from erw.kv import kv_get, kv_get_json, kv_set, kv_set_json
-from erw.models import Change, Issue, IssueSprint, IssueVersion, Link, Sprint, Version
+from erw.models import Change, Issue, IssueSprint, IssueVersion, Link, Project, Sprint, Version
 from erw.settings import Settings
 
 
@@ -86,7 +86,8 @@ def upsert_issue_json(session: Session, raw: dict, settings: Settings) -> SyncRe
     key = raw["key"]
     fields = raw.get("fields") or {}
     project_key = (fields.get("project") or {}).get("key") or key.rsplit("-", 1)[0]
-    if project_key not in settings.jira_projects:
+    project = session.get(Project, project_key)
+    if project_key not in settings.jira_projects and not (project is not None and project.tracked):
         return SyncResult("ignored", key)
 
     issue = session.get(Issue, key)
@@ -126,12 +127,17 @@ def upsert_issue_json(session: Session, raw: dict, settings: Settings) -> SyncRe
         if cid in known:
             continue
         at = parse_dt(h.get("created"))
+        author = h.get("author") or h.get("user") or {}
+        a_id = author.get("accountId") if isinstance(author, dict) else None
+        a_name = (author.get("displayName") or author.get("name")) if isinstance(author, dict) else None
         for idx, it in enumerate(h.get("items", [])):
             field = (it.get("field") or "").lower()
             changed.add(field)
             session.add(
                 Change(
-                    issue_key=key, change_id=cid, idx=idx, at=at, field=field,
+                    issue_key=key, change_id=cid, idx=idx, at=at,
+                    author_id=a_id, author_name=a_name,
+                    field=field,
                     from_val=it.get("from"), to_val=it.get("to"),
                     from_str=it.get("fromString"), to_str=it.get("toString"),
                 )
@@ -147,26 +153,52 @@ def upsert_issue_json(session: Session, raw: dict, settings: Settings) -> SyncRe
     session.flush()
     session.add_all(IssueSprint(issue_key=key, sprint_id=i) for i in seen)
 
-    # fix versions
-    session.execute(delete(IssueVersion).where(IssueVersion.issue_key == key))
+    # fix versions (and affects versions when explicitly included)
+    session.execute(
+        delete(IssueVersion).where(IssueVersion.issue_key == key, IssueVersion.relation_type == "fix")
+    )
     vids: set[int] = set()
     for rv in fields.get("fixVersions") or []:
         v = _set_version(session, rv, project_key)
         if v is not None:
             vids.add(v.id)
     session.flush()
-    session.add_all(IssueVersion(issue_key=key, version_id=i) for i in vids)
+    session.add_all(IssueVersion(issue_key=key, version_id=i, relation_type="fix") for i in vids)
+    if "versions" in fields:
+        session.execute(
+            delete(IssueVersion).where(IssueVersion.issue_key == key, IssueVersion.relation_type == "affects")
+        )
+        avids: set[int] = set()
+        for rv in fields.get("versions") or []:
+            v = _set_version(session, rv, project_key)
+            if v is not None and v.id not in avids:
+                avids.add(v.id)
+        session.flush()
+        session.add_all(IssueVersion(issue_key=key, version_id=i, relation_type="affects") for i in avids)
 
     # links (this issue is always the source; direction 1 = outward, 0 = inward)
     session.execute(delete(Link).where(Link.source_key == key))
     links: dict[tuple[str, str], str] = {}
     for lk in fields.get("issuelinks") or []:
-        type_std = normalize_link_type((lk.get("type") or {}).get("name"))
+        raw_tname = (lk.get("type") or {}).get("name")
+        if raw_tname and "clon" in raw_tname.lower() and raw_tname.lower() not in ("cloners", "cloners (old)"):
+            type_std = "Clone"
+        else:
+            type_std = normalize_link_type(raw_tname)
         if lk.get("outwardIssue"):
             links[(lk["outwardIssue"]["key"], type_std)] = "1"
         elif lk.get("inwardIssue"):
             links[(lk["inwardIssue"]["key"], type_std)] = "0"
-    session.add_all(Link(source_key=key, target_key=t, type_std=ty, direction=d) for (t, ty), d in links.items())
+    for (t, ty), d in links.items():
+        inv = session.get(Link, (t, key, ty))
+        if ty == "Relate":
+            if inv is not None:
+                continue
+        else:
+            flipped = "0" if d == "1" else "1"
+            if inv is not None and inv.direction == flipped:
+                continue
+        session.add(Link(source_key=key, target_key=t, type_std=ty, direction=d))
     session.flush()
 
     if created:
@@ -204,7 +236,14 @@ def sync_version(session: Session, raw_version: dict, project_key: str | None = 
     session.flush()
     if v is None:
         return []
-    return list(session.scalars(select(IssueVersion.issue_key).where(IssueVersion.version_id == v.id).order_by(IssueVersion.issue_key)))
+    return list(
+        session.scalars(
+            select(IssueVersion.issue_key)
+            .where(IssueVersion.version_id == v.id)
+            .distinct()
+            .order_by(IssueVersion.issue_key)
+        )
+    )
 
 
 def catch_up(session: Session, client: JiraClient, settings: Settings, now: datetime) -> int:

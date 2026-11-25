@@ -52,7 +52,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        if catch_up_on_startup and settings.jira_base_url:
+        if catch_up_on_startup and settings.jira_mode == "jira_cloud" and settings.jira_base_url:
             jobs.executor.submit(jobs.run_catch_up)
         app.state.scheduler = jobs.start_scheduler(settings) if start_scheduler_on_startup else None
         try:
@@ -70,6 +70,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(webhooks.router)
     app.include_router(auth.router)
+    app.include_router(auth.demo_router)
     app.include_router(projects.projects_router)
     app.include_router(issues.issues_router)
     app.include_router(actions.actions_router)

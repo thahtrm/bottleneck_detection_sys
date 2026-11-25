@@ -3,18 +3,26 @@ from __future__ import annotations
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
-from sqlalchemy import case, func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, field_validator
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
-from erw.auth import get_session, get_user_project_role, require_admin, require_authenticated_user
+from erw.auth import (
+    get_session,
+    get_user_project_role,
+    normalize_project_role,
+    require_admin,
+    require_authenticated_user,
+    require_viewer,
+)
 from erw.db import utcnow
-from erw.models import Issue, Project, ProjectMember, ReportFile, RiskState, User
+from erw.models import Issue, Project, ProjectMember, ReportFile, RiskState, User, default_avatar_color
 from erw.pipeline.chat_reports import persist_health_report, report_dedup_key
 from erw.settings import Settings, get_settings
+from erw.sql_like import like_contains
 
-MemberRole = Literal["pm", "viewer"]
+MemberRole = Literal["pm", "developer", "viewer"]
 
 
 class ProjectStats(BaseModel):
@@ -156,9 +164,32 @@ class ProjectMemberCreate(BaseModel):
     email: str
     role: MemberRole = "viewer"
 
+    @field_validator("role", mode="before")
+    @classmethod
+    def _normalize_role(cls, v):
+        return normalize_project_role(v)
+
 
 class ProjectMemberUpdate(BaseModel):
     role: MemberRole
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def _normalize_role(cls, v):
+        return normalize_project_role(v)
+
+
+class AssignableUserItem(BaseModel):
+    id: int
+    account_id: str | None = None
+    name: str
+    email: str
+    avatar_url: str | None = None
+    avatar_color: str = "#0052CC"
+    job_title: str | None = None
+    department: str | None = None
+    is_admin: bool
+    role: str
 
 
 def _ensure_project(session: Session, key: str) -> Project:
@@ -200,8 +231,8 @@ def _serialize_member(member: ProjectMember, user: User) -> ProjectMemberItem:
         user_id=user.id,
         email=user.email,
         name=user.name,
-        role=member.role,
-        is_active=bool(getattr(user, "is_active", True)),
+        role=normalize_project_role(member.role) or member.role,
+        is_active=getattr(user, "is_active", True) is not False,
     )
 
 
@@ -305,7 +336,7 @@ def add_member(
     ).scalar_one_or_none()
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if not getattr(target, "is_active", True):
+    if getattr(target, "is_active", True) is False:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is disabled")
     existing = session.get(ProjectMember, (key, target.id))
     if existing is not None:
@@ -357,6 +388,57 @@ def remove_member(
     _guard_last_pm(session, key, member, removing=True, new_role=None)
     session.delete(member)
     session.commit()
+
+
+@_projects_sub.get("/{key}/assignable-users", response_model=list[AssignableUserItem])
+@_projects_sub.get("/{key}/assignable-users/", response_model=list[AssignableUserItem], include_in_schema=False)
+def list_assignable_users(
+    key: str,
+    q: str | None = Query(default=None),
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> list[AssignableUserItem]:
+    _ensure_project(session, key)
+    require_viewer(key, user=user, session=session)
+    stmt = (
+        select(User, ProjectMember.role)
+        .outerjoin(
+            ProjectMember,
+            (ProjectMember.user_id == User.id) & (ProjectMember.project_key == key),
+        )
+        .where(
+            User.is_active.is_(True),
+            or_(User.is_admin.is_(True), ProjectMember.user_id.is_not(None)),
+        )
+    )
+    needle = (q or "").strip().lower()
+    if needle:
+        pattern = like_contains(needle)
+        stmt = stmt.where(
+            func.lower(User.name).like(pattern, escape="\\")
+            | func.lower(User.email).like(pattern, escape="\\")
+            | func.lower(func.coalesce(User.account_id, "")).like(pattern, escape="\\")
+        )
+    stmt = stmt.order_by(func.lower(User.name), func.lower(User.email))
+    rows = session.execute(stmt).all()
+    items: list[AssignableUserItem] = []
+    for u, member_role in rows:
+        effective_role = "admin" if u.is_admin else (normalize_project_role(member_role) or "viewer")
+        items.append(
+            AssignableUserItem(
+                id=u.id,
+                account_id=u.account_id,
+                name=u.name,
+                email=u.email,
+                avatar_url=u.avatar_url,
+                avatar_color=u.avatar_color or default_avatar_color(u.name or u.email),
+                job_title=u.job_title,
+                department=u.department,
+                is_admin=bool(u.is_admin),
+                role=effective_role,
+            )
+        )
+    return items
 
 
 router.include_router(_projects_sub)

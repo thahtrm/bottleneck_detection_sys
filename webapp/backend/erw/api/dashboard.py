@@ -369,7 +369,11 @@ def _deadline_memberships(session: Session, keys: set[str]) -> list[tuple[str, s
     version_rows = session.execute(
         select(IssueVersion.issue_key, Version)
         .join(Version, Version.id == IssueVersion.version_id)
-        .where(IssueVersion.issue_key.in_(keys), Version.released.isnot(True))
+        .where(
+            IssueVersion.issue_key.in_(keys),
+            IssueVersion.relation_type == "fix",
+            Version.released.isnot(True),
+        )
     ).all()
     return [
         (f"sprint:{s.id}", "sprint", s.name or f"Sprint {s.id}", s.end_at.date() if s.end_at else None, key)

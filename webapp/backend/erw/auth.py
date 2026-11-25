@@ -90,13 +90,19 @@ def get_current_user(
     return session.get(User, user_id)
 
 
+def normalize_project_role(role: str | None) -> str | None:
+    if role == "member":
+        return "developer"
+    return role
+
+
 def require_authenticated_user(user: User | None = Depends(get_current_user)) -> User:
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
-    if not getattr(user, "is_active", True):
+    if getattr(user, "is_active", True) is False:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -122,7 +128,7 @@ def get_user_project_role(session: Session, user: User, project_key: str) -> str
     )
     member = session.execute(stmt).scalar_one_or_none()
     if member is not None:
-        return member.role
+        return normalize_project_role(member.role)
     return None
 
 
@@ -174,6 +180,22 @@ def require_pm(
     return dep
 
 
+def require_developer(
+    project_key: str,
+    *,
+    user: User | None = None,
+    session: Session | None = None,
+):
+    dep = require_project_role(
+        project_key,
+        {"pm", "developer"},
+        detail=f"Developer role required for project {project_key}",
+    )
+    if user is not None and session is not None:
+        return dep(user=user, session=session)
+    return dep
+
+
 def require_viewer(
     project_key: str,
     *,
@@ -182,7 +204,7 @@ def require_viewer(
 ):
     dep = require_project_role(
         project_key,
-        {"pm", "viewer"},
+        {"pm", "developer", "viewer"},
         detail=f"Access denied for project {project_key}",
     )
     if user is not None and session is not None:

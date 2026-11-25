@@ -6,6 +6,7 @@ from erw import jobs
 from erw.db import SessionLocal, init_db, make_engine, utcnow
 from erw.ingest.sync import catch_up
 from erw.integrations.jira import JiraClient
+from erw.integrations.local_jira import LocalJiraClient
 from erw.settings import get_settings
 
 WEBHOOK_EVENTS = [
@@ -214,8 +215,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(build_digest(session, project, utcnow(), settings), end="\n\n")
         return 0
 
-    client = JiraClient(settings.jira_base_url, settings.jira_email, settings.jira_api_token)
     if args.command == "register-webhook":
+        if settings.jira_mode == "jira_cloud":
+            client = JiraClient(settings.jira_base_url, settings.jira_email, settings.jira_api_token)
+        else:
+            engine = make_engine(settings.db_url)
+            init_db(engine)
+            client = LocalJiraClient(settings, engine=engine)
         url = f"{settings.public_base_url}/webhooks/jira/{settings.jira_webhook_secret}"
         jql = "project in (" + ", ".join(settings.jira_projects) + ")"
         client.register_webhook(url, WEBHOOK_EVENTS, jql)
@@ -225,6 +231,10 @@ def main(argv: list[str] | None = None) -> int:
     engine = make_engine(settings.db_url)
     init_db(engine)
     jobs.configure(settings, engine)
+    if settings.jira_mode == "jira_cloud":
+        client = JiraClient(settings.jira_base_url, settings.jira_email, settings.jira_api_token)
+    else:
+        client = LocalJiraClient(settings, engine=engine)
     from erw.pipeline import alerts, evaluate
 
     evaluate._dispatch = alerts.dispatch

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from erw.api.actions import get_jira_client
-from erw.auth import get_session, require_authenticated_user, require_pm, require_viewer
+from erw.auth import get_session, require_authenticated_user, require_developer, require_pm, require_viewer
 from erw.integrations.jira import JiraClient, JiraError
 from erw.integrations.llm import enqueue_suggestion, get_cached_suggestion
 from erw.models import Action, Change, Issue, Link, RiskState, Score, Suggestion, User
@@ -257,7 +257,7 @@ def list_issue_transitions(
     issue = session.get(Issue, key)
     if issue is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
-    require_pm(issue.project_key, user=user, session=session)
+    require_developer(issue.project_key, user=user, session=session)
     try:
         transitions = jira_client.get_transitions(key)
     except (JiraError, httpx.HTTPError) as e:

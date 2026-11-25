@@ -116,14 +116,14 @@ def _project_report(session: Session, report_id: int, user: User) -> ReportFile 
     if row is None:
         return None
     role = get_user_project_role(session, user, row.project_key)
-    if user.is_admin or role in {"pm", "viewer", "admin"}:
+    if user.is_admin or role in {"pm", "developer", "viewer", "admin"}:
         return row
     return None
 
 
 def _require_project_member(session: Session, user: User, project: str) -> None:
     role = get_user_project_role(session, user, project.strip())
-    if user.is_admin or role in {"pm", "viewer", "admin"}:
+    if user.is_admin or role in {"pm", "developer", "viewer", "admin"}:
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Project membership required")
 

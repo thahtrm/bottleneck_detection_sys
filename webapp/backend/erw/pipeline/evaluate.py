@@ -122,7 +122,9 @@ def evaluate_issue(
         select(Sprint).join(IssueSprint, IssueSprint.sprint_id == Sprint.id).where(IssueSprint.issue_key == key)
     ))
     versions = list(session.scalars(
-        select(Version).join(IssueVersion, IssueVersion.version_id == Version.id).where(IssueVersion.issue_key == key)
+        select(Version)
+        .join(IssueVersion, IssueVersion.version_id == Version.id)
+        .where(IssueVersion.issue_key == key, IssueVersion.relation_type == "fix")
     ))
     tl = build_timeline(
         issue, changes, sprints, versions, _blockers(session, issue, changes), now,
