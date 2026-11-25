@@ -3,21 +3,36 @@ from __future__ import annotations
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
+from erw.api.issues import local_mode_or_403
 from erw.auth import (
     get_session,
     get_user_project_role,
     normalize_project_role,
     require_admin,
     require_authenticated_user,
+    require_pm,
     require_viewer,
 )
 from erw.db import utcnow
-from erw.models import Issue, Project, ProjectMember, ReportFile, RiskState, User, default_avatar_color
+from erw.integrations.jira import JiraError
+from erw.integrations.local_jira import LocalJiraService
+from erw.models import (
+    Component,
+    Issue,
+    Project,
+    ProjectMember,
+    ReportFile,
+    RiskState,
+    Sprint,
+    User,
+    Version,
+    default_avatar_color,
+)
 from erw.pipeline.chat_reports import persist_health_report, report_dedup_key
 from erw.settings import Settings, get_settings
 from erw.sql_like import like_contains
@@ -439,6 +454,519 @@ def list_assignable_users(
             )
         )
     return items
+
+
+class ProjectWrite(BaseModel):
+    key: str
+    name: str
+    description: str | None = None
+
+
+class ProjectPatch(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    lead_user_id: int | None = None
+
+
+class ComponentWrite(BaseModel):
+    name: str
+    description: str | None = None
+    lead_user_id: int | None = None
+
+
+class ComponentPatch(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    lead_user_id: int | None = None
+
+
+class VersionWrite(BaseModel):
+    name: str
+    description: str | None = None
+    start_date: str | None = None
+    release_date: str | None = None
+    released: bool = False
+
+
+class VersionPatch(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    start_date: str | None = None
+    release_date: str | None = None
+    released: bool | None = None
+
+
+class SprintWrite(BaseModel):
+    name: str
+    goal: str | None = None
+    start_at: str | None = None
+    end_at: str | None = None
+
+
+class SprintPatch(BaseModel):
+    name: str | None = None
+    goal: str | None = None
+    start_at: str | None = None
+    end_at: str | None = None
+
+
+class RankBody(BaseModel):
+    issue_key: str
+    sprint_id: int | None = None
+    before_key: str | None = None
+
+
+def _jira_http(exc: JiraError) -> HTTPException:
+    return HTTPException(status_code=exc.status, detail=exc.body or "Jira error")
+
+
+def _require_project_creator(session: Session, user: User) -> None:
+    if user.is_admin:
+        return
+    is_pm = session.scalar(
+        select(func.count())
+        .select_from(ProjectMember)
+        .where(ProjectMember.user_id == user.id, ProjectMember.role == "pm")
+    )
+    if not is_pm:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PM role required to create a project")
+
+
+def _project_out(project: Project) -> dict[str, Any]:
+    return {
+        "key": project.key,
+        "name": project.name,
+        "description": project.description or "",
+        "lead_user_id": project.lead_user_id,
+        "tracked": project.tracked,
+    }
+
+
+def _component_out(component: Component) -> dict[str, Any]:
+    return {
+        "id": component.id,
+        "project_key": component.project_key,
+        "name": component.name,
+        "description": component.description or "",
+        "lead_user_id": component.lead_user_id,
+    }
+
+
+def _version_out(version: Version) -> dict[str, Any]:
+    return {
+        "id": version.id,
+        "project_key": version.project_key,
+        "name": version.name,
+        "description": version.description or "",
+        "released": bool(version.released),
+        "start_date": version.start_date.isoformat() if version.start_date else None,
+        "release_date": version.release_date.isoformat() if version.release_date else None,
+    }
+
+
+def _sprint_out(sprint: Sprint) -> dict[str, Any]:
+    return {
+        "id": sprint.id,
+        "project_key": sprint.project_key,
+        "name": sprint.name,
+        "goal": sprint.goal or "",
+        "state": sprint.state,
+        "start_at": sprint.start_at.isoformat() if sprint.start_at else None,
+        "end_at": sprint.end_at.isoformat() if sprint.end_at else None,
+        "complete_at": sprint.complete_at.isoformat() if sprint.complete_at else None,
+    }
+
+
+def _present_fields(model: BaseModel, names: tuple[str, ...]) -> dict[str, Any]:
+    payload = model.model_dump(exclude_unset=True)
+    return {name: payload[name] for name in names if name in payload}
+
+
+@_projects_sub.post("", status_code=status.HTTP_201_CREATED)
+@_projects_sub.post("/", status_code=status.HTTP_201_CREATED, include_in_schema=False)
+def create_project(
+    body: ProjectWrite,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    local_mode_or_403(request, settings)
+    _require_project_creator(session, user)
+    try:
+        project = LocalJiraService.create_project(
+            session,
+            key=body.key,
+            name=body.name,
+            description=body.description,
+            actor=user,
+        )
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return _project_out(project)
+
+
+@_projects_sub.patch("/{key}")
+def update_project(
+    key: str,
+    body: ProjectPatch,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        project = LocalJiraService.update_project(session, key, _present_fields(body, ("name", "description", "lead_user_id")))
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return _project_out(project)
+
+
+@_projects_sub.get("/{key}/components")
+def list_components(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> list[dict[str, Any]]:
+    _ensure_project(session, key)
+    require_viewer(key, user=user, session=session)
+    try:
+        rows = LocalJiraService.list_components(session, key)
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    return [_component_out(row) for row in rows]
+
+
+@_projects_sub.post("/{key}/components", status_code=status.HTTP_201_CREATED)
+def create_component(
+    key: str,
+    body: ComponentWrite,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        component = LocalJiraService.create_component(
+            session,
+            key,
+            name=body.name,
+            description=body.description,
+            lead_user_id=body.lead_user_id,
+        )
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return _component_out(component)
+
+
+@_projects_sub.patch("/{key}/components/{component_id}")
+def update_component(
+    key: str,
+    component_id: int,
+    body: ComponentPatch,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        component = LocalJiraService.update_component(
+            session,
+            key,
+            component_id,
+            _present_fields(body, ("name", "description", "lead_user_id")),
+        )
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return _component_out(component)
+
+
+@_projects_sub.delete("/{key}/components/{component_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_component(
+    key: str,
+    component_id: int,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        LocalJiraService.delete_component(session, key, component_id)
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@_projects_sub.get("/{key}/versions")
+def list_versions(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> list[dict[str, Any]]:
+    _ensure_project(session, key)
+    require_viewer(key, user=user, session=session)
+    try:
+        rows = LocalJiraService.list_versions(session, key)
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    return [_version_out(row) for row in rows]
+
+
+@_projects_sub.post("/{key}/versions", status_code=status.HTTP_201_CREATED)
+def create_version(
+    key: str,
+    body: VersionWrite,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        version = LocalJiraService.create_version(
+            session,
+            key,
+            name=body.name,
+            description=body.description,
+            start_date=body.start_date,
+            release_date=body.release_date,
+            released=body.released,
+        )
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return _version_out(version)
+
+
+@_projects_sub.patch("/{key}/versions/{version_id}")
+def update_version(
+    key: str,
+    version_id: int,
+    body: VersionPatch,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        version = LocalJiraService.update_version(
+            session,
+            key,
+            version_id,
+            _present_fields(body, ("name", "description", "start_date", "release_date", "released")),
+        )
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return _version_out(version)
+
+
+@_projects_sub.get("/{key}/workflow")
+def get_workflow(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    _ensure_project(session, key)
+    require_viewer(key, user=user, session=session)
+    try:
+        return LocalJiraService.get_project_workflow(session, key)
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+
+
+@_projects_sub.put("/{key}/workflow")
+def put_workflow(
+    key: str,
+    body: dict[str, Any],
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        saved = LocalJiraService.replace_workflow(session, key, body)
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return saved
+
+
+@_projects_sub.get("/{key}/sprints")
+def list_sprints(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> list[dict[str, Any]]:
+    _ensure_project(session, key)
+    require_viewer(key, user=user, session=session)
+    try:
+        rows = LocalJiraService.list_sprints(session, key)
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    return [_sprint_out(row) for row in rows]
+
+
+@_projects_sub.post("/{key}/sprints", status_code=status.HTTP_201_CREATED)
+def create_sprint(
+    key: str,
+    body: SprintWrite,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        sprint = LocalJiraService.create_sprint(
+            session,
+            key,
+            name=body.name,
+            goal=body.goal,
+            start_at=body.start_at,
+            end_at=body.end_at,
+        )
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return _sprint_out(sprint)
+
+
+@_projects_sub.patch("/{key}/sprints/{sprint_id}")
+def update_sprint(
+    key: str,
+    sprint_id: int,
+    body: SprintPatch,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        sprint = LocalJiraService.update_sprint(
+            session,
+            key,
+            sprint_id,
+            _present_fields(body, ("name", "goal", "start_at", "end_at")),
+        )
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return _sprint_out(sprint)
+
+
+@_projects_sub.post("/{key}/sprints/{sprint_id}/start")
+def start_sprint(
+    key: str,
+    sprint_id: int,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        sprint = LocalJiraService.start_sprint(session, key, sprint_id)
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return _sprint_out(sprint)
+
+
+@_projects_sub.post("/{key}/sprints/{sprint_id}/complete")
+def complete_sprint(
+    key: str,
+    sprint_id: int,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    app_settings = local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        sprint, moved = LocalJiraService.complete_sprint(session, key, sprint_id, settings=app_settings)
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    payload = _sprint_out(sprint)
+    payload["moved_to_backlog"] = moved
+    return payload
+
+
+@_projects_sub.post("/{key}/backlog/rank")
+def rank_backlog(
+    key: str,
+    body: RankBody,
+    request: Request,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    app_settings = local_mode_or_403(request, settings)
+    _ensure_project(session, key)
+    require_pm(key, user=user, session=session)
+    try:
+        issue = LocalJiraService.rank_backlog(
+            session,
+            key,
+            body.issue_key,
+            sprint_id=body.sprint_id,
+            before_key=body.before_key,
+            actor=user,
+            settings=app_settings,
+        )
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
+    session.commit()
+    return {"issue_key": issue.key, "rank": issue.rank, "sprint_id": body.sprint_id}
+
+
+@_projects_sub.get("/{key}/board")
+def get_board(
+    key: str,
+    user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    _ensure_project(session, key)
+    require_viewer(key, user=user, session=session)
+    try:
+        return LocalJiraService.get_board(session, key)
+    except JiraError as exc:
+        raise _jira_http(exc) from exc
 
 
 router.include_router(_projects_sub)

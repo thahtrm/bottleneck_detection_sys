@@ -1,22 +1,27 @@
 from __future__ import annotations
 
+import copy
 import re
 import uuid
 import zlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from early_risk_detection.data.normalize import normalize_link_type, normalize_priority
-from sqlalchemy import Engine, delete, func, or_, select
+from sqlalchemy import Engine, delete, func, insert, or_, select, update
 from sqlalchemy.orm import Session
 
+from erw.auth import get_user_project_role
 from erw.db import SessionLocal, make_engine, utcnow
 from erw.domain.timeline import _DEFAULT_CATEGORIES
 from erw.integrations.jira import JiraClient, JiraError, Transition
 from erw.models import (
+    Action,
+    Attachment,
     Change,
     Comment,
     Component,
@@ -27,13 +32,19 @@ from erw.models import (
     IssueVote,
     IssueWatcher,
     Link,
+    Notification,
     Project,
+    ProjectMember,
     RiskState,
+    Score,
     Sprint,
+    Suggestion,
     User,
     Version,
+    Worklog,
 )
 from erw.settings import Settings
+from erw.sql_like import like_contains
 
 DEFAULT_WORKFLOW: dict[str, Any] = {
     "statuses": [
@@ -92,6 +103,23 @@ _DURATION_MULTIPLIERS = {
 }
 _DURATION_TOKEN_RE = re.compile(r"(\d+)\s*([wdhms])", re.IGNORECASE)
 _TZ_NO_COLON = re.compile(r"([+-]\d{2})(\d{2})$")
+_MENTION_RE = re.compile(r"@([A-Za-z0-9][A-Za-z0-9._:-]*)")
+_REKEY_ISSUE_COLUMNS = (
+    Change.issue_key,
+    Comment.issue_key,
+    Attachment.issue_key,
+    Worklog.issue_key,
+    IssueSprint.issue_key,
+    IssueVersion.issue_key,
+    IssueWatcher.issue_key,
+    IssueVote.issue_key,
+    IssueComponent.issue_key,
+    Score.issue_key,
+    RiskState.issue_key,
+    Notification.issue_key,
+    Suggestion.issue_key,
+    Action.issue_key,
+)
 
 
 class LocalJiraConflictError(JiraError):
@@ -437,6 +465,73 @@ def _check_optimistic_lock(
                 current_updated=cur_utc,
                 expected_updated=exp_utc,
             )
+
+
+def _load_project(session: Session, key: str) -> Project:
+    project = session.get(Project, key)
+    if project is None:
+        raise JiraError(404, f"Project {key} not found")
+    return project
+
+
+def _load_live_issue(session: Session, key: str) -> Issue:
+    issue = session.get(Issue, key)
+    if issue is None or issue.deleted_at is not None:
+        raise JiraError(404, f"Issue {key} not found")
+    return issue
+
+
+def _touch_issue(session: Session, issue: Issue, settings: Settings | None, now: datetime | None = None) -> datetime:
+    stamped = _next_updated_at(issue, now)
+    issue.updated_at = stamped
+    issue.version = (issue.version or 1) + 1
+    session.flush()
+    issue.raw = LocalJiraService.build_issue_raw(session, issue, settings)
+    session.flush()
+    return stamped
+
+
+def _optional_dt(value: datetime | str | None) -> datetime | None:
+    if value is None or value == "":
+        return None
+    try:
+        return _parse_dt(value)
+    except ValueError as exc:
+        raise JiraError(400, f"Invalid datetime: {value}") from exc
+
+
+def _count_for(session: Session, model: type[IssueWatcher] | type[IssueVote], issue_key: str) -> int:
+    return int(session.scalar(select(func.count()).select_from(model).where(model.issue_key == issue_key)) or 0)
+
+
+def _can_modify_comment(session: Session, comment: Comment, actor: User | None) -> bool:
+    if actor is None:
+        return False
+    author_id, _name = _actor_identity(actor)
+    if comment.author_id and author_id and comment.author_id == author_id:
+        return True
+    issue = session.get(Issue, comment.issue_key)
+    if issue is None:
+        return False
+    role = get_user_project_role(session, actor, issue.project_key)
+    return role in {"pm", "admin"}
+
+
+def _move_attachment_dir(settings: Settings | None, old_key: str, new_key: str) -> None:
+    if settings is None:
+        return
+    root = Path(settings.attachments_dir)
+    src = root / old_key
+    dst = root / new_key
+    if not src.is_dir():
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.exists():
+        for child in src.iterdir():
+            child.replace(dst / child.name)
+        src.rmdir()
+        return
+    src.rename(dst)
 
 
 class LocalJiraService:
@@ -1424,6 +1519,8 @@ class LocalJiraService:
         if issue is None or issue.deleted_at is not None:
             raise JiraError(404, f"Issue {key} not found")
         text_body = _adf_text(body).strip() if isinstance(body, (dict, list)) else str(body)
+        if mentions is None:
+            mentions = LocalJiraService.parse_mentions(session, issue.project_key, text_body, actor)
         now = _next_updated_at(issue)
         author_id, author_name = _actor_identity(actor)
         comment = Comment(
@@ -1628,6 +1725,875 @@ class LocalJiraService:
         issue.version = (issue.version or 1) + 1
         session.flush()
         LocalJiraService.evaluate_with_neighbors(session, [key], now, settings)
+
+    @staticmethod
+    def parse_mentions(
+        session: Session,
+        project_key: str,
+        body: str,
+        actor: User | None = None,
+    ) -> list[str]:
+        tokens = _MENTION_RE.findall(body or "")
+        if not tokens:
+            return []
+        members = session.scalars(
+            select(User)
+            .join(ProjectMember, ProjectMember.user_id == User.id)
+            .where(ProjectMember.project_key == project_key, User.is_active.is_(True))
+        ).all()
+        allowed = {member.account_id for member in members if member.account_id}
+        if actor is not None and actor.account_id:
+            allowed.add(actor.account_id)
+        found: list[str] = []
+        seen: set[str] = set()
+        for token in tokens:
+            if token in allowed and token not in seen:
+                seen.add(token)
+                found.append(token)
+        return found
+
+    @staticmethod
+    def update_comment(
+        session: Session,
+        key: str,
+        comment_id: int,
+        body: str,
+        *,
+        actor: User | None = None,
+        settings: Settings | None = None,
+    ) -> Comment:
+        issue = _load_live_issue(session, key)
+        comment = session.get(Comment, int(comment_id))
+        if comment is None or comment.issue_key != key or comment.deleted_at is not None:
+            raise JiraError(404, "Comment not found")
+        if not _can_modify_comment(session, comment, actor):
+            raise JiraError(403, "Only the author or a PM can edit this comment")
+        text = body if isinstance(body, str) else str(body or "")
+        comment.body = text
+        comment.mentions = LocalJiraService.parse_mentions(session, issue.project_key, text, actor)
+        comment.edited = True
+        comment.updated_at = utcnow()
+        _touch_issue(session, issue, settings)
+        return comment
+
+    @staticmethod
+    def delete_comment(
+        session: Session,
+        key: str,
+        comment_id: int,
+        *,
+        actor: User | None = None,
+        settings: Settings | None = None,
+    ) -> None:
+        issue = _load_live_issue(session, key)
+        comment = session.get(Comment, int(comment_id))
+        if comment is None or comment.issue_key != key or comment.deleted_at is not None:
+            raise JiraError(404, "Comment not found")
+        if not _can_modify_comment(session, comment, actor):
+            raise JiraError(403, "Only the author or a PM can delete this comment")
+        comment.deleted_at = utcnow()
+        _touch_issue(session, issue, settings)
+
+    @staticmethod
+    def list_activity(
+        session: Session,
+        key: str,
+        *,
+        kind: str = "all",
+        order: str = "desc",
+    ) -> list[dict[str, Any]]:
+        _load_live_issue(session, key)
+        if kind not in {"all", "comments", "history", "worklog"}:
+            raise JiraError(400, "Invalid activity kind")
+        if order not in {"asc", "desc"}:
+            raise JiraError(400, "Invalid activity order")
+        rows: list[tuple[datetime, int, dict[str, Any]]] = []
+        if kind in {"all", "comments"}:
+            comments = session.scalars(
+                select(Comment).where(Comment.issue_key == key, Comment.deleted_at.is_(None))
+            ).all()
+            for comment in comments:
+                rows.append(
+                    (
+                        comment.created_at,
+                        comment.id,
+                        {
+                            "kind": "comment",
+                            "id": comment.id,
+                            "at": comment.created_at.isoformat(),
+                            "author_id": comment.author_id,
+                            "author_name": comment.author_name,
+                            "body": comment.body,
+                            "mentions": list(comment.mentions or []),
+                            "edited": bool(comment.edited),
+                        },
+                    )
+                )
+        if kind in {"all", "history"}:
+            changes = session.scalars(select(Change).where(Change.issue_key == key)).all()
+            for change in changes:
+                rows.append(
+                    (
+                        change.at,
+                        change.id,
+                        {
+                            "kind": "history",
+                            "id": change.id,
+                            "at": change.at.isoformat(),
+                            "author_id": change.author_id,
+                            "author_name": change.author_name,
+                            "field": change.field,
+                            "from_str": change.from_str,
+                            "to_str": change.to_str,
+                        },
+                    )
+                )
+        if kind in {"all", "worklog"}:
+            worklogs = session.scalars(select(Worklog).where(Worklog.issue_key == key)).all()
+            for worklog in worklogs:
+                at = worklog.started_at or worklog.created_at
+                rows.append(
+                    (
+                        at,
+                        worklog.id,
+                        {
+                            "kind": "worklog",
+                            "id": worklog.id,
+                            "at": at.isoformat(),
+                            "author_id": worklog.author_id,
+                            "author_name": worklog.author_name,
+                            "time_spent_seconds": worklog.time_spent_seconds,
+                            "comment": worklog.comment or "",
+                        },
+                    )
+                )
+        rows.sort(key=lambda row: (row[0], row[1]), reverse=order == "desc")
+        return [item for _at, _id, item in rows]
+
+    @staticmethod
+    def add_worklog(
+        session: Session,
+        key: str,
+        time_spent: str | int | float | None,
+        *,
+        started_at: datetime | str | None = None,
+        comment: str | None = None,
+        actor: User | None = None,
+        settings: Settings | None = None,
+    ) -> Worklog:
+        issue = _load_live_issue(session, key)
+        try:
+            seconds = parse_jira_duration(time_spent)
+        except ValueError as exc:
+            raise JiraError(400, str(exc)) from exc
+        if seconds is None:
+            raise JiraError(400, "time_spent is required")
+        started = _optional_dt(started_at) or utcnow()
+        author_id, author_name = _actor_identity(actor)
+        now = utcnow()
+        worklog = Worklog(
+            issue_key=key,
+            author_id=author_id,
+            author_name=author_name if actor else None,
+            time_spent_seconds=seconds,
+            started_at=started,
+            comment=comment or "",
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(worklog)
+        issue.time_spent_seconds = int(issue.time_spent_seconds or 0) + seconds
+        if issue.remaining_estimate_seconds is not None:
+            issue.remaining_estimate_seconds = max(0, int(issue.remaining_estimate_seconds) - seconds)
+        session.flush()
+        _touch_issue(session, issue, settings)
+        LocalJiraService.evaluate_with_neighbors(session, [key], issue.updated_at or now, settings)
+        return worklog
+
+    @staticmethod
+    def add_attachment(
+        session: Session,
+        key: str,
+        *,
+        filename: str,
+        content: bytes,
+        mime_type: str | None = None,
+        actor: User | None = None,
+        settings: Settings | None = None,
+    ) -> Attachment:
+        _load_live_issue(session, key)
+        if settings is None:
+            raise JiraError(500, "Attachment storage is not configured")
+        raw_name = (filename or "").replace("\\", "/").split("/")[-1].strip()
+        if not raw_name or raw_name in {".", ".."}:
+            raise JiraError(400, "Filename is required")
+        directory = Path(settings.attachments_dir) / key
+        directory.mkdir(parents=True, exist_ok=True)
+        dest = directory / raw_name
+        if dest.exists():
+            stem = Path(raw_name).stem
+            suffix = Path(raw_name).suffix
+            number = 2
+            while dest.exists():
+                dest = directory / f"{stem}-{number}{suffix}"
+                number += 1
+        dest.write_bytes(content or b"")
+        author_id, author_name = _actor_identity(actor)
+        attachment = Attachment(
+            issue_key=key,
+            author_id=author_id,
+            author_name=author_name if actor else None,
+            filename=dest.name,
+            mime_type=mime_type or "application/octet-stream",
+            size_bytes=len(content or b""),
+            storage_path=str(dest.resolve()),
+            created_at=utcnow(),
+        )
+        session.add(attachment)
+        session.flush()
+        return attachment
+
+    @staticmethod
+    def get_attachment(session: Session, key: str, attachment_id: int) -> Attachment:
+        _load_live_issue(session, key)
+        attachment = session.get(Attachment, int(attachment_id))
+        if attachment is None or attachment.issue_key != key:
+            raise JiraError(404, "Attachment not found")
+        return attachment
+
+    @staticmethod
+    def watch_issue(session: Session, key: str, *, actor: User | None) -> int:
+        issue = _load_live_issue(session, key)
+        if actor is None:
+            raise JiraError(400, "Actor is required")
+        if session.get(IssueWatcher, (issue.key, actor.id)) is None:
+            session.add(IssueWatcher(issue_key=issue.key, user_id=actor.id, created_at=utcnow()))
+            session.flush()
+        return _count_for(session, IssueWatcher, issue.key)
+
+    @staticmethod
+    def unwatch_issue(session: Session, key: str, *, actor: User | None) -> int:
+        issue = _load_live_issue(session, key)
+        if actor is None:
+            raise JiraError(400, "Actor is required")
+        row = session.get(IssueWatcher, (issue.key, actor.id))
+        if row is not None:
+            session.delete(row)
+            session.flush()
+        return _count_for(session, IssueWatcher, issue.key)
+
+    @staticmethod
+    def vote_issue(session: Session, key: str, *, actor: User | None) -> int:
+        issue = _load_live_issue(session, key)
+        if actor is None:
+            raise JiraError(400, "Actor is required")
+        if session.get(IssueVote, (issue.key, actor.id)) is None:
+            session.add(IssueVote(issue_key=issue.key, user_id=actor.id, created_at=utcnow()))
+            session.flush()
+        return _count_for(session, IssueVote, issue.key)
+
+    @staticmethod
+    def unvote_issue(session: Session, key: str, *, actor: User | None) -> int:
+        issue = _load_live_issue(session, key)
+        if actor is None:
+            raise JiraError(400, "Actor is required")
+        row = session.get(IssueVote, (issue.key, actor.id))
+        if row is not None:
+            session.delete(row)
+            session.flush()
+        return _count_for(session, IssueVote, issue.key)
+
+    @staticmethod
+    def clone_issue(
+        session: Session,
+        key: str,
+        *,
+        summary: str | None = None,
+        actor: User | None = None,
+        settings: Settings | None = None,
+    ) -> Issue:
+        source = _load_live_issue(session, key)
+        copied = source.summary if summary is None else summary
+        return LocalJiraService.create_issue(
+            session,
+            project_key=source.project_key,
+            summary=copied,
+            issuetype=source.issuetype or "Task",
+            priority=source.priority or "Medium",
+            description=source.description or "",
+            labels=list(source.labels or []),
+            actor=actor,
+            settings=settings,
+        )
+
+    @staticmethod
+    def move_issue(
+        session: Session,
+        key: str,
+        *,
+        project_key: str | None = None,
+        issuetype: str | None = None,
+        actor: User | None = None,
+        settings: Settings | None = None,
+    ) -> Issue:
+        issue = _load_live_issue(session, key)
+        dest = (project_key or issue.project_key).strip()
+        if not dest:
+            raise JiraError(400, "project_key or issuetype is required")
+        if dest == issue.project_key:
+            if issuetype is None or issuetype == issue.issuetype:
+                if project_key is None and issuetype is None:
+                    raise JiraError(400, "project_key or issuetype is required")
+                return issue
+            return LocalJiraService.update_issue(
+                session,
+                issue.key,
+                {"issuetype": issuetype},
+                actor=actor,
+                settings=settings,
+            )
+        target_type = issuetype if issuetype is not None else issue.issuetype
+        if issue.issuetype == "Sub-task" or target_type == "Sub-task":
+            raise JiraError(422, "Sub-task cannot move to another project")
+        child_count = session.scalar(
+            select(func.count())
+            .select_from(Issue)
+            .where(
+                Issue.parent_key == issue.key,
+                Issue.issuetype == "Sub-task",
+                Issue.deleted_at.is_(None),
+            )
+        )
+        if child_count:
+            raise JiraError(422, "Issue with sub-tasks cannot move to another project")
+        if session.get(Project, dest) is None:
+            raise JiraError(404, f"Project {dest} not found")
+
+        new_key = LocalJiraService.next_issue_key(session, dest)
+        now = _next_updated_at(issue)
+        author_id, author_name = _actor_identity(actor)
+        old_key = issue.key
+        old_project = issue.project_key
+        old_type = issue.issuetype
+        payload = {column.name: getattr(issue, column.name) for column in Issue.__table__.columns}
+        payload["key"] = new_key
+        payload["project_key"] = dest
+        payload["issuetype"] = target_type
+        payload["updated_at"] = now
+        payload["version"] = int(payload.get("version") or 1) + 1
+        session.expunge(issue)
+        session.execute(insert(Issue).values(**payload))
+        for column in _REKEY_ISSUE_COLUMNS:
+            session.execute(update(column.class_).where(column == old_key).values({column.key: new_key}))
+        session.execute(update(Link).where(Link.source_key == old_key).values(source_key=new_key))
+        session.execute(update(Link).where(Link.target_key == old_key).values(target_key=new_key))
+        session.execute(update(Issue).where(Issue.parent_key == old_key).values(parent_key=new_key))
+        session.execute(delete(Issue).where(Issue.key == old_key))
+        session.expire_all()
+        moved = session.get(Issue, new_key)
+        if moved is None:
+            raise JiraError(500, "Moved issue was not saved")
+        _move_attachment_dir(settings, old_key, new_key)
+        if settings is not None:
+            root = Path(settings.attachments_dir).resolve()
+            for attachment in session.scalars(select(Attachment).where(Attachment.issue_key == new_key)):
+                attachment.storage_path = str(root / new_key / attachment.filename)
+        change_id = f"loc-{uuid.uuid4().hex[:12]}"
+        history = [("project", old_project, dest), ("key", old_key, new_key)]
+        if target_type != old_type:
+            history.append(("issuetype", old_type, target_type))
+        for idx, (field, frm, to) in enumerate(history):
+            session.add(
+                Change(
+                    issue_key=new_key,
+                    change_id=change_id,
+                    idx=idx,
+                    at=now,
+                    author_id=author_id,
+                    author_name=author_name,
+                    field=field,
+                    from_val=frm,
+                    to_val=to,
+                    from_str=frm,
+                    to_str=to,
+                )
+            )
+        session.flush()
+        moved.raw = LocalJiraService.build_issue_raw(session, moved, settings)
+        session.flush()
+        LocalJiraService.evaluate_with_neighbors(session, [new_key], now, settings)
+        return moved
+
+    @staticmethod
+    def search_issues(
+        session: Session,
+        *,
+        project_key: str,
+        q: str | None = None,
+        status: str | None = None,
+        issuetype: str | None = None,
+        priority: str | None = None,
+        assignee: str | None = None,
+        sprint_id: int | None = None,
+    ) -> list[Issue]:
+        _load_project(session, project_key)
+        stmt = select(Issue).where(Issue.project_key == project_key, Issue.deleted_at.is_(None))
+        if q:
+            stmt = stmt.where(func.lower(Issue.summary).like(like_contains(q).lower(), escape="\\"))
+        if status:
+            stmt = stmt.where(Issue.status == status)
+        if issuetype:
+            stmt = stmt.where(Issue.issuetype == issuetype)
+        if priority:
+            stmt = stmt.where(Issue.priority == priority)
+        if assignee:
+            stmt = stmt.where(or_(Issue.assignee_id == assignee, Issue.assignee_name == assignee))
+        if sprint_id is not None:
+            stmt = stmt.join(IssueSprint, IssueSprint.issue_key == Issue.key).where(IssueSprint.sprint_id == int(sprint_id))
+        stmt = stmt.order_by(Issue.rank.asc(), Issue.key.asc())
+        return list(session.scalars(stmt).all())
+
+    @staticmethod
+    def create_project(
+        session: Session,
+        *,
+        key: str,
+        name: str,
+        description: str | None = None,
+        actor: User | None = None,
+    ) -> Project:
+        if actor is None:
+            raise JiraError(400, "Actor is required")
+        clean_key = (key or "").strip()
+        clean_name = (name or "").strip()
+        if not clean_key or not clean_name:
+            raise JiraError(400, "Project key and name are required")
+        if session.get(Project, clean_key) is not None:
+            raise JiraError(409, f"Project {clean_key} already exists")
+        project = Project(
+            key=clean_key,
+            name=clean_name,
+            description=description or "",
+            tracked=True,
+            lead_user_id=actor.id,
+            issue_seq=0,
+            workflow={},
+            status_map={},
+            thresholds={},
+        )
+        session.add(project)
+        session.add(ProjectMember(project_key=clean_key, user_id=actor.id, role="pm"))
+        session.flush()
+        return project
+
+    @staticmethod
+    def update_project(session: Session, key: str, fields: dict[str, Any]) -> Project:
+        project = _load_project(session, key)
+        if "name" in fields:
+            clean_name = (fields["name"] or "").strip()
+            if not clean_name:
+                raise JiraError(400, "Project name cannot be empty")
+            project.name = clean_name
+        if "description" in fields:
+            project.description = fields["description"] or ""
+        if "lead_user_id" in fields:
+            lead_id = fields["lead_user_id"]
+            if lead_id is None:
+                project.lead_user_id = None
+            else:
+                if session.get(User, int(lead_id)) is None:
+                    raise JiraError(404, "User not found")
+                project.lead_user_id = int(lead_id)
+        session.flush()
+        return project
+
+    @staticmethod
+    def list_components(session: Session, project_key: str) -> list[Component]:
+        _load_project(session, project_key)
+        return list(
+            session.scalars(
+                select(Component).where(Component.project_key == project_key).order_by(Component.id.asc())
+            ).all()
+        )
+
+    @staticmethod
+    def create_component(
+        session: Session,
+        project_key: str,
+        *,
+        name: str,
+        description: str | None = None,
+        lead_user_id: int | None = None,
+    ) -> Component:
+        _load_project(session, project_key)
+        clean_name = (name or "").strip()
+        if not clean_name:
+            raise JiraError(400, "Component name is required")
+        clash = session.scalar(
+            select(Component.id).where(Component.project_key == project_key, Component.name == clean_name)
+        )
+        if clash is not None:
+            raise JiraError(409, "Component name already exists")
+        if lead_user_id is not None and session.get(User, int(lead_user_id)) is None:
+            raise JiraError(404, "User not found")
+        component = Component(
+            project_key=project_key,
+            name=clean_name,
+            description=description or "",
+            lead_user_id=int(lead_user_id) if lead_user_id is not None else None,
+        )
+        session.add(component)
+        session.flush()
+        return component
+
+    @staticmethod
+    def update_component(session: Session, project_key: str, component_id: int, fields: dict[str, Any]) -> Component:
+        _load_project(session, project_key)
+        component = session.get(Component, int(component_id))
+        if component is None or component.project_key != project_key:
+            raise JiraError(404, "Component not found")
+        if "name" in fields:
+            clean_name = (fields["name"] or "").strip()
+            if not clean_name:
+                raise JiraError(400, "Component name cannot be empty")
+            clash = session.scalar(
+                select(Component.id).where(
+                    Component.project_key == project_key,
+                    Component.name == clean_name,
+                    Component.id != component.id,
+                )
+            )
+            if clash is not None:
+                raise JiraError(409, "Component name already exists")
+            component.name = clean_name
+        if "description" in fields:
+            component.description = fields["description"] or ""
+        if "lead_user_id" in fields:
+            lead_id = fields["lead_user_id"]
+            if lead_id is None:
+                component.lead_user_id = None
+            else:
+                if session.get(User, int(lead_id)) is None:
+                    raise JiraError(404, "User not found")
+                component.lead_user_id = int(lead_id)
+        session.flush()
+        return component
+
+    @staticmethod
+    def delete_component(session: Session, project_key: str, component_id: int) -> None:
+        _load_project(session, project_key)
+        component = session.get(Component, int(component_id))
+        if component is None or component.project_key != project_key:
+            raise JiraError(404, "Component not found")
+        session.execute(delete(IssueComponent).where(IssueComponent.component_id == component.id))
+        session.delete(component)
+        session.flush()
+
+    @staticmethod
+    def list_versions(session: Session, project_key: str) -> list[Version]:
+        _load_project(session, project_key)
+        return list(
+            session.scalars(select(Version).where(Version.project_key == project_key).order_by(Version.id.asc())).all()
+        )
+
+    @staticmethod
+    def create_version(
+        session: Session,
+        project_key: str,
+        *,
+        name: str,
+        description: str | None = None,
+        start_date: date | str | None = None,
+        release_date: date | str | None = None,
+        released: bool = False,
+    ) -> Version:
+        _load_project(session, project_key)
+        clean_name = (name or "").strip()
+        if not clean_name:
+            raise JiraError(400, "Version name is required")
+        version = Version(
+            project_key=project_key,
+            name=clean_name,
+            description=description or "",
+            start_date=_parse_date(start_date),
+            release_date=_parse_date(release_date),
+            released=bool(released),
+        )
+        session.add(version)
+        session.flush()
+        return version
+
+    @staticmethod
+    def update_version(session: Session, project_key: str, version_id: int, fields: dict[str, Any]) -> Version:
+        _load_project(session, project_key)
+        version = session.get(Version, int(version_id))
+        if version is None or version.project_key != project_key:
+            raise JiraError(404, "Version not found")
+        if "name" in fields:
+            clean_name = (fields["name"] or "").strip()
+            if not clean_name:
+                raise JiraError(400, "Version name cannot be empty")
+            version.name = clean_name
+        if "description" in fields:
+            version.description = fields["description"] or ""
+        if "start_date" in fields:
+            version.start_date = _parse_date(fields["start_date"])
+        if "release_date" in fields:
+            version.release_date = _parse_date(fields["release_date"])
+        if "released" in fields:
+            version.released = bool(fields["released"])
+        session.flush()
+        return version
+
+    @staticmethod
+    def get_project_workflow(session: Session, project_key: str) -> dict[str, Any]:
+        project = _load_project(session, project_key)
+        return copy.deepcopy(_get_workflow(project))
+
+    @staticmethod
+    def replace_workflow(session: Session, project_key: str, workflow: dict[str, Any]) -> dict[str, Any]:
+        project = _load_project(session, project_key)
+        if not isinstance(workflow, dict):
+            raise JiraError(400, "Workflow must be an object")
+        statuses = workflow.get("statuses")
+        transitions = workflow.get("transitions")
+        if not isinstance(statuses, list) or not isinstance(transitions, list):
+            raise JiraError(400, "Workflow needs statuses and transitions")
+        names: set[str] = set()
+        for status_row in statuses:
+            if not isinstance(status_row, dict) or not str(status_row.get("name") or "").strip():
+                raise JiraError(400, "Workflow status needs a name")
+            names.add(str(status_row["name"]).strip())
+        for transition in transitions:
+            if not isinstance(transition, dict):
+                raise JiraError(400, "Invalid transition")
+            target = str(transition.get("to") or "").strip()
+            if target not in names:
+                raise JiraError(400, f"Transition references unknown status {target}")
+            for source in transition.get("from") or []:
+                source_name = str(source).strip()
+                if source_name == "*":
+                    continue
+                if source_name not in names:
+                    raise JiraError(400, f"Transition references unknown status {source_name}")
+        stored = copy.deepcopy(workflow)
+        project.workflow = stored
+        session.flush()
+        return copy.deepcopy(stored)
+
+    @staticmethod
+    def list_sprints(session: Session, project_key: str) -> list[Sprint]:
+        _load_project(session, project_key)
+        return list(
+            session.scalars(select(Sprint).where(Sprint.project_key == project_key).order_by(Sprint.id.asc())).all()
+        )
+
+    @staticmethod
+    def create_sprint(
+        session: Session,
+        project_key: str,
+        *,
+        name: str,
+        goal: str | None = None,
+        start_at: datetime | str | None = None,
+        end_at: datetime | str | None = None,
+    ) -> Sprint:
+        _load_project(session, project_key)
+        clean_name = (name or "").strip()
+        if not clean_name:
+            raise JiraError(400, "Sprint name is required")
+        sprint = Sprint(
+            project_key=project_key,
+            name=clean_name,
+            goal=goal or "",
+            state="future",
+            board_id=1,
+            start_at=_optional_dt(start_at),
+            end_at=_optional_dt(end_at),
+        )
+        session.add(sprint)
+        session.flush()
+        return sprint
+
+    @staticmethod
+    def update_sprint(session: Session, project_key: str, sprint_id: int, fields: dict[str, Any]) -> Sprint:
+        _load_project(session, project_key)
+        sprint = session.get(Sprint, int(sprint_id))
+        if sprint is None or sprint.project_key != project_key:
+            raise JiraError(404, "Sprint not found")
+        if "name" in fields:
+            clean_name = (fields["name"] or "").strip()
+            if not clean_name:
+                raise JiraError(400, "Sprint name cannot be empty")
+            sprint.name = clean_name
+        if "goal" in fields:
+            sprint.goal = fields["goal"] or ""
+        if "start_at" in fields:
+            sprint.start_at = _optional_dt(fields["start_at"])
+        if "end_at" in fields:
+            sprint.end_at = _optional_dt(fields["end_at"])
+        session.flush()
+        return sprint
+
+    @staticmethod
+    def start_sprint(session: Session, project_key: str, sprint_id: int) -> Sprint:
+        _load_project(session, project_key)
+        sprint = session.get(Sprint, int(sprint_id))
+        if sprint is None or sprint.project_key != project_key:
+            raise JiraError(404, "Sprint not found")
+        if sprint.state == "active":
+            return sprint
+        other = session.scalar(
+            select(Sprint.id).where(
+                Sprint.project_key == project_key,
+                Sprint.state == "active",
+                Sprint.id != sprint.id,
+            )
+        )
+        if other is not None:
+            raise JiraError(409, "Project already has an active sprint")
+        sprint.state = "active"
+        if sprint.start_at is None:
+            sprint.start_at = utcnow()
+        session.flush()
+        return sprint
+
+    @staticmethod
+    def complete_sprint(
+        session: Session,
+        project_key: str,
+        sprint_id: int,
+        *,
+        settings: Settings | None = None,
+    ) -> tuple[Sprint, list[str]]:
+        _load_project(session, project_key)
+        sprint = session.get(Sprint, int(sprint_id))
+        if sprint is None or sprint.project_key != project_key:
+            raise JiraError(404, "Sprint not found")
+        rows = session.execute(
+            select(Issue, IssueSprint)
+            .join(IssueSprint, IssueSprint.issue_key == Issue.key)
+            .where(IssueSprint.sprint_id == sprint.id)
+        ).all()
+        moved: list[str] = []
+        affected: list[Issue] = []
+        for issue, membership in rows:
+            if issue.deleted_at is not None:
+                continue
+            affected.append(issue)
+            if issue.status_category != "done":
+                session.delete(membership)
+                moved.append(issue.key)
+        sprint.state = "closed"
+        if sprint.complete_at is None:
+            sprint.complete_at = utcnow()
+        session.flush()
+        for issue in affected:
+            issue.raw = LocalJiraService.build_issue_raw(session, issue, settings)
+        session.flush()
+        return sprint, moved
+
+    @staticmethod
+    def rank_backlog(
+        session: Session,
+        project_key: str,
+        issue_key: str,
+        *,
+        sprint_id: int | None,
+        before_key: str | None,
+        actor: User | None = None,
+        settings: Settings | None = None,
+    ) -> Issue:
+        _load_project(session, project_key)
+        issue = _load_live_issue(session, issue_key)
+        if issue.project_key != project_key:
+            raise JiraError(404, f"Issue {issue_key} not found")
+        if before_key == issue.key:
+            raise JiraError(400, "before_key cannot be the same issue")
+        if sprint_id is not None:
+            sprint = session.get(Sprint, int(sprint_id))
+            if sprint is None or sprint.project_key != project_key:
+                raise JiraError(404, "Sprint not found")
+        memberships = list(session.scalars(select(IssueSprint).where(IssueSprint.issue_key == issue.key)).all())
+        if sprint_id is None:
+            for row in memberships:
+                session.delete(row)
+        else:
+            found = False
+            for row in memberships:
+                if row.sprint_id == int(sprint_id):
+                    found = True
+                else:
+                    session.delete(row)
+            if not found:
+                session.add(IssueSprint(issue_key=issue.key, sprint_id=int(sprint_id)))
+        session.flush()
+        if sprint_id is None:
+            peers = list(
+                session.scalars(
+                    select(Issue).where(
+                        Issue.project_key == project_key,
+                        Issue.deleted_at.is_(None),
+                        ~Issue.key.in_(select(IssueSprint.issue_key)),
+                    )
+                ).all()
+            )
+        else:
+            peers = list(
+                session.scalars(
+                    select(Issue)
+                    .join(IssueSprint, IssueSprint.issue_key == Issue.key)
+                    .where(IssueSprint.sprint_id == int(sprint_id), Issue.deleted_at.is_(None))
+                ).all()
+            )
+        peer_keys = {peer.key for peer in peers}
+        if before_key:
+            if before_key not in peer_keys:
+                raise JiraError(400, "before_key is not in the destination")
+            before = next(peer for peer in peers if peer.key == before_key)
+            lower = [peer.rank for peer in peers if peer.key != issue.key and peer.rank < before.rank]
+            issue.rank = (max(lower) + before.rank) / 2.0 if lower else float(before.rank) - 1000.0
+        else:
+            others = [peer.rank for peer in peers if peer.key != issue.key]
+            issue.rank = (max(others) if others else 0.0) + 1000.0
+        _touch_issue(session, issue, settings)
+        return issue
+
+    @staticmethod
+    def get_board(session: Session, project_key: str) -> dict[str, Any]:
+        project = _load_project(session, project_key)
+        workflow = _get_workflow(project)
+        issues = session.scalars(
+            select(Issue)
+            .where(Issue.project_key == project_key, Issue.deleted_at.is_(None))
+            .order_by(Issue.rank.asc(), Issue.key.asc())
+        ).all()
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for issue in issues:
+            grouped.setdefault(issue.status or "", []).append(
+                {
+                    "key": issue.key,
+                    "summary": issue.summary,
+                    "status": issue.status,
+                    "issuetype": issue.issuetype,
+                    "priority": issue.priority,
+                    "assignee_id": issue.assignee_id,
+                    "assignee_name": issue.assignee_name,
+                    "rank": issue.rank,
+                }
+            )
+        columns = []
+        for status_row in workflow.get("statuses") or []:
+            name = str(status_row.get("name") or "")
+            columns.append(
+                {
+                    "name": name,
+                    "status": name,
+                    "category": status_row.get("category"),
+                    "issues": grouped.get(name, []),
+                }
+            )
+        return {"project_key": project_key, "columns": columns}
 
 
 class LocalJiraClient:

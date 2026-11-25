@@ -467,6 +467,25 @@ def test_assignable_users_picker(local_client, local_session):
     assert [u["email"] for u in q_resp.json()] == ["dev@local.test"]
 
 
+def test_create_issue_requires_developer_in_local_mode(local_client, local_session):
+    _seed_local_users(local_session)
+    local_client.post("/api/auth/login", json={"email": "dev@local.test", "password": "pass"})
+    created = local_client.post("/api/issues", json={"project_key": "DEMO", "summary": "Write API"})
+    assert created.status_code == 201
+    body = created.json()
+    assert body["key"] == "DEMO-1"
+    assert body["summary"] == "Write API"
+    assert body["status"] == "To Do"
+    assert body["project_key"] == "DEMO"
+
+    missing = local_client.post("/api/issues", json={"project_key": "DEMO", "summary": "   "})
+    assert missing.status_code == 400
+
+    local_client.post("/api/auth/login", json={"email": "viewer@local.test", "password": "pass"})
+    denied = local_client.post("/api/issues", json={"project_key": "DEMO", "summary": "Nope"})
+    assert denied.status_code == 403
+
+
 def test_user_search_treats_like_wildcards_as_literals(local_client, local_session):
     _seed_local_users(local_session)
     now = utcnow()
