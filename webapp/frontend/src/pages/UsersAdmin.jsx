@@ -15,7 +15,7 @@ import {
 import { IconCopy, IconPlus, IconRefresh, IconSearch, IconUsers } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
-import { createAdminUser, listAdminUsers, patchAdminUser } from '../api/client';
+import { createAdminUser, listAdminUsers, patchAdminUser, resetDemo } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import '../styles/kaggleTokens.css';
 
@@ -78,6 +78,18 @@ export default function UsersAdmin() {
     onError: (error) => notifications.show({ color: 'red', message: error.message }),
   });
 
+  const resetMut = useMutation({
+    mutationFn: resetDemo,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['jira'] });
+      queryClient.invalidateQueries({ queryKey: ['issue-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-board'] });
+      notifications.show({ color: 'teal', message: 'Demo data was reset.' });
+    },
+    onError: (error) => notifications.show({ color: 'red', message: error.message }),
+  });
+
   const patchMut = useMutation({
     mutationFn: ({ id, patch }) => patchAdminUser(id, patch),
     onSuccess: (data) => {
@@ -109,13 +121,25 @@ export default function UsersAdmin() {
               Người dùng
             </Title>
           </Group>
-          <Button
-            className="erw-settings-btn-primary"
-            leftSection={<IconPlus size={16} />}
-            onClick={() => setCreateOpen(true)}
-          >
-            Thêm người dùng
-          </Button>
+          <Group gap="sm">
+            <Button
+              className="erw-settings-btn-secondary"
+              loading={resetMut.isPending}
+              onClick={() => {
+                if (!window.confirm('Reset demo data? This replaces the current demo project and issues.')) return;
+                resetMut.mutate();
+              }}
+            >
+              Reset demo
+            </Button>
+            <Button
+              className="erw-settings-btn-primary"
+              leftSection={<IconPlus size={16} />}
+              onClick={() => setCreateOpen(true)}
+            >
+              Thêm người dùng
+            </Button>
+          </Group>
         </Group>
 
         <TextInput

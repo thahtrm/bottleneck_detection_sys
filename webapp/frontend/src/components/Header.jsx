@@ -18,9 +18,9 @@ import {
   IconX,
   IconMenu2,
 } from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
-import { getAdminSettings } from '../api/client';
+import { getAdminSettings, listDemoUsers, quickSwitch } from '../api/client';
 import { OpenProjectIcon } from './JiraLinks';
 import AppLogo from './brand/AppLogo';
 
@@ -55,8 +55,10 @@ export default function Header({
   isRefreshing = false,
   mobileNavOpened = false,
   onToggleMobileNav,
+  onCreate,
 }) {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
+  const queryClient = useQueryClient();
 
   // Chỉ gọi getAdminSettings nếu người dùng có quyền admin
   const { data: adminSettings } = useQuery({
@@ -66,6 +68,26 @@ export default function Header({
     refetchInterval: 30000,
     staleTime: 10000,
   });
+
+  const jiraLocal = user?.jira_mode === 'local' || adminSettings?.jira_mode === 'local';
+  const demoUsers = useQuery({
+    queryKey: ['demo-users'],
+    queryFn: listDemoUsers,
+    enabled: jiraLocal,
+  });
+  const switchMut = useMutation({
+    mutationFn: (userId) => quickSwitch(userId),
+    onSuccess: async () => {
+      await refresh();
+      await queryClient.invalidateQueries();
+    },
+  });
+  const userOptions = (demoUsers.data || []).map((item) => ({
+    value: String(item.id),
+    label: item.name || item.email,
+  }));
+  const currentUserId = user?.id != null ? String(user.id) : null;
+  const switchValue = userOptions.some((item) => item.value === currentUserId) ? currentUserId : null;
 
   // Chuẩn bị danh sách option cho Select dự án
   const projectOptions = [
@@ -168,6 +190,35 @@ export default function Header({
 
       {/* Khối bên phải: Nút Refresh + Webhook status + User Menu */}
       <Group gap="sm" wrap="nowrap" style={{ flexShrink: 0 }}>
+        {jiraLocal ? (
+          <Select
+            aria-label="Switch user"
+            data={userOptions}
+            value={switchValue}
+            onChange={(value) => {
+              if (!value || value === currentUserId) return;
+              switchMut.mutate(Number(value));
+            }}
+            placeholder="Switch user"
+            searchable
+            size="sm"
+            maw={180}
+            allowDeselect={false}
+            disabled={switchMut.isPending}
+            error={
+              switchMut.isError
+                ? switchMut.error.message
+                : demoUsers.isError
+                  ? 'Demo users could not be loaded.'
+                  : undefined
+            }
+          />
+        ) : null}
+        {jiraLocal && onCreate ? (
+          <Button size="sm" color="dark" onClick={onCreate}>
+            + Create
+          </Button>
+        ) : null}
         <Tooltip label="Làm mới dữ liệu" withArrow position="bottom">
           <ActionIcon
             variant="light"

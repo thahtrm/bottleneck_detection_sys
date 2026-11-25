@@ -60,6 +60,13 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const refreshUser = async () => {
+    const userData = await getMeApi();
+    setUser(userData);
+    setError(null);
+    return userData;
+  };
+
   const logoutUser = async () => {
     try {
       await logoutApi();
@@ -83,6 +90,7 @@ export function AuthProvider({ children }) {
     error,
     login: loginUser,
     logout: logoutUser,
+    refresh: refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -16,6 +16,7 @@ test('a full state survives a round trip through the URL', () => {
     chips: ['rising', 'overdue'],
     issue: 'DEMO-12',
     sprint: 7,
+    report: null,
   };
   const search = serializeDashboardState(state);
   assert.deepEqual(parseDashboardState(search), state);
@@ -66,6 +67,15 @@ test('chat view is a first-class URL state', () => {
   const search = serializeDashboardState(state);
   assert.equal(search, '?project=DEMO&view=chat');
   assert.deepEqual(parseDashboardState(search), state);
+});
+
+test('jira views round trip through the issue query param', () => {
+  for (const view of ['jira-board', 'backlog', 'navigator']) {
+    const state = { ...DEFAULT_STATE, project: 'DEMO', view, issue: 'DEMO-3' };
+    const search = serializeDashboardState(state);
+    assert.equal(search, `?project=DEMO&view=${view}&issue=DEMO-3`);
+    assert.deepEqual(parseDashboardState(search), state);
+  }
 });
 
 test('issue open from chat can patch board + issue together', () => {

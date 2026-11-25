@@ -10,19 +10,73 @@ from erw.auth import hash_password
 from erw.db import utcnow
 from erw.models import (
     Action,
+    Attachment,
     Change,
+    ChatAgentRun,
+    ChatMemory,
+    ChatMessage,
+    Comment,
+    Component,
     Issue,
+    IssueComponent,
     IssueSprint,
     IssueVersion,
+    IssueVote,
+    IssueWatcher,
     Link,
     Project,
     ProjectMember,
+    ReportFile,
+    ReportSlot,
     RiskState,
     Score,
     Sprint,
     Suggestion,
     User,
     Version,
+    Worklog,
+)
+
+# Child rows first. SQLite foreign keys reject a parent delete while these remain.
+_RESET_DELETE_ORDER = (
+    ChatAgentRun,
+    ReportFile,
+    ChatMessage,
+    ReportSlot,
+    ChatMemory,
+    IssueComponent,
+    Comment,
+    Attachment,
+    Worklog,
+    IssueWatcher,
+    IssueVote,
+    Action,
+    Suggestion,
+    RiskState,
+    Score,
+    Link,
+    IssueSprint,
+    IssueVersion,
+    Change,
+    Component,
+    Sprint,
+    Version,
+    Issue,
+    ProjectMember,
+    Project,
+    User,
+)
+
+# email, name, password, is_admin, account_id, job_title, project role
+_DEMO_PEOPLE = (
+    ("admin@earlyrisk.local", "Hệ Thống Quản Trị", "Admin@123456", True, "acc-demo-admin", "Quản trị hệ thống", None),
+    ("pm@earlyrisk.local", "Nguyễn Văn PM", "Pm@123456", False, "acc-demo-pm", "Project Manager", "pm"),
+    ("viewer@earlyrisk.local", "Trần Thị Viewer", "Viewer@123456", False, "acc-demo-viewer", "Viewer", "viewer"),
+    ("an@earlyrisk.local", "Phạm Minh An", "Dev@123456", False, "acc-demo-an", "Backend Engineer", "developer"),
+    ("binh@earlyrisk.local", "Lê Thanh Bình", "Dev@123456", False, "acc-demo-binh", "Backend Engineer", "developer"),
+    ("chi@earlyrisk.local", "Đỗ Thu Chi", "Dev@123456", False, "acc-demo-chi", "Backend Engineer", "developer"),
+    ("dung@earlyrisk.local", "Vũ Quốc Dũng", "Dev@123456", False, "acc-demo-dung", "Backend Engineer", "developer"),
+    ("qa@earlyrisk.local", "Lý Thu QA", "Qa@123456", False, "acc-demo-qa", "QA Engineer", "viewer"),
 )
 
 
@@ -32,6 +86,8 @@ def _upsert_user(
     name: str,
     password: str,
     is_admin: bool,
+    account_id: str,
+    job_title: str,
 ) -> User:
     user = session.execute(select(User).where(func.lower(User.email) == email.lower())).scalar_one_or_none()
     now = utcnow()
@@ -42,6 +98,8 @@ def _upsert_user(
             password_hash=hash_password(password),
             is_admin=is_admin,
             is_active=True,
+            account_id=account_id,
+            job_title=job_title,
             created_at=now,
         )
         session.add(user)
@@ -51,6 +109,8 @@ def _upsert_user(
         user.password_hash = hash_password(password)
         user.is_active = True
         user.is_admin = is_admin
+        user.account_id = account_id
+        user.job_title = job_title
         session.flush()
     return user
 
@@ -126,48 +186,23 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
     now = utcnow()
 
     if reset:
-        # Delete tables according to foreign key order
-        for model in (
-            Action,
-            Suggestion,
-            RiskState,
-            Score,
-            Link,
-            IssueSprint,
-            IssueVersion,
-            Change,
-            Sprint,
-            Version,
-            Issue,
-            ProjectMember,
-            Project,
-            User,
-        ):
+        for model in _RESET_DELETE_ORDER:
             session.query(model).delete()
         session.flush()
 
     # 1. Initialize Users & Permissions
-    _upsert_user(
-        session,
-        email="admin@earlyrisk.local",
-        name="Hệ Thống Quản Trị",
-        password="Admin@123456",
-        is_admin=True,
-    )
-    pm_user = _upsert_user(
-        session,
-        email="pm@earlyrisk.local",
-        name="Nguyễn Văn PM",
-        password="Pm@123456",
-        is_admin=False,
-    )
-    viewer_user = _upsert_user(
-        session,
-        email="viewer@earlyrisk.local",
-        name="Trần Thị Viewer",
-        password="Viewer@123456",
-        is_admin=False,
-    )
+    people: dict[str, User] = {}
+    for email, name, password, is_admin, account_id, job_title, _role in _DEMO_PEOPLE:
+        people[email] = _upsert_user(
+            session,
+            email=email,
+            name=name,
+            password=password,
+            is_admin=is_admin,
+            account_id=account_id,
+            job_title=job_title,
+        )
+    pm_user = people["pm@earlyrisk.local"]
 
     # 2. Project DEMO & Members
     project = session.get(Project, "DEMO")
@@ -188,8 +223,7 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
     session.flush()
 
     members_to_assign = [
-        (pm_user.id, "pm"),
-        (viewer_user.id, "viewer"),
+        (people[email].id, role) for email, *_rest, role in _DEMO_PEOPLE if role is not None
     ]
     for uid, role in members_to_assign:
         m = session.get(ProjectMember, ("DEMO", uid))
@@ -220,6 +254,44 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
         sprint.end_at = now + timedelta(days=7)
     session.flush()
 
+    closed = session.get(Sprint, 100)
+    if closed is None:
+        closed = Sprint(id=100, board_id=3, project_key="DEMO")
+        session.add(closed)
+    closed.name = "Sprint 0 - Đã đóng"
+    closed.state = "closed"
+    closed.start_at = now - timedelta(days=21)
+    closed.end_at = now - timedelta(days=7)
+    closed.complete_at = now - timedelta(days=7)
+
+    future = session.get(Sprint, 103)
+    if future is None:
+        future = Sprint(id=103, board_id=3, project_key="DEMO")
+        session.add(future)
+    future.name = "Sprint 3 - Sắp tới"
+    future.state = "future"
+    future.start_at = now + timedelta(days=8)
+    future.end_at = now + timedelta(days=22)
+    future.complete_at = None
+    session.flush()
+
+    released = session.get(Version, 200)
+    if released is None:
+        released = Version(id=200, project_key="DEMO")
+        session.add(released)
+    released.name = "v0.9"
+    released.released = True
+    released.release_date = now.date() - timedelta(days=30)
+
+    unreleased = session.get(Version, 202)
+    if unreleased is None:
+        unreleased = Version(id=202, project_key="DEMO")
+        session.add(unreleased)
+    unreleased.name = "v1.1"
+    unreleased.released = False
+    unreleased.release_date = now.date() + timedelta(days=45)
+    session.flush()
+
     # 4. Scenarios
     # Scenario 1: DEMO-101 (High risk due to sprint elapsed & model T0)
     # Scenario 2: DEMO-102 (Blocked by DEMO-105) & DEMO-105 (Sandbox API credentials)
@@ -227,6 +299,20 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
     # Scenario 4: DEMO-104 (LLM Suggestions cached)
     # Scenario 5: DEMO-106 (Safe / Done task)
     issues_data = [
+        {
+            "key": "DEMO-100",
+            "project_key": "DEMO",
+            "summary": "Nền tảng phân quyền và cổng API",
+            "issuetype": "Epic",
+            "priority": "High",
+            "priority_norm": 0.75,
+            "status": "In Progress",
+            "status_category": "indeterminate",
+            "story_points": 21.0,
+            "duedate": now.date() + timedelta(days=21),
+            "created_at": now - timedelta(days=12),
+            "updated_at": now,
+        },
         {
             "key": "DEMO-101",
             "project_key": "DEMO",
@@ -311,6 +397,21 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
             "created_at": now - timedelta(days=8),
             "updated_at": now - timedelta(days=1),
             "resolved_at": now - timedelta(days=1),
+        },
+        {
+            "key": "DEMO-117",
+            "project_key": "DEMO",
+            "parent_key": "DEMO-101",
+            "summary": "Viết middleware kiểm tra JWT",
+            "issuetype": "Sub-task",
+            "priority": "Medium",
+            "priority_norm": 0.5,
+            "status": "To Do",
+            "status_category": "new",
+            "story_points": 2.0,
+            "duedate": now.date() + timedelta(days=2),
+            "created_at": now - timedelta(days=2),
+            "updated_at": now,
         },
     ]
 
@@ -487,34 +588,100 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
                 setattr(issue, k, v)
     session.flush()
 
-    # Link DEMO-101 to Sprint 101
+    # Link DEMO-101 to the active sprint. DEMO-103 stays in the backlog with no IssueSprint row.
     issue_sprint = session.get(IssueSprint, ("DEMO-101", 101))
     if issue_sprint is None:
         issue_sprint = IssueSprint(issue_key="DEMO-101", sprint_id=101)
         session.add(issue_sprint)
     session.flush()
 
+    component = session.execute(
+        select(Component).where(Component.project_key == "DEMO", Component.name == "API")
+    ).scalar_one_or_none()
+    if component is None:
+        component = Component(project_key="DEMO", name="API", description="Cổng API và phân quyền", lead_user_id=pm_user.id)
+        session.add(component)
+        session.flush()
+    else:
+        component.description = "Cổng API và phân quyền"
+        component.lead_user_id = pm_user.id
+        session.flush()
+    issue_component = session.get(IssueComponent, ("DEMO-101", component.id))
+    if issue_component is None:
+        session.add(IssueComponent(issue_key="DEMO-101", component_id=component.id))
+    session.flush()
+
+    mention = f"@{pm_user.account_id}"
+    comment_body = f"{mention} xem lại phạm vi story trước khi đóng sprint"
+    comment = session.execute(
+        select(Comment).where(Comment.issue_key == "DEMO-101", Comment.body == comment_body)
+    ).scalar_one_or_none()
+    if comment is None:
+        session.add(Comment(
+            issue_key="DEMO-101",
+            author_id=pm_user.account_id,
+            author_name=pm_user.name,
+            body=comment_body,
+            mentions=[pm_user.account_id],
+            created_at=now - timedelta(hours=5),
+            updated_at=now - timedelta(hours=5),
+        ))
+
+    status_change = session.execute(
+        select(Change.id).where(Change.issue_key == "DEMO-101", Change.change_id == "demo-status-1", Change.idx == 0)
+    ).first()
+    if status_change is None:
+        session.add(Change(
+            issue_key="DEMO-101",
+            change_id="demo-status-1",
+            idx=0,
+            at=now - timedelta(days=1),
+            author_id=pm_user.account_id,
+            author_name=pm_user.name,
+            field="status",
+            from_str="To Do",
+            to_str="In Progress",
+        ))
+
+    work_comment = "Điều tra luồng JWT"
+    worklog = session.execute(
+        select(Worklog).where(Worklog.issue_key == "DEMO-101", Worklog.comment == work_comment)
+    ).scalar_one_or_none()
+    if worklog is None:
+        session.add(Worklog(
+            issue_key="DEMO-101",
+            author_id=pm_user.account_id,
+            author_name=pm_user.name,
+            time_spent_seconds=3600,
+            started_at=now - timedelta(hours=6),
+            comment=work_comment,
+            created_at=now - timedelta(hours=6),
+            updated_at=now - timedelta(hours=6),
+        ))
+    session.flush()
+
     # Links
+    # direction "0" is the inward Block side: source is blocked by an open target.
     links_data = [
-        ("DEMO-102", "DEMO-105", "is blocked by", "inward"),
+        ("DEMO-102", "DEMO-105", "Block", "0"),
     ]
     if rich_network:
         links_data.extend([
-            ("DEMO-107", "DEMO-105", "is blocked by", "inward"),
-            ("DEMO-111", "DEMO-105", "is blocked by", "inward"),
-            ("DEMO-107", "DEMO-102", "is blocked by", "inward"),
-            ("DEMO-114", "DEMO-107", "is blocked by", "inward"),
-            ("DEMO-115", "DEMO-114", "is blocked by", "inward"),
-            ("DEMO-101", "DEMO-108", "is blocked by", "inward"),
-            ("DEMO-103", "DEMO-108", "is blocked by", "inward"),
-            ("DEMO-109", "DEMO-108", "is blocked by", "inward"),
-            ("DEMO-110", "DEMO-101", "is blocked by", "inward"),
-            ("DEMO-115", "DEMO-110", "is blocked by", "inward"),
-            ("DEMO-112", "DEMO-103", "is blocked by", "inward"),
-            ("DEMO-111", "DEMO-109", "is blocked by", "inward"),
-            ("DEMO-113", "DEMO-104", "is blocked by", "inward"),
-            ("DEMO-108", "DEMO-106", "is blocked by", "inward"),
-            ("DEMO-101", "DEMO-116", "is blocked by", "inward"),
+            ("DEMO-107", "DEMO-105", "Block", "0"),
+            ("DEMO-111", "DEMO-105", "Block", "0"),
+            ("DEMO-107", "DEMO-102", "Block", "0"),
+            ("DEMO-114", "DEMO-107", "Block", "0"),
+            ("DEMO-115", "DEMO-114", "Block", "0"),
+            ("DEMO-101", "DEMO-108", "Block", "0"),
+            ("DEMO-103", "DEMO-108", "Block", "0"),
+            ("DEMO-109", "DEMO-108", "Block", "0"),
+            ("DEMO-110", "DEMO-101", "Block", "0"),
+            ("DEMO-115", "DEMO-110", "Block", "0"),
+            ("DEMO-112", "DEMO-103", "Block", "0"),
+            ("DEMO-111", "DEMO-109", "Block", "0"),
+            ("DEMO-113", "DEMO-104", "Block", "0"),
+            ("DEMO-108", "DEMO-106", "Block", "0"),
+            ("DEMO-101", "DEMO-116", "Block", "0"),
         ])
 
     for src, tgt, tstd, direct in links_data:
@@ -880,12 +1047,17 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
     session.commit()
 
     return {
-        "users": 3,
+        "users": len(_DEMO_PEOPLE),
         "projects": 1,
-        "project_members": 2,
-        "sprints": 1,
+        "project_members": sum(1 for person in _DEMO_PEOPLE if person[6] is not None),
+        "sprints": 4 if rich_network else 3,
+        "versions": 3 if rich_network else 2,
+        "components": 1,
         "issues": len(issues_data),
         "risk_states": len(risk_states_data),
         "links": len(links_data),
         "suggestions": 1,
+        "comments": 1,
+        "changes": 4 if rich_network else 1,
+        "worklogs": 1,
     }

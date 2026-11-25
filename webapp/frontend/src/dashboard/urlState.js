@@ -10,6 +10,9 @@ export const VIEWS = [
   'users',
   'project-settings',
   'settings',
+  'jira-board',
+  'backlog',
+  'navigator',
 ];
 
 export const DEFAULT_STATE = Object.freeze({

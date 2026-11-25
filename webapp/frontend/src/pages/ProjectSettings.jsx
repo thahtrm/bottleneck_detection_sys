@@ -18,13 +18,14 @@ import {
   IconMessageCircle,
   IconUsers,
 } from '@tabler/icons-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import { OpenProjectOnJira } from '../components/JiraLinks';
 import MemoryPrefsSection from '../components/settings/MemoryPrefsSection';
 import ProjectMembersSection from '../components/settings/ProjectMembersSection';
 import { useAuth } from '../context/AuthContext';
-import { generateHealthReport, toggleProjectTracking } from '../api/client';
+import { generateHealthReport, listComponents, listVersions, toggleProjectTracking } from '../api/client';
+import { jiraQueryKeys } from '../dashboard/jiraModel';
 import '../styles/kaggleTokens.css';
 
 function SettingsCard({ title, icon, children, right }) {
@@ -58,6 +59,16 @@ export default function ProjectSettings({
   const canEditMemory = Boolean(project) && (isAdmin || projectRole === 'pm');
   const canGenerateHealth = Boolean(project) && (isAdmin || projectRole === 'pm');
   const [toggling, setToggling] = useState(false);
+  const componentsQuery = useQuery({
+    queryKey: jiraQueryKeys.components(project),
+    queryFn: () => listComponents(project),
+    enabled: Boolean(project),
+  });
+  const versionsQuery = useQuery({
+    queryKey: jiraQueryKeys.versions(project),
+    queryFn: () => listVersions(project),
+    enabled: Boolean(project),
+  });
 
   const healthMut = useMutation({
     mutationFn: () => generateHealthReport(project),
@@ -159,6 +170,35 @@ export default function ProjectSettings({
             </Button>
           ) : null}
         </Group>
+
+        <SettingsCard title="Components and versions" icon={<IconFolders size={22} color="var(--color-secondary)" />}>
+          <Stack gap="xs">
+            <Text className="erw-settings-label">Components</Text>
+            {componentsQuery.isError ? (
+              <Text className="erw-settings-error">Components could not be loaded.</Text>
+            ) : null}
+            {componentsQuery.isSuccess && (componentsQuery.data || []).length === 0 ? (
+              <Text className="erw-settings-body">This project has no components.</Text>
+            ) : null}
+            {(componentsQuery.data || []).map((row) => (
+              <Text key={row.id} className="erw-settings-body">
+                {row.name}
+              </Text>
+            ))}
+            <Text className="erw-settings-label">Versions</Text>
+            {versionsQuery.isError ? (
+              <Text className="erw-settings-error">Versions could not be loaded.</Text>
+            ) : null}
+            {versionsQuery.isSuccess && (versionsQuery.data || []).length === 0 ? (
+              <Text className="erw-settings-body">This project has no versions.</Text>
+            ) : null}
+            {(versionsQuery.data || []).map((row) => (
+              <Text key={row.id} className="erw-settings-body">
+                {row.released ? `${row.name} (released)` : row.name}
+              </Text>
+            ))}
+          </Stack>
+        </SettingsCard>
 
         <SettingsCard title="Báo cáo sức khỏe" icon={<IconFileReport size={22} color="var(--color-secondary)" />}>
           <Stack gap="sm">

@@ -430,3 +430,103 @@ export async function removeProjectMember(projectKey, userId) {
   );
 }
 
+export async function listDemoUsers() {
+  return await apiFetch('/api/demo/users');
+}
+
+export async function quickSwitch(userId) {
+  return await apiFetch('/api/auth/quick-switch', {
+    method: 'POST',
+    body: { user_id: userId },
+  });
+}
+
+export async function createIssue(body) {
+  return await apiFetch('/api/issues', {
+    method: 'POST',
+    body,
+  });
+}
+
+export async function listProjectIssues(params) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value != null && String(value) !== '') query.set(key, String(value));
+  });
+  return await apiFetch(`/api/issues?${query.toString()}`);
+}
+
+export async function patchIssue(key, { fields, expectedUpdated }) {
+  return await apiFetch(`/api/issues/${encodeURIComponent(key)}`, {
+    method: 'PATCH',
+    body: { fields, expected_updated: expectedUpdated ?? null },
+  });
+}
+
+export async function transitionIssue(key, transitionId) {
+  return await apiFetch(`/api/issues/${encodeURIComponent(key)}/transitions`, {
+    method: 'POST',
+    body: { transition_id: transitionId },
+  });
+}
+
+export async function addIssueComment(key, body) {
+  return await apiFetch(`/api/issues/${encodeURIComponent(key)}/comments`, {
+    method: 'POST',
+    body: { body },
+  });
+}
+
+export async function getIssueActivity(key, kind = 'comments') {
+  const query = new URLSearchParams({ kind });
+  return await apiFetch(`/api/issues/${encodeURIComponent(key)}/activity?${query.toString()}`);
+}
+
+export async function getProjectBoard(projectKey) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/board`);
+}
+
+export async function listSprints(projectKey) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/sprints`);
+}
+
+export async function createSprint(projectKey, body) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/sprints`, {
+    method: 'POST',
+    body,
+  });
+}
+
+export async function startSprint(projectKey, sprintId) {
+  return await apiFetch(
+    `/api/projects/${encodeURIComponent(projectKey)}/sprints/${encodeURIComponent(sprintId)}/start`,
+    { method: 'POST' },
+  );
+}
+
+export async function completeSprint(projectKey, sprintId) {
+  return await apiFetch(
+    `/api/projects/${encodeURIComponent(projectKey)}/sprints/${encodeURIComponent(sprintId)}/complete`,
+    { method: 'POST' },
+  );
+}
+
+export async function rankBacklog(projectKey, { issueKey, sprintId }) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/backlog/rank`, {
+    method: 'POST',
+    body: { issue_key: issueKey, sprint_id: sprintId },
+  });
+}
+
+export async function listComponents(projectKey) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/components`);
+}
+
+export async function listVersions(projectKey) {
+  return await apiFetch(`/api/projects/${encodeURIComponent(projectKey)}/versions`);
+}
+
+export async function resetDemo() {
+  return await apiFetch('/api/admin/demo/reset', { method: 'POST' });
+}
+

@@ -4,12 +4,15 @@ import {
   IconAdjustments,
   IconAffiliate,
   IconFileReport,
+  IconLayoutBoard,
   IconLayoutKanban,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconList,
+  IconListSearch,
   IconMessageCircle,
   IconSettings,
+  IconStack2,
   IconUsers,
 } from '@tabler/icons-react';
 import '../styles/kaggleTokens.css';
@@ -26,6 +29,12 @@ const NAV_META = [
   { value: 'settings', label: 'Cài đặt', Icon: IconSettings },
 ];
 
+const JIRA_NAV = [
+  { value: 'jira-board', label: 'Jira board', Icon: IconLayoutBoard },
+  { value: 'backlog', label: 'Backlog', Icon: IconStack2 },
+  { value: 'navigator', label: 'Issues', Icon: IconListSearch },
+];
+
 export function buildViewNavItems({
   showChatNav,
   showUsersNav,
@@ -39,6 +48,13 @@ export function buildViewNavItems({
     if (item.projectOnly && !showProjectSettingsNav) return false;
     return true;
   });
+}
+
+export function buildNavGroups(flags) {
+  return [
+    { id: 'jira', label: 'Workspace / Jira', items: JIRA_NAV },
+    { id: 'risk', label: 'Risk & AI', items: buildViewNavItems(flags) },
+  ];
 }
 
 /**
@@ -57,14 +73,38 @@ export default function LeftNav({
   onToggleCollapsed,
   showCollapseToggle = false,
 }) {
-  const items = buildViewNavItems({
+  const groups = buildNavGroups({
     showChatNav,
     showUsersNav,
     showProjectSettingsNav,
     showReportsNav,
   });
+  const items = groups.flatMap((group) => group.items);
   const active = items.some((item) => item.value === view) ? view : 'board';
   const scopeClass = collapsed ? 'erw-nav-scope erw-nav-collapsed' : 'erw-nav-scope';
+
+  const renderItem = ({ value, label, Icon }) => {
+    const isActive = value === active;
+    const button = (
+      <button
+        type="button"
+        className="erw-nav-item"
+        data-active={isActive ? 'true' : 'false'}
+        aria-current={isActive ? 'page' : undefined}
+        aria-label={label}
+        onClick={() => onViewChange && onViewChange(value)}
+      >
+        <Icon size={20} stroke={1.75} className="erw-nav-icon" aria-hidden />
+        <span className="erw-nav-label">{label}</span>
+      </button>
+    );
+    if (!collapsed) return <React.Fragment key={value}>{button}</React.Fragment>;
+    return (
+      <Tooltip key={value} label={label} position="right" withArrow openDelay={200}>
+        {button}
+      </Tooltip>
+    );
+  };
 
   return (
     <nav className={scopeClass} aria-label="Điều hướng chính">
@@ -72,30 +112,12 @@ export default function LeftNav({
         {collapsed ? <AppLogo variant="mark" size="sm" /> : <AppLogo variant="mark" size="sm" showTitle />}
       </div>
       <Stack gap="xs" className="erw-nav-stack">
-        {items.map(({ value, label, Icon }) => {
-          const isActive = value === active;
-          const button = (
-            <button
-              type="button"
-              className="erw-nav-item"
-              data-active={isActive ? 'true' : 'false'}
-              aria-current={isActive ? 'page' : undefined}
-              aria-label={label}
-              onClick={() => onViewChange && onViewChange(value)}
-            >
-              <Icon size={20} stroke={1.75} className="erw-nav-icon" aria-hidden />
-              <span className="erw-nav-label">{label}</span>
-            </button>
-          );
-
-          if (!collapsed) return <React.Fragment key={value}>{button}</React.Fragment>;
-
-          return (
-            <Tooltip key={value} label={label} position="right" withArrow openDelay={200}>
-              {button}
-            </Tooltip>
-          );
-        })}
+        {groups.map((group) => (
+          <Stack key={group.id} gap="xs">
+            <div className="erw-nav-group">{group.label}</div>
+            {group.items.map(renderItem)}
+          </Stack>
+        ))}
       </Stack>
 
       {showCollapseToggle && onToggleCollapsed ? (

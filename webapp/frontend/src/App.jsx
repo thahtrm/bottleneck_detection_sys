@@ -20,6 +20,13 @@ import ActionConfirmModal from './components/ActionConfirmModal';
 import NetworkGraph from './components/NetworkGraph';
 import PmChatBubbleShell from './components/chat/PmChatBubbleShell';
 import PmChatPage from './components/chat/PmChatPage';
+import CreateIssueModal from './components/jira/CreateIssueModal';
+import IssueDetail from './components/jira/IssueDetail';
+import JiraBoard from './components/jira/JiraBoard';
+import BacklogView from './components/jira/BacklogView';
+import IssueNavigator from './components/jira/IssueNavigator';
+
+const JIRA_VIEWS = new Set(['jira-board', 'backlog', 'navigator']);
 
 const NAV_EXPANDED_WIDTH = 220;
 const NAV_COLLAPSED_WIDTH = 64;
@@ -49,6 +56,7 @@ function AppContent() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [confirmModalData, setConfirmModalData] = useState(null);
   const [confirmModalOpened, setConfirmModalOpened] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [suggestionKey, setSuggestionKey] = useState(null);
   const [suggestionNonce, setSuggestionNonce] = useState(0);
   // Only apply desktop collapse after media query resolves (avoid flash on mobile).
@@ -103,6 +111,10 @@ function AppContent() {
   const canChatOnSelected =
     Boolean(state.project) && (user.is_admin || selectedProjectRole === 'pm');
   // §8.1 A+B / §8.4 A: Báo cáo nav for members who can read project reports.
+  const canEditJira = Boolean(
+    user.is_admin || selectedProjectRole === 'pm' || selectedProjectRole === 'developer',
+  );
+  const canManageSprint = Boolean(user.is_admin || selectedProjectRole === 'pm');
   const canReadReportsOnSelected =
     Boolean(state.project) &&
     (user.is_admin || selectedProjectRole === 'pm' || selectedProjectRole === 'viewer');
@@ -141,9 +153,11 @@ function AppContent() {
   const boardLike = view === 'board' || view === 'list';
   // Chat tab must fill the viewport like Board/List so the page never scrolls;
   // message history scrolls inside PmChatTimeline instead.
-  const fillViewport = boardLike || view === 'chat';
+  const jiraDetail = JIRA_VIEWS.has(view) && Boolean(state.issue);
+  const fillViewport = boardLike || view === 'chat' || ((view === 'jira-board' || view === 'backlog') && !jiraDetail);
   const panelOpen =
     Boolean(state.issue) &&
+    !JIRA_VIEWS.has(view) &&
     view !== 'settings' &&
     view !== 'project-settings' &&
     view !== 'chat' &&
@@ -183,6 +197,7 @@ function AppContent() {
           isRefreshing={isRefreshing}
           mobileNavOpened={mobileNavOpened}
           onToggleMobileNav={() => setMobileNavOpened((open) => !open)}
+          onCreate={() => setCreateOpen(true)}
         />
       </AppShell.Header>
 
@@ -261,6 +276,22 @@ function AppContent() {
           />
         )}
         {view === 'users' && <UsersAdmin />}
+        {jiraDetail && (
+          <IssueDetail issueKey={state.issue} canEdit={canEditJira} onClose={() => selectIssue(null)} />
+        )}
+        {view === 'jira-board' && !jiraDetail && (
+          <Box style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <JiraBoard project={state.project} canEdit={canEditJira} onSelectIssue={selectIssue} />
+          </Box>
+        )}
+        {view === 'backlog' && !jiraDetail && (
+          <Box style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+            <BacklogView project={state.project} canRank={canManageSprint} onSelectIssue={selectIssue} />
+          </Box>
+        )}
+        {view === 'navigator' && !jiraDetail && (
+          <IssueNavigator project={state.project} q={state.q} onSelectIssue={selectIssue} />
+        )}
         {view === 'graph' && (
           <NetworkGraph selectedProject={state.project} onSelectIssue={selectIssue} selectedIssueKey={state.issue} />
         )}
@@ -297,6 +328,12 @@ function AppContent() {
           />
         )}
 
+        <CreateIssueModal
+          opened={createOpen}
+          onClose={() => setCreateOpen(false)}
+          project={state.project}
+          projects={projects}
+        />
         <ActionConfirmModal
           opened={confirmModalOpened}
           onClose={() => setConfirmModalOpened(false)}

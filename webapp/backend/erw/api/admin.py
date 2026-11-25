@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from erw import jobs
 from erw.auth import hash_password, require_admin
 from erw.db import get_session, utcnow
+from erw.demo.seed import seed_demo_data
 from erw.integrations.local_jira import LocalJiraService
 from erw.kv import get_kv, set_kv
 from erw.ml.batch import _batch_lock
@@ -468,3 +469,18 @@ def delete_user(
 
     session.delete(row)
     session.commit()
+
+
+@admin_router.post("/demo/reset")
+def reset_demo_data(
+    request: Request,
+    user: User = Depends(require_admin),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    app_settings = getattr(request.app.state, "settings", None) or settings
+    if getattr(app_settings, "jira_mode", "local") != "local":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only available in local mode")
+    summary = seed_demo_data(session, reset=True)
+    session.commit()
+    return summary

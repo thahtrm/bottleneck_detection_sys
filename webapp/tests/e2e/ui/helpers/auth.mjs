@@ -15,7 +15,7 @@ export const ROLE_CREDENTIALS = {
     role: 'viewer',
   },
   developer: {
-    email: 'dev@earlyrisk.local',
+    email: 'an@earlyrisk.local',
     password: 'Dev@123456',
     role: 'developer',
   },
