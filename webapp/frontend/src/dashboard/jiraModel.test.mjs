@@ -56,6 +56,7 @@ test('field edits send only the values that differ from the issue', () => {
   const issue = {
     summary: 'Ship it',
     description: 'Now',
+    assignee_id: 'acc-ada',
     assignee_name: 'Ada',
     priority: 'Medium',
     duedate: '2026-12-01',
@@ -63,7 +64,7 @@ test('field edits send only the values that differ from the issue', () => {
   assert.deepEqual(changedIssueFields(issue, {
     summary: 'Ship it',
     description: 'Now',
-    assignee: 'Ada',
+    assignee: 'acc-ada',
     priority: 'High',
     duedate: '2026-12-01',
   }), { priority: 'High' });

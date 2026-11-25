@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Checkbox, Group, Modal, Select, Stack, Text, TextInput } from '@mantine/core';
+import { IconFlag, IconPlus } from '@tabler/icons-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createIssue } from '../../api/client';
 import { ISSUE_TYPES, PRIORITIES, jiraQueryKeys } from '../../dashboard/jiraModel';
+import AssigneeSelect from './AssigneeSelect';
+import { IssueTypeMark } from './jiraMarks';
 
 const EMPTY = { summary: '', issuetype: 'Task', priority: 'Medium', assignee: '' };
 
@@ -22,10 +25,12 @@ export default function CreateIssueModal({ opened, onClose, project = '', projec
   }, [opened, project]);
 
   const activeProject = project || projectKey;
-  const projectOptions = projects.map((item) => ({
-    value: item.key,
-    label: item.name ? `${item.key} — ${item.name}` : item.key,
-  }));
+  const projectOptions = projects
+    .filter((item) => item.origin !== 'jira')
+    .map((item) => ({
+      value: item.key,
+      label: item.name ? `${item.key} — ${item.name}` : item.key,
+    }));
 
   const createMut = useMutation({
     mutationFn: createIssue,
@@ -71,7 +76,12 @@ export default function CreateIssueModal({ opened, onClose, project = '', projec
     <Modal
       opened={opened}
       onClose={onClose}
-      title="+ Create"
+      title={(
+        <Group gap={6}>
+          <IconPlus size={16} />
+          <span>Create issue</span>
+        </Group>
+      )}
       centered
     >
       <Stack gap="sm" className="erw-settings-scope">
@@ -82,36 +92,46 @@ export default function CreateIssueModal({ opened, onClose, project = '', projec
             label="Project"
             data={projectOptions}
             value={projectKey || null}
-            onChange={(value) => setProjectKey(value || '')}
+            onChange={(value) => {
+              setProjectKey(value || '');
+              setForm((current) => ({ ...current, assignee: '' }));
+            }}
             placeholder="Select a project"
             searchable
           />
         )}
         <TextInput
           label="Summary"
+          size="sm"
           value={form.summary}
           onChange={(event) => setForm((current) => ({ ...current, summary: event.currentTarget.value }))}
           required
         />
-        <Select
-          label="Issue type"
-          data={ISSUE_TYPES}
-          value={form.issuetype}
-          onChange={(value) => setForm((current) => ({ ...current, issuetype: value || 'Task' }))}
-          allowDeselect={false}
-        />
-        <Select
-          label="Priority"
-          data={PRIORITIES}
-          value={form.priority}
-          onChange={(value) => setForm((current) => ({ ...current, priority: value || 'Medium' }))}
-          allowDeselect={false}
-        />
-        <TextInput
+        <Group grow>
+          <Select
+            label="Issue type"
+            size="sm"
+            leftSection={<IssueTypeMark type={form.issuetype} />}
+            data={ISSUE_TYPES}
+            value={form.issuetype}
+            onChange={(value) => setForm((current) => ({ ...current, issuetype: value || 'Task' }))}
+            allowDeselect={false}
+          />
+          <Select
+            label="Priority"
+            size="sm"
+            leftSection={<IconFlag size={14} />}
+            data={PRIORITIES}
+            value={form.priority}
+            onChange={(value) => setForm((current) => ({ ...current, priority: value || 'Medium' }))}
+            allowDeselect={false}
+          />
+        </Group>
+        <AssigneeSelect
           label="Assignee"
+          projectKey={activeProject}
           value={form.assignee}
-          onChange={(event) => setForm((current) => ({ ...current, assignee: event.currentTarget.value }))}
-          placeholder="Optional name or account"
+          onChange={(assignee) => setForm((current) => ({ ...current, assignee }))}
         />
         <Checkbox
           label="Create another"
@@ -124,7 +144,7 @@ export default function CreateIssueModal({ opened, onClose, project = '', projec
           <Button className="erw-settings-btn-secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button className="erw-settings-btn-primary" loading={createMut.isPending} onClick={submit}>
+          <Button className="erw-settings-btn-primary" leftSection={<IconPlus size={14} />} loading={createMut.isPending} onClick={submit}>
             Create
           </Button>
         </Group>

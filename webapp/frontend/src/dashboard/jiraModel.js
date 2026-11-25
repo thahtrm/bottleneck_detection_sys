@@ -85,7 +85,7 @@ export function changedIssueFields(issue, draft) {
   const fields = {};
   if (draft.summary !== (issue.summary || '')) fields.summary = draft.summary;
   if (draft.description !== issueDescription(issue)) fields.description = draft.description;
-  const assignee = issue.assignee_name || issue.assignee_id || '';
+  const assignee = issue.assignee_id || issue.assignee_name || '';
   if (draft.assignee !== assignee) fields.assignee = draft.assignee.trim() ? draft.assignee.trim() : null;
   if (draft.priority !== (issue.priority || '')) fields.priority = draft.priority;
   const due = (issue.duedate || '').slice(0, 10);

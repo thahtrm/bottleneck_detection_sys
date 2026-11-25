@@ -124,6 +124,8 @@ export default function UsersAdmin() {
           <Group gap="sm">
             <Button
               className="erw-settings-btn-secondary"
+              size="xs"
+              leftSection={<IconRefresh size={14} />}
               loading={resetMut.isPending}
               onClick={() => {
                 if (!window.confirm('Reset demo data? This replaces the current demo project and issues.')) return;

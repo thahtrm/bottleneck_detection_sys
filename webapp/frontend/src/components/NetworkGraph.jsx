@@ -117,6 +117,7 @@ export default function NetworkGraph({ selectedProject = '', onSelectIssue, sele
   const { data: graphData, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['dashboard-graph', selectedProject],
     queryFn: () => getDashboardGraph(selectedProject || null),
+    enabled: Boolean(selectedProject),
     staleTime: 15000,
   });
 
@@ -236,6 +237,14 @@ export default function NetworkGraph({ selectedProject = '', onSelectIssue, sele
     setActiveFilter((prev) => (prev === filter ? 'ALL' : filter));
     if (!isOverview(validView)) setView({ mode: validView.back });
   };
+
+  if (!selectedProject) {
+    return (
+      <Alert color="gray" variant="light" title="Chọn một dự án">
+        <Text size="sm">Đồ thị chỉ vẽ một dự án simulate hoặc một dự án Jira, không gộp hai nguồn.</Text>
+      </Alert>
+    );
+  }
 
   return (
     <Card withBorder radius="md" padding="md" shadow="sm" style={{ position: 'relative', minHeight: 650 }}>

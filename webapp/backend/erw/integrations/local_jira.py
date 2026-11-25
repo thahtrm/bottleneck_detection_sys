@@ -2180,6 +2180,7 @@ class LocalJiraService:
             workflow={},
             status_map={},
             thresholds={},
+            origin="simulate",
         )
         session.add(project)
         session.add(ProjectMember(project_key=clean_key, user_id=actor.id, role="pm"))

@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
 import {
+  ActionIcon,
   Button,
   Group,
   Select,
-  SimpleGrid,
-  Stack,
   Text,
   Textarea,
   TextInput,
-  Title,
 } from '@mantine/core';
+import {
+  IconArrowLeft,
+  IconCalendar,
+  IconFlag,
+  IconMessage,
+  IconSend,
+} from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   addIssueComment,
@@ -25,12 +30,14 @@ import {
   issueDescription,
   jiraQueryKeys,
 } from '../../dashboard/jiraModel';
+import AssigneeSelect from './AssigneeSelect';
+import { IssueTypeMark, PersonMark, StatusMark } from './jiraMarks';
 
 function draftFromIssue(issue) {
   return {
     summary: issue.summary || '',
     description: issueDescription(issue),
-    assignee: issue.assignee_name || issue.assignee_id || '',
+    assignee: issue.assignee_id || issue.assignee_name || '',
     priority: issue.priority || 'Medium',
     duedate: (issue.duedate || '').slice(0, 10),
   };
@@ -127,67 +134,90 @@ export default function IssueDetail({ issueKey, canEdit = false, onClose }) {
 
   return (
     <div className="erw-settings-scope erw-jira-scope">
-      <Group justify="space-between">
-        <Title order={2} className="erw-settings-page-title">
-          {issue.key}
-        </Title>
-        <Button className="erw-settings-btn-secondary" onClick={onClose}>
-          Back
-        </Button>
-      </Group>
+      <header className="erw-jira-bar">
+        <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Back" onClick={onClose}>
+          <IconArrowLeft size={16} />
+        </ActionIcon>
+        <IssueTypeMark type={issue.issuetype} />
+        <span className="erw-jira-key">{issue.key}</span>
+        <span className="erw-jira-inline">
+          <StatusMark status={issue.status} />
+          {issue.status || 'No status'}
+        </span>
+      </header>
       {error ? <Text className="erw-settings-error">{error}</Text> : null}
-      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-        <Stack gap="sm">
+      <div className="erw-jira-detail">
+        <div className="erw-jira-detail-main">
           <TextInput
-            label="Summary"
+            size="sm"
+            aria-label="Summary"
             value={draft.summary}
             disabled={!canEdit}
             onChange={(event) => setDraft((current) => ({ ...current, summary: event.currentTarget.value }))}
           />
           <Textarea
-            label="Description"
-            minRows={8}
+            size="sm"
+            aria-label="Description"
+            placeholder="Description"
+            minRows={4}
+            autosize
+            maxRows={10}
             value={draft.description}
             disabled={!canEdit}
             onChange={(event) => setDraft((current) => ({ ...current, description: event.currentTarget.value }))}
           />
-          <Stack gap="xs">
+          <div className="erw-jira-comments">
+            <span className="erw-jira-inline erw-settings-meta">
+              <IconMessage size={14} />
+              Comments
+            </span>
             {commentsQuery.isError ? <Text className="erw-settings-error">Comments could not be loaded.</Text> : null}
             {commentsQuery.isSuccess && comments.length === 0 ? (
-              <Text className="erw-settings-body">No comments yet.</Text>
+              <Text className="erw-jira-empty">No comments yet.</Text>
             ) : null}
             {comments.map((item) => (
-              <div key={item.id} className="erw-settings-field">
-                <Text className="erw-settings-meta">{item.author_name || 'Someone'}</Text>
-                <Text className="erw-settings-body">{item.body}</Text>
+              <div key={item.id} className="erw-jira-comment">
+                <PersonMark name={item.author_name} />
+                <div>
+                  <Text className="erw-settings-meta">{item.author_name || 'Someone'}</Text>
+                  <Text className="erw-settings-body">{item.body}</Text>
+                </div>
               </div>
             ))}
-          </Stack>
-          <Textarea
-            label="Comment"
-            minRows={3}
-            value={comment}
-            disabled={!canEdit}
-            onChange={(event) => setComment(event.currentTarget.value)}
-          />
-          <Group>
-            <Button
-              className="erw-settings-btn-secondary"
+          </div>
+          <Group gap={6} align="flex-end" wrap="nowrap">
+            <Textarea
+              style={{ flex: 1 }}
+              size="xs"
+              aria-label="Comment"
+              placeholder="Comment"
+              minRows={1}
+              autosize
+              maxRows={4}
+              value={comment}
+              disabled={!canEdit}
+              onChange={(event) => setComment(event.currentTarget.value)}
+            />
+            <ActionIcon
+              variant="filled"
+              color="dark"
+              size="lg"
+              aria-label="Comment"
               disabled={!canEdit || !comment.trim()}
               loading={commentMut.isPending}
               onClick={() => commentMut.mutate(comment.trim())}
             >
-              Comment
-            </Button>
+              <IconSend size={16} />
+            </ActionIcon>
           </Group>
-        </Stack>
-        <Stack gap="sm">
-          <Text className="erw-settings-label">Status</Text>
-          <Text className="erw-settings-body">{issue.status || 'No status'}</Text>
+        </div>
+        <aside className="erw-jira-detail-side">
           {canEdit ? (
             <Select
-              label="Transition"
-              placeholder="Move to a status"
+              size="xs"
+              aria-label="Transition"
+              placeholder="Move status"
+              leftSection={<StatusMark status={issue.status} />}
               data={transitionData}
               value={null}
               disabled={transitionsQuery.isError || transitionData.length === 0}
@@ -199,14 +229,18 @@ export default function IssueDetail({ issueKey, canEdit = false, onClose }) {
           {transitionsQuery.isError ? (
             <Text className="erw-settings-error">Transitions could not be loaded.</Text>
           ) : null}
-          <TextInput
-            label="Assignee"
+          <AssigneeSelect
+            size="xs"
+            projectKey={issue.project_key}
             value={draft.assignee}
+            currentLabel={issue.assignee_name}
             disabled={!canEdit}
-            onChange={(event) => setDraft((current) => ({ ...current, assignee: event.currentTarget.value }))}
+            onChange={(assignee) => setDraft((current) => ({ ...current, assignee }))}
           />
           <Select
-            label="Priority"
+            size="xs"
+            aria-label="Priority"
+            leftSection={<IconFlag size={14} />}
             data={priorityData}
             value={draft.priority}
             disabled={!canEdit}
@@ -214,19 +248,21 @@ export default function IssueDetail({ issueKey, canEdit = false, onClose }) {
             onChange={(value) => setDraft((current) => ({ ...current, priority: value || current.priority }))}
           />
           <TextInput
-            label="Due date"
+            size="xs"
+            aria-label="Due date"
             type="date"
+            leftSection={<IconCalendar size={14} />}
             value={draft.duedate}
             disabled={!canEdit}
             onChange={(event) => setDraft((current) => ({ ...current, duedate: event.currentTarget.value }))}
           />
           {canEdit ? (
-            <Button className="erw-settings-btn-primary" loading={saveMut.isPending} onClick={save}>
+            <Button size="xs" className="erw-settings-btn-primary" loading={saveMut.isPending} onClick={save}>
               Save
             </Button>
           ) : null}
-        </Stack>
-      </SimpleGrid>
+        </aside>
+      </div>
     </div>
   );
 }

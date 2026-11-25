@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Group, Text, Title } from '@mantine/core';
+import { Text } from '@mantine/core';
+import { IconLayoutBoard } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getIssueTransitions, getProjectBoard, transitionIssue } from '../../api/client';
 import { jiraQueryKeys, transitionIdForMove } from '../../dashboard/jiraModel';
 import JiraCard from './JiraCard';
+import { StatusMark } from './jiraMarks';
 
 export default function JiraBoard({ project, canEdit = false, onSelectIssue }) {
   const queryClient = useQueryClient();
@@ -56,19 +58,22 @@ export default function JiraBoard({ project, canEdit = false, onSelectIssue }) {
     }
   };
 
+  const issueCount = columns.reduce((sum, column) => sum + (column.issues || []).length, 0);
+
   return (
     <div className="erw-settings-scope erw-jira-scope">
-      <Group justify="space-between">
-        <Title order={3} className="erw-settings-page-title">
-          Jira board
-        </Title>
-        <Text className="erw-settings-meta">{project}</Text>
-      </Group>
+      <header className="erw-jira-bar">
+        <IconLayoutBoard size={16} stroke={1.75} aria-hidden />
+        <h2>Jira board</h2>
+        <span className="erw-jira-count">{project}</span>
+        <span className="erw-jira-count">{issueCount}</span>
+      </header>
       {moveError ? <Text className="erw-settings-error">{moveError}</Text> : null}
       {columns.length === 0 ? <Text className="erw-settings-body">This project has no workflow columns.</Text> : null}
       <div className="erw-jira-board">
         {columns.map((column) => {
           const name = column.name || column.status;
+          const cards = column.issues || [];
           return (
             <section
               key={name}
@@ -82,10 +87,12 @@ export default function JiraBoard({ project, canEdit = false, onSelectIssue }) {
               onDragLeave={() => setOverColumn((current) => (current === name ? null : current))}
               onDrop={(event) => onDrop(event, column)}
             >
-              <Text className="erw-settings-label">
-                {name} ({(column.issues || []).length})
-              </Text>
-              {(column.issues || []).map((issue) => (
+              <header className="erw-jira-col-head">
+                <StatusMark status={name} />
+                <span>{name}</span>
+                <span className="erw-jira-count">{cards.length}</span>
+              </header>
+              {cards.map((issue) => (
                 <JiraCard key={issue.key} issue={issue} draggable={canEdit} onOpen={onSelectIssue} />
               ))}
             </section>

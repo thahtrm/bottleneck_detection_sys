@@ -75,6 +75,7 @@ class Project(Base):
     lead_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     issue_seq: Mapped[int] = mapped_column(Integer, default=0)
     workflow: Mapped[Any] = mapped_column(JSON, default=dict)
+    origin: Mapped[str] = mapped_column(String, default="simulate")  # jira | simulate
 
 
 class ProjectMember(Base):

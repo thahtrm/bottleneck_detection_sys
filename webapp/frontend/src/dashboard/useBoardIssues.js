@@ -9,6 +9,7 @@ export function useBoardIssues({ project, q, sprint }) {
   const { data, dataUpdatedAt, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: ['dashboard-board', project, search, sprint],
     queryFn: () => getBoard({ project, q: search, sprint }),
+    enabled: Boolean(project),
     refetchInterval: 30000,
     staleTime: 10000,
     retry: (failures, err) => !(err.status >= 400 && err.status < 500) && failures < 3,

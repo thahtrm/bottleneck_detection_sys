@@ -11,6 +11,8 @@ services:
       - webapp/backend/.env
     environment:
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      # Local Jira writes (drag, comments, create) are rejected unless this is local.
+      JIRA_MODE: local
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

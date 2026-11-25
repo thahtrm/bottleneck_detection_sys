@@ -16,7 +16,7 @@ from erw.auth import get_session, require_authenticated_user, require_developer,
 from erw.integrations.jira import JiraClient, JiraError
 from erw.integrations.llm import enqueue_suggestion, get_cached_suggestion
 from erw.integrations.local_jira import LocalJiraService
-from erw.models import Action, Change, Issue, Link, RiskState, Score, Suggestion, User
+from erw.models import Action, Change, Issue, Link, Project, RiskState, Score, Suggestion, User
 from erw.settings import Settings, get_settings
 
 issues_router = APIRouter(prefix="/api/issues", tags=["issues"])
@@ -74,10 +74,29 @@ class WorklogBody(BaseModel):
     comment: str | None = None
 
 
-def local_mode_or_403(request: Request, settings: Settings) -> Settings:
+def _issue_project_key(session: Session, key: str) -> str:
+    issue = session.get(Issue, key)
+    if issue is not None:
+        return issue.project_key
+    return key.split("-", 1)[0]
+
+
+def local_mode_or_403(
+    request: Request,
+    settings: Settings,
+    session: Session | None = None,
+    project_key: str | None = None,
+) -> Settings:
     app_settings = getattr(request.app.state, "settings", None) or settings
     if getattr(app_settings, "jira_mode", "local") != "local":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only available in local mode")
+    if session is not None and project_key:
+        project = session.get(Project, project_key)
+        if project is not None and project.origin != "simulate":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dự án Jira được cập nhật từ webhook, không sửa tại đây",
+            )
     return app_settings
 
 
@@ -280,8 +299,7 @@ def create_issue(
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
     app_settings = getattr(request.app.state, "settings", None) or settings
-    if getattr(app_settings, "jira_mode", "local") != "local":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Issue create is only available in local mode")
+    local_mode_or_403(request, settings, session, body.project_key)
     require_developer(body.project_key, user=user, session=session)
     try:
         issue = LocalJiraService.create_issue(
@@ -482,7 +500,7 @@ def update_issue(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     try:
@@ -510,7 +528,7 @@ def transition_issue(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     try:
@@ -535,7 +553,7 @@ def delete_issue(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> Response:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_pm(issue.project_key, user=user, session=session)
     try:
@@ -555,7 +573,7 @@ def create_link(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     try:
@@ -582,7 +600,7 @@ def remove_link(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> Response:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     try:
@@ -611,7 +629,7 @@ def clone_issue(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     try:
@@ -637,7 +655,7 @@ def move_issue(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     try:
@@ -694,7 +712,7 @@ def watch_issue(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     return _watch_vote(session, key, user, remove=False, vote=False)
 
 
@@ -706,7 +724,7 @@ def unwatch_issue(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     return _watch_vote(session, key, user, remove=True, vote=False)
 
 
@@ -718,7 +736,7 @@ def vote_issue(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     return _watch_vote(session, key, user, remove=False, vote=True)
 
 
@@ -730,7 +748,7 @@ def unvote_issue(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     return _watch_vote(session, key, user, remove=True, vote=True)
 
 
@@ -743,7 +761,7 @@ def create_comment(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     try:
@@ -764,7 +782,7 @@ def edit_comment(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     try:
@@ -791,7 +809,7 @@ def remove_comment(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> Response:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     try:
@@ -828,7 +846,7 @@ def create_worklog(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     try:
@@ -863,7 +881,7 @@ async def upload_attachment(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, _issue_project_key(session, key))
     issue = _issue_or_404(session, key)
     require_developer(issue.project_key, user=user, session=session)
     filename, content, mime_type = _multipart_file(await request.body(), request.headers.get("content-type", ""))

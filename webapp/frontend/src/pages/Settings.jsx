@@ -308,6 +308,7 @@ export default function Settings({
                     <Table.Tr>
                       <Table.Th>Mã</Table.Th>
                       <Table.Th>Tên</Table.Th>
+                      <Table.Th>Nguồn</Table.Th>
                       <Table.Th>Vai trò</Table.Th>
                       <Table.Th>Theo dõi</Table.Th>
                     </Table.Tr>
@@ -324,6 +325,11 @@ export default function Settings({
                           <Text size="sm" fw={500}>
                             {item.name || '—'}
                           </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge color={item.origin === 'jira' ? 'orange' : 'violet'} size="sm" variant="light">
+                            {item.origin === 'jira' ? 'Jira' : 'Simulate'}
+                          </Badge>
                         </Table.Td>
                         <Table.Td>
                           <Text size="sm">{user.is_admin ? 'admin' : item.role || 'viewer'}</Text>

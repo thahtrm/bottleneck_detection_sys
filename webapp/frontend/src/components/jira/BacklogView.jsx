@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Button, Group, Stack, Text, TextInput, Title } from '@mantine/core';
+import { Button, Group, Text, TextInput } from '@mantine/core';
+import { IconCircleCheck, IconPlayerPlay, IconPlus, IconStack2 } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { completeSprint, createSprint, listProjectIssues, listSprints, rankBacklog, startSprint } from '../../api/client';
 import { backlogIssues, issuesForSprint, jiraQueryKeys, openSprints } from '../../dashboard/jiraModel';
@@ -18,12 +19,12 @@ function DropLane({ title, meta, over, canDrop, onOver, onLeave, onDrop, empty, 
       onDragLeave={onLeave}
       onDrop={onDrop}
     >
-      <Group justify="space-between">
-        <Text className="erw-settings-label">{title}</Text>
+      <header className="erw-jira-col-head">
+        <span>{title}</span>
         {meta}
-      </Group>
+      </header>
       {empty}
-      <Stack gap="xs">{children}</Stack>
+      <div className="erw-jira-rows">{children}</div>
     </section>
   );
 }
@@ -105,32 +106,35 @@ export default function BacklogView({ project, canRank = false, onSelectIssue })
 
   return (
     <div className="erw-settings-scope erw-jira-scope">
-      <Group justify="space-between" align="flex-end">
-        <Title order={3} className="erw-settings-page-title">
-          Backlog
-        </Title>
+      <header className="erw-jira-bar">
+        <IconStack2 size={16} stroke={1.75} aria-hidden />
+        <h2>Backlog</h2>
+        <span className="erw-jira-count">{project}</span>
         {canRank ? (
-          <Group gap="xs">
+          <Group gap={6} wrap="nowrap" className="erw-jira-bar-actions">
             <TextInput
+              size="xs"
               placeholder="Sprint name"
               value={name}
               onChange={(event) => setName(event.currentTarget.value)}
               aria-label="Sprint name"
             />
             <Button
+              size="xs"
               className="erw-settings-btn-primary"
+              leftSection={<IconPlus size={14} />}
               disabled={!name.trim()}
               loading={createMut.isPending}
               onClick={() => createMut.mutate()}
             >
-              Create sprint
+              Sprint
             </Button>
           </Group>
         ) : null}
-      </Group>
+      </header>
       {error ? <Text className="erw-settings-error">{error}</Text> : null}
       {!active ? <Text className="erw-settings-body">No active sprint.</Text> : null}
-      <Stack gap="md">
+      <div className="erw-jira-lanes">
         {sprints.map((sprint) => {
           const cards = issuesForSprint(issues, sprint.id);
           return (
@@ -143,30 +147,36 @@ export default function BacklogView({ project, canRank = false, onSelectIssue })
               onLeave={() => setOverLane((current) => (current === sprint.id ? null : current))}
               onDrop={(event) => dropOn(event, sprint.id)}
               meta={
-                canRank && sprint.state === 'active' ? (
-                  <Button
-                    className="erw-settings-btn-secondary"
-                    size="xs"
-                    loading={completeMut.isPending}
-                    onClick={() => completeMut.mutate(sprint.id)}
-                  >
-                    Complete sprint
-                  </Button>
-                ) : canRank && sprint.state === 'future' ? (
-                  <Button
-                    className="erw-settings-btn-secondary"
-                    size="xs"
-                    loading={startMut.isPending}
-                    onClick={() => startMut.mutate(sprint.id)}
-                  >
-                    Start sprint
-                  </Button>
-                ) : null
+                <Group gap={6} wrap="nowrap">
+                  <span className="erw-jira-count">{cards.length}</span>
+                  {canRank && sprint.state === 'active' ? (
+                    <Button
+                      className="erw-settings-btn-secondary"
+                      size="compact-xs"
+                      leftSection={<IconCircleCheck size={14} />}
+                      loading={completeMut.isPending}
+                      onClick={() => completeMut.mutate(sprint.id)}
+                    >
+                      Complete
+                    </Button>
+                  ) : null}
+                  {canRank && sprint.state === 'future' ? (
+                    <Button
+                      className="erw-settings-btn-secondary"
+                      size="compact-xs"
+                      leftSection={<IconPlayerPlay size={14} />}
+                      loading={startMut.isPending}
+                      onClick={() => startMut.mutate(sprint.id)}
+                    >
+                      Start
+                    </Button>
+                  ) : null}
+                </Group>
               }
-              empty={cards.length === 0 ? <Text className="erw-settings-body">This sprint has no issues.</Text> : null}
+              empty={cards.length === 0 ? <Text className="erw-jira-empty">No issues</Text> : null}
             >
               {cards.map((issue) => (
-                <JiraCard key={issue.key} issue={issue} draggable={canRank} onOpen={onSelectIssue} />
+                <JiraCard key={issue.key} issue={issue} layout="row" draggable={canRank} onOpen={onSelectIssue} />
               ))}
             </DropLane>
           );
@@ -178,13 +188,14 @@ export default function BacklogView({ project, canRank = false, onSelectIssue })
           onOver={() => canRank && setOverLane('backlog')}
           onLeave={() => setOverLane((current) => (current === 'backlog' ? null : current))}
           onDrop={(event) => dropOn(event, null)}
-          empty={loose.length === 0 ? <Text className="erw-settings-body">The backlog is empty.</Text> : null}
+          meta={<span className="erw-jira-count">{loose.length}</span>}
+          empty={loose.length === 0 ? <Text className="erw-jira-empty">Empty</Text> : null}
         >
           {loose.map((issue) => (
-            <JiraCard key={issue.key} issue={issue} draggable={canRank} onOpen={onSelectIssue} />
+            <JiraCard key={issue.key} issue={issue} layout="row" draggable={canRank} onOpen={onSelectIssue} />
           ))}
         </DropLane>
-      </Stack>
+      </div>
     </div>
   );
 }

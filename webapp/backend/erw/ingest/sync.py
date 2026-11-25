@@ -250,7 +250,13 @@ def catch_up(session: Session, client: JiraClient, settings: Settings, now: date
     """Re-sync issues updated since the last webhook/catch-up (minus 5 min) plus any pending_sync keys."""
     from erw.pipeline.evaluate import on_synced
 
-    projects = ", ".join(f'"{p}"' for p in settings.jira_projects)
+    simulate_keys = set(
+        session.scalars(select(Project.key).where(Project.origin == "simulate")).all()
+    )
+    cloud_projects = [p for p in settings.jira_projects if p not in simulate_keys]
+    if not cloud_projects:
+        return 0
+    projects = ", ".join(f'"{p}"' for p in cloud_projects)
     last_catch = kv_get(session, "last_catch_up_at")
     if last_catch is None:
         jql = f"project in ({projects})"
@@ -264,7 +270,7 @@ def catch_up(session: Session, client: JiraClient, settings: Settings, now: date
         jql = f'project in ({projects}) AND updated >= "{stamp}"'
     keys = client.search_keys(jql)
     for k in kv_get_json(session, "pending_sync", []):
-        if k not in keys:
+        if k not in keys and k.split("-", 1)[0] not in simulate_keys:
             keys.append(k)
 
     results: list[SyncResult] = []

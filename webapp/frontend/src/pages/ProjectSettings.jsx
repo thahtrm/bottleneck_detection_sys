@@ -16,6 +16,8 @@ import {
   IconFileReport,
   IconFolders,
   IconMessageCircle,
+  IconPuzzle,
+  IconTag,
   IconUsers,
 } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -172,31 +174,43 @@ export default function ProjectSettings({
         </Group>
 
         <SettingsCard title="Components and versions" icon={<IconFolders size={22} color="var(--color-secondary)" />}>
-          <Stack gap="xs">
-            <Text className="erw-settings-label">Components</Text>
+          <Stack gap="sm">
+            <Group gap={6} align="center">
+              <IconPuzzle size={14} />
+              <Text className="erw-settings-label">Components</Text>
+            </Group>
             {componentsQuery.isError ? (
               <Text className="erw-settings-error">Components could not be loaded.</Text>
             ) : null}
             {componentsQuery.isSuccess && (componentsQuery.data || []).length === 0 ? (
-              <Text className="erw-settings-body">This project has no components.</Text>
+              <Text className="erw-jira-empty">None</Text>
             ) : null}
-            {(componentsQuery.data || []).map((row) => (
-              <Text key={row.id} className="erw-settings-body">
-                {row.name}
-              </Text>
-            ))}
-            <Text className="erw-settings-label">Versions</Text>
+            <Group gap={6}>
+              {(componentsQuery.data || []).map((row) => (
+                <span key={row.id} className="erw-jira-chip">
+                  <IconPuzzle size={12} />
+                  {row.name}
+                </span>
+              ))}
+            </Group>
+            <Group gap={6} align="center">
+              <IconTag size={14} />
+              <Text className="erw-settings-label">Versions</Text>
+            </Group>
             {versionsQuery.isError ? (
               <Text className="erw-settings-error">Versions could not be loaded.</Text>
             ) : null}
             {versionsQuery.isSuccess && (versionsQuery.data || []).length === 0 ? (
-              <Text className="erw-settings-body">This project has no versions.</Text>
+              <Text className="erw-jira-empty">None</Text>
             ) : null}
-            {(versionsQuery.data || []).map((row) => (
-              <Text key={row.id} className="erw-settings-body">
-                {row.released ? `${row.name} (released)` : row.name}
-              </Text>
-            ))}
+            <Group gap={6}>
+              {(versionsQuery.data || []).map((row) => (
+                <span key={row.id} className="erw-jira-chip" data-released={row.released ? 'true' : 'false'}>
+                  <IconTag size={12} />
+                  {row.name}
+                </span>
+              ))}
+            </Group>
           </Stack>
         </SettingsCard>
 

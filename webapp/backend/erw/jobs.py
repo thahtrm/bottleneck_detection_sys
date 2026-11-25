@@ -91,15 +91,25 @@ def _member_results(keys: list[str], field: str) -> list[SyncResult]:
     return [SyncResult("updated", k, frozenset({field})) for k in keys]
 
 
+def _simulated_project(session: Session, project_key: str) -> bool:
+    project = session.get(Project, project_key)
+    return project is not None and project.origin == "simulate"
+
+
 def dispatch_event(session: Session, payload: dict, client, settings: Settings) -> list[SyncResult]:
     event = payload.get("webhookEvent", "")
-    if event in ("jira:issue_created", "jira:issue_updated"):
-        return _sync_keys(session, client, settings, [payload["issue"]["key"]])
+    if event in ("jira:issue_created", "jira:issue_updated", "jira:issue_deleted"):
+        key = payload["issue"]["key"]
+        project_key = key.split("-", 1)[0]
+        if _simulated_project(session, project_key):
+            log.info("ignoring webhook %s for simulated project %s", event, project_key)
+            return []
+        if event == "jira:issue_deleted":
+            return [mark_deleted(session, key)]
+        return _sync_keys(session, client, settings, [key])
     if event in ("issuelink_created", "issuelink_deleted"):
         link = payload["issueLink"]
         return _sync_keys(session, client, settings, [str(link["sourceIssueId"]), str(link["destinationIssueId"])])
-    if event == "jira:issue_deleted":
-        return [mark_deleted(session, payload["issue"]["key"])]
     if event.startswith("sprint_"):
         sprint = payload["sprint"]
         board = sprint.get("originBoardId")

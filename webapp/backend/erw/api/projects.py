@@ -51,6 +51,7 @@ class ProjectListItem(BaseModel):
     key: str
     name: str
     tracked: bool
+    origin: str = "jira"
     role: str
     stats: ProjectStats
 
@@ -107,7 +108,7 @@ def list_projects(
         added = False
         for key in app_settings.jira_projects:
             if key not in existing:
-                new_p = Project(key=key, name="", tracked=True)
+                new_p = Project(key=key, name="", tracked=True, origin="jira")
                 session.add(new_p)
                 existing[key] = new_p
                 added = True
@@ -137,6 +138,7 @@ def list_projects(
                 key=p.key,
                 name=p.name,
                 tracked=p.tracked,
+                origin=p.origin or "jira",
                 role=role,
                 stats=ProjectStats(**stats),
             )
@@ -169,6 +171,7 @@ def toggle_tracking(
 
 class ProjectMemberItem(BaseModel):
     user_id: int
+    account_id: str | None = None
     email: str
     name: str
     role: str
@@ -244,6 +247,7 @@ def _count_pms(session: Session, project_key: str) -> int:
 def _serialize_member(member: ProjectMember, user: User) -> ProjectMemberItem:
     return ProjectMemberItem(
         user_id=user.id,
+        account_id=user.account_id or f"local-{user.id}",
         email=user.email,
         name=user.name,
         role=normalize_project_role(member.role) or member.role,
@@ -616,7 +620,7 @@ def update_project(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -651,7 +655,7 @@ def create_component(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -678,7 +682,7 @@ def update_component(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -703,7 +707,7 @@ def delete_component(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> Response:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -738,7 +742,7 @@ def create_version(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -767,7 +771,7 @@ def update_version(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -806,7 +810,7 @@ def put_workflow(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -841,7 +845,7 @@ def create_sprint(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -869,7 +873,7 @@ def update_sprint(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -894,7 +898,7 @@ def start_sprint(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    local_mode_or_403(request, settings)
+    local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -914,7 +918,7 @@ def complete_sprint(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:
@@ -936,7 +940,7 @@ def rank_backlog(
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, Any]:
-    app_settings = local_mode_or_403(request, settings)
+    app_settings = local_mode_or_403(request, settings, session, key)
     _ensure_project(session, key)
     require_pm(key, user=user, session=session)
     try:

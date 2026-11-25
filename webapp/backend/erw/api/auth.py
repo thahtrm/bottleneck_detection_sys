@@ -64,7 +64,7 @@ class DemoUserItem(BaseModel):
     projects: list[DemoUserProject] = []
 
 
-def _user_response(user: User, settings: Settings) -> UserResponse:
+def _user_response(user: User, settings: Settings, session: Session) -> UserResponse:
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -114,7 +114,7 @@ def login(
         samesite="lax",
         path="/",
     )
-    return _user_response(user, app_settings)
+    return _user_response(user, app_settings, session)
 
 
 @router.post("/logout")
@@ -135,10 +135,11 @@ def logout(
 def me(
     request: Request,
     current_user: User = Depends(require_authenticated_user),
+    session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> UserResponse:
     app_settings = getattr(request.app.state, "settings", None) or settings
-    return _user_response(current_user, app_settings)
+    return _user_response(current_user, app_settings, session)
 
 
 @router.post("/quick-switch", response_model=UserResponse)
@@ -152,10 +153,7 @@ def quick_switch(
 ) -> UserResponse:
     app_settings = getattr(request.app.state, "settings", None) or settings
     if getattr(app_settings, "jira_mode", "local") != "local":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Quick switch is only available in local mode",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Quick switch is only available in local mode")
     target = session.get(User, req.user_id)
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -171,7 +169,7 @@ def quick_switch(
         samesite="lax",
         path="/",
     )
-    return _user_response(target, app_settings)
+    return _user_response(target, app_settings, session)
 
 
 @demo_router.get("/users", response_model=list[DemoUserItem])
@@ -183,10 +181,7 @@ def list_demo_users(
 ) -> list[DemoUserItem]:
     app_settings = getattr(request.app.state, "settings", None) or settings
     if getattr(app_settings, "jira_mode", "local") != "local":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Quick switch is only available in local mode",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Quick switch is only available in local mode")
     users = list(
         session.scalars(
             select(User)

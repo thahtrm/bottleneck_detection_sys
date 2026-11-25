@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Group, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Group, Select, Table, Text, TextInput } from '@mantine/core';
+import { IconCircle, IconFlag, IconListSearch } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { listProjectIssues } from '../../api/client';
 import { ISSUE_TYPES, PRIORITIES, jiraQueryKeys } from '../../dashboard/jiraModel';
+import AssigneeSelect from './AssigneeSelect';
+import { IssueTypeMark, PersonMark, PriorityMark, StatusMark } from './jiraMarks';
 
 export default function IssueNavigator({ project, q = '', onSelectIssue }) {
   const [filters, setFilters] = useState({ status: '', issuetype: '', priority: '', assignee: '' });
@@ -23,45 +26,55 @@ export default function IssueNavigator({ project, q = '', onSelectIssue }) {
 
   return (
     <div className="erw-settings-scope erw-jira-scope">
-      <Title order={3} className="erw-settings-page-title">
-        Issues
-      </Title>
-      <Group grow align="flex-end">
+      <header className="erw-jira-bar">
+        <IconListSearch size={16} stroke={1.75} aria-hidden />
+        <h2>Issues</h2>
+        <span className="erw-jira-count">{issues.length}</span>
+      </header>
+      <Group gap={6} className="erw-jira-filters" align="center">
         <TextInput
-          label="Status"
+          size="xs"
+          placeholder="Status"
+          aria-label="Status"
+          leftSection={<IconCircle size={14} />}
           value={filters.status}
           onChange={(event) => setFilter('status')(event.currentTarget.value)}
         />
         <Select
-          label="Type"
-          placeholder="Any"
+          size="xs"
+          placeholder="Type"
+          aria-label="Type"
           data={ISSUE_TYPES}
           value={filters.issuetype || null}
           onChange={(value) => setFilter('issuetype')(value || '')}
           clearable
         />
         <Select
-          label="Priority"
-          placeholder="Any"
+          size="xs"
+          placeholder="Priority"
+          aria-label="Priority"
+          leftSection={<IconFlag size={14} />}
           data={PRIORITIES}
           value={filters.priority || null}
           onChange={(value) => setFilter('priority')(value || '')}
           clearable
         />
-        <TextInput
-          label="Assignee"
+        <AssigneeSelect
+          size="xs"
+          projectKey={project}
           value={filters.assignee}
-          onChange={(event) => setFilter('assignee')(event.currentTarget.value)}
+          placeholder="Assignee"
+          onChange={setFilter('assignee')}
         />
       </Group>
       {issuesQuery.isLoading ? <Text className="erw-settings-body">Loading issues.</Text> : null}
       {issuesQuery.isError ? <Text className="erw-settings-error">Issues could not be loaded.</Text> : null}
       {issuesQuery.isSuccess && issues.length === 0 ? (
-        <Text className="erw-settings-body">No issues match these filters.</Text>
+        <Text className="erw-jira-empty">No issues match these filters.</Text>
       ) : null}
       {issues.length > 0 ? (
-        <Stack className="erw-settings-card">
-          <Table highlightOnHover>
+        <div className="erw-jira-table">
+          <Table highlightOnHover verticalSpacing={4} horizontalSpacing="xs">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Key</Table.Th>
@@ -75,17 +88,37 @@ export default function IssueNavigator({ project, q = '', onSelectIssue }) {
             <Table.Tbody>
               {issues.map((issue) => (
                 <Table.Tr key={issue.key} style={{ cursor: 'pointer' }} onClick={() => onSelectIssue(issue.key)}>
-                  <Table.Td>{issue.key}</Table.Td>
+                  <Table.Td><span className="erw-jira-key">{issue.key}</span></Table.Td>
                   <Table.Td>{issue.summary}</Table.Td>
-                  <Table.Td>{issue.issuetype}</Table.Td>
-                  <Table.Td>{issue.status}</Table.Td>
-                  <Table.Td>{issue.priority}</Table.Td>
-                  <Table.Td>{issue.assignee_name || ''}</Table.Td>
+                  <Table.Td>
+                    <span className="erw-jira-inline">
+                      <IssueTypeMark type={issue.issuetype} />
+                      {issue.issuetype}
+                    </span>
+                  </Table.Td>
+                  <Table.Td>
+                    <span className="erw-jira-inline">
+                      <StatusMark status={issue.status} />
+                      {issue.status}
+                    </span>
+                  </Table.Td>
+                  <Table.Td>
+                    <span className="erw-jira-inline">
+                      <PriorityMark priority={issue.priority} />
+                      {issue.priority}
+                    </span>
+                  </Table.Td>
+                  <Table.Td>
+                    <span className="erw-jira-inline">
+                      <PersonMark name={issue.assignee_name} />
+                      {issue.assignee_name || ''}
+                    </span>
+                  </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
-        </Stack>
+        </div>
       ) : null}
     </div>
   );

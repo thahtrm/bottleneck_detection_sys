@@ -36,6 +36,15 @@ export default function BoardView({ state, patch, onMoveStatus, canMoveStatus, o
     [board, ctx, state.group, state.chips]
   );
 
+  if (!state.project) {
+    return (
+      <Alert color="gray" variant="light" title="Chọn một dự án">
+        <Text size="sm">
+          Dự án simulate và dự án Jira dùng hai nguồn riêng. Chọn một dự án trên thanh trên để xem rủi ro của đúng nguồn đó.
+        </Text>
+      </Alert>
+    );
+  }
   if (isLoading) return <BoardSkeleton />;
   if (isError && !board) {
     return (

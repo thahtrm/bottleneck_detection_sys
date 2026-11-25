@@ -17,6 +17,8 @@ import {
   IconLogout,
   IconX,
   IconMenu2,
+  IconPlus,
+  IconUsers,
 } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
@@ -90,14 +92,20 @@ export default function Header({
   const switchValue = userOptions.some((item) => item.value === currentUserId) ? currentUserId : null;
 
   // Chuẩn bị danh sách option cho Select dự án
+  const projectOption = (p) => {
+    const key = p.key || p.id || '';
+    const kind = p.origin === 'jira' ? 'Jira' : 'Simulate';
+    const name = p.name ? `${key} — ${p.name}` : key;
+    return { value: key, label: `${kind} · ${name}` };
+  };
+  const simulateProjects = projects.filter((p) => p.origin !== 'jira');
+  const jiraProjects = projects.filter((p) => p.origin === 'jira');
   const projectOptions = [
-    { value: '', label: 'Tất cả dự án' },
-    ...projects.map((p) => {
-      const key = p.key || p.id || '';
-      const name = p.name ? `${key} - ${p.name}` : key;
-      return { value: key, label: name };
-    }),
-  ];
+    simulateProjects.length
+      ? { group: 'Dự án simulate', items: simulateProjects.map(projectOption) }
+      : null,
+    jiraProjects.length ? { group: 'Dự án Jira', items: jiraProjects.map(projectOption) } : null,
+  ].filter(Boolean);
 
   // Trạng thái hiển thị webhook
   let webhookTooltip = 'Hệ thống đang hoạt động bình thường';
@@ -149,12 +157,12 @@ export default function Header({
 
         <Select
           data={projectOptions}
-          value={selectedProject || ''}
-          onChange={(val) => onSelectProject && onSelectProject(val || '')}
+          value={selectedProject || null}
+          onChange={(val) => onSelectProject && val && onSelectProject(val)}
           placeholder="Chọn dự án"
           size="sm"
-          miw={120}
-          maw={230}
+          miw={160}
+          maw={320}
           style={{ flex: '1 1 160px' }}
           allowDeselect={false}
           checkIconPosition="right"
@@ -200,9 +208,10 @@ export default function Header({
               switchMut.mutate(Number(value));
             }}
             placeholder="Switch user"
+            leftSection={<IconUsers size={14} />}
             searchable
-            size="sm"
-            maw={180}
+            size="xs"
+            maw={168}
             allowDeselect={false}
             disabled={switchMut.isPending}
             error={
@@ -215,8 +224,8 @@ export default function Header({
           />
         ) : null}
         {jiraLocal && onCreate ? (
-          <Button size="sm" color="dark" onClick={onCreate}>
-            + Create
+          <Button size="xs" color="dark" leftSection={<IconPlus size={14} />} onClick={onCreate}>
+            Create
           </Button>
         ) : null}
         <Tooltip label="Làm mới dữ liệu" withArrow position="bottom">

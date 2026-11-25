@@ -122,8 +122,10 @@ def init_db(engine: Engine) -> None:
                     ("lead_user_id", "INTEGER REFERENCES users(id)"),
                     ("issue_seq", "INTEGER NOT NULL DEFAULT 0"),
                     ("workflow", "JSON NOT NULL DEFAULT '{}'"),
+                    ("origin", "VARCHAR NOT NULL DEFAULT 'jira'"),
                 ],
             )
+            conn.execute(text("UPDATE projects SET origin = 'simulate' WHERE key = 'DEMO'"))
             max_by_proj: dict[str, int] = {}
             for proj_key, issue_key in conn.execute(text("SELECT project_key, key FROM issues")).all():
                 if not proj_key or not issue_key:

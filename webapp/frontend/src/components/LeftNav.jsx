@@ -4,6 +4,7 @@ import {
   IconAdjustments,
   IconAffiliate,
   IconFileReport,
+  IconBolt,
   IconLayoutBoard,
   IconLayoutKanban,
   IconLayoutSidebarLeftCollapse,
@@ -16,7 +17,6 @@ import {
   IconUsers,
 } from '@tabler/icons-react';
 import '../styles/kaggleTokens.css';
-import AppLogo from './brand/AppLogo';
 
 const NAV_META = [
   { value: 'board', label: 'Bảng', Icon: IconLayoutKanban },
@@ -52,8 +52,8 @@ export function buildViewNavItems({
 
 export function buildNavGroups(flags) {
   return [
-    { id: 'jira', label: 'Workspace / Jira', items: JIRA_NAV },
-    { id: 'risk', label: 'Risk & AI', items: buildViewNavItems(flags) },
+    { id: 'jira', label: 'Workspace / Jira', Icon: IconLayoutBoard, items: JIRA_NAV },
+    { id: 'risk', label: 'Risk & AI', Icon: IconBolt, items: buildViewNavItems(flags) },
   ];
 }
 
@@ -108,13 +108,13 @@ export default function LeftNav({
 
   return (
     <nav className={scopeClass} aria-label="Điều hướng chính">
-      <div className="erw-nav-brand">
-        {collapsed ? <AppLogo variant="mark" size="sm" /> : <AppLogo variant="mark" size="sm" showTitle />}
-      </div>
       <Stack gap="xs" className="erw-nav-stack">
         {groups.map((group) => (
           <Stack key={group.id} gap="xs">
-            <div className="erw-nav-group">{group.label}</div>
+            <div className="erw-nav-group">
+              <group.Icon size={12} stroke={1.75} aria-hidden />
+              <span>{group.label}</span>
+            </div>
             {group.items.map(renderItem)}
           </Stack>
         ))}

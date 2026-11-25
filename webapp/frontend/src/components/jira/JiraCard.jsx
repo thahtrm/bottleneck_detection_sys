@@ -1,13 +1,13 @@
 import React, { useRef } from 'react';
-import { Text } from '@mantine/core';
+import { IssueTypeMark, PersonMark, PriorityMark } from './jiraMarks';
 
-export default function JiraCard({ issue, draggable = false, onOpen }) {
+export default function JiraCard({ issue, draggable = false, onOpen, layout = 'card' }) {
   const dragged = useRef(false);
-  const meta = [issue.issuetype, issue.priority, issue.assignee_name].filter(Boolean).join(' · ');
+  const className = layout === 'row' ? 'erw-jira-row' : 'erw-jira-card';
 
   return (
     <div
-      className="erw-jira-card"
+      className={className}
       draggable={draggable}
       role="button"
       tabIndex={0}
@@ -33,13 +33,11 @@ export default function JiraCard({ issue, draggable = false, onOpen }) {
         }
       }}
     >
-      <Text className="erw-settings-meta" fw={700}>
-        {issue.key}
-      </Text>
-      <Text className="erw-settings-body" lineClamp={3}>
-        {issue.summary}
-      </Text>
-      {meta ? <Text className="erw-settings-meta">{meta}</Text> : null}
+      <IssueTypeMark type={issue.issuetype} />
+      <span className="erw-jira-key">{issue.key}</span>
+      <span className={layout === 'row' ? 'erw-jira-row-summary' : 'erw-jira-summary'}>{issue.summary}</span>
+      <PriorityMark priority={issue.priority} />
+      <PersonMark name={issue.assignee_name} />
     </div>
   );
 }

@@ -211,6 +211,7 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
             key="DEMO",
             name="Dự án Mẫu Scrum (DEMO)",
             tracked=True,
+            origin="simulate",
             status_map={},
             thresholds={"p_delay": 0.39, "criticality": 0.05},
         )
@@ -218,6 +219,7 @@ def seed_demo_data(session: Session, reset: bool = False, rich_network: bool = F
     else:
         project.name = "Dự án Mẫu Scrum (DEMO)"
         project.tracked = True
+        project.origin = "simulate"
         project.status_map = {}
         project.thresholds = {"p_delay": 0.39, "criticality": 0.05}
     session.flush()
