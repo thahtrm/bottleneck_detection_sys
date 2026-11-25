@@ -15,6 +15,7 @@ SATURDAY = datetime(2026, 11, 7, 1, 0, tzinfo=UTC)
 @pytest.fixture(autouse=True)
 def _isolate_reports_dir(tmp_path, settings):
     settings.reports_dir = str(tmp_path / "reports")
+    settings.ollama_url = ""
 
 
 def _user(session, email, admin=False) -> User:
